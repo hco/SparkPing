@@ -37,11 +37,23 @@ run = "cargo clippy -- -W clippy::pedantic"
 
 [tasks.run]
 description = "Run the project"
-run = "cargo run"
+run = '''
+if [[ "$(uname)" == "Darwin" ]]; then
+  sudo cargo run
+else
+  cargo run
+fi
+'''
 
 [tasks.dev]
 description = "Run the project with watch support (auto-reload on file changes)"
-run = "cargo watch -x run"
+run = '''
+if [[ "$(uname)" == "Darwin" ]]; then
+  sudo cargo watch -x run
+else
+  cargo watch -x run
+fi
+'''
 
 [tasks.watch-check]
 description = "Watch for changes and run cargo check (faster feedback loop)"
