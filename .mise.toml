@@ -1,5 +1,7 @@
 [tools]
 rust = "1.91.1"
+"cargo:cargo-watch" = {version = "latest"}
+
 
 [tasks.build]
 description = "Build the project"
@@ -36,6 +38,14 @@ run = "cargo clippy -- -W clippy::pedantic"
 [tasks.run]
 description = "Run the project"
 run = "cargo run"
+
+[tasks.dev]
+description = "Run the project with watch support (auto-reload on file changes)"
+run = "cargo watch -x run"
+
+[tasks.watch-check]
+description = "Watch for changes and run cargo check (faster feedback loop)"
+run = "cargo watch -x check"
 
 [tasks.clean]
 description = "Clean build artifacts"
