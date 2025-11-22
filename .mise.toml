@@ -1,0 +1,50 @@
+[tools]
+rust = "1.91.1"
+
+[tasks.build]
+description = "Build the project"
+run = "cargo build"
+
+[tasks.release]
+description = "Build the project in release mode"
+run = "cargo build --release"
+
+[tasks.test]
+description = "Run tests"
+run = "cargo test"
+
+[tasks.check]
+description = "Check code without building"
+run = "cargo check"
+
+[tasks.fmt]
+description = "Format code"
+run = "cargo fmt"
+
+[tasks.fmt-check]
+description = "Check code formatting"
+run = "cargo fmt --check"
+
+[tasks.clippy]
+description = "Run clippy linter"
+run = "cargo clippy"
+
+[tasks.clippy-pedantic]
+description = "Run clippy with pedantic lints"
+run = "cargo clippy -- -W clippy::pedantic"
+
+[tasks.run]
+description = "Run the project"
+run = "cargo run"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"
+
+[tasks.lint]
+description = "Run all linting checks (fmt-check + clippy)"
+run = "cargo fmt --check && cargo clippy"
+
+[tasks.all]
+description = "Run check, fmt-check, and clippy"
+run = "cargo check && cargo fmt --check && cargo clippy"
