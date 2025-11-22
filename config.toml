@@ -3,7 +3,7 @@ host = "127.0.0.1"
 port = 8080
 
 [logging]
-level = "info"
+level = "debug"
 file = "sparkping.log"
 
 [database]
@@ -11,11 +11,16 @@ path = "./tsink-data"
 
 [[targets]]
 address = "192.168.83.11"
-name = "Router"
+name = "Home Assistant"
+ping_count = 3        # Number of pings back-to-back (default: 3)
+ping_interval = 5     # Wait time in seconds after each batch (default: 1)
 
 [[targets]]
-address = "192.168.83.12"
+address = "192.168.83.1"
+# Uses defaults: 3 pings, 1 second interval
 
 [[targets]]
-address = "192.168.83.13"
-name = "NAS Server"
+address = "8.8.8.8"
+name = "Google DNS"
+ping_count = 5        # Custom: 5 pings back-to-back
+ping_interval = 30     # Custom: wait 30 seconds after each batch
