@@ -9,3 +9,13 @@ file = "sparkping.log"
 [database]
 path = "./tsink-data"
 
+[[targets]]
+address = "192.168.83.11"
+name = "Router"
+
+[[targets]]
+address = "192.168.83.12"
+
+[[targets]]
+address = "192.168.83.13"
+name = "NAS Server"

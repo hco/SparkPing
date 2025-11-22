@@ -18,6 +18,7 @@ struct AppConfig {
     server: ServerConfig,
     logging: LoggingConfig,
     database: DatabaseConfig,
+    targets: Vec<Target>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +38,12 @@ struct DatabaseConfig {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct Target {
+    address: String,
+    name: Option<String>,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -53,6 +60,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Server: {}:{}", app_config.server.host, app_config.server.port);
     println!("Logging: level={}, file={}", app_config.logging.level, app_config.logging.file);
     println!("Database path: {}", app_config.database.path);
+    println!("Targets to ping:");
+    for target in &app_config.targets {
+        match &target.name {
+            Some(name) => println!("  - {} ({})", target.address, name),
+            None => println!("  - {}", target.address),
+        }
+    }
 
     // Initialize tsink storage with configured path
     let storage = StorageBuilder::new()
