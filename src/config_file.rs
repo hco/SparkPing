@@ -5,6 +5,9 @@ use std::sync::Arc;
 use toml_edit::{DocumentMut, Item, Value, Table};
 use uuid::Uuid;
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+
 /// Read the config file and parse it as a TOML document
 pub fn read_config_file(path: &Path) -> Result<DocumentMut, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
@@ -25,6 +28,28 @@ pub fn write_config_file(
     let temp_path = path.with_extension("tmp");
     let content = doc.to_string();
     std::fs::write(&temp_path, content)?;
+    
+    // Preserve permissions and owner from original file if it exists
+    if path.exists() {
+        let metadata = std::fs::metadata(path)?;
+        let permissions = metadata.permissions();
+        std::fs::set_permissions(&temp_path, permissions)?;
+        
+        #[cfg(unix)]
+        {
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            let path_cstr = CString::new(temp_path.as_os_str().as_bytes())?;
+            let uid = metadata.uid();
+            let gid = metadata.gid();
+            let result = unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
+            if result != 0 {
+                return Err(format!("Failed to preserve file owner: chown failed with errno {}", 
+                    std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)).into());
+            }
+        }
+    }
+    
     std::fs::rename(&temp_path, path)?;
     
     // Clear write flag after writing
