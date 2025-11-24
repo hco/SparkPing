@@ -3,6 +3,18 @@ rust = "1.91.1"
 node = "24"
 "cargo:cargo-watch" = { version = "latest" }
 
+[settings]
+# Enable hooks (required for postinstall hook to work)
+experimental = true
+
+[hooks]
+# Enabling corepack will install the `pnpm` package manager specified in your package.json
+postinstall = "npx corepack enable"
+
+[env]
+# Add node_modules/.bin to PATH so binaries installed with pnpm are available
+_.path = ["{{config_root}}/frontend/node_modules/.bin"]
+
 [tasks."install:rust"]
 description = "Install Rust dependencies"
 run = "cargo fetch && touch .cargo-fetched"
@@ -112,6 +124,11 @@ run = "cd frontend && pnpm build"
 description = "Lint the frontend code"
 depends = ["install"]
 run = "cd frontend && pnpm lint"
+
+[tasks."frontend:lint-fix"]
+description = "Lint the frontend code and fix errors"
+depends = ["install"]
+run = "cd frontend && pnpm exec eslint . --fix"
 
 [tasks."frontend:type-check"]
 description = "Run TypeScript type checking"
