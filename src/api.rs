@@ -1,24 +1,24 @@
+use crate::config::{AppConfig, Target};
+use crate::config_file;
+use crate::ping::perform_ping;
+use crate::storage::write_ping_result;
 use axum::{
-    extract::{Query, State, Path},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, Json},
     routing::{get, put},
     Router,
 };
-use tower_http::services::ServeDir;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::sync::RwLock;
-use tsink::Storage;
+use tower_http::services::ServeDir;
 use tracing::{error, info};
-use crate::config::{AppConfig, Target};
-use crate::config_file;
-use crate::ping::perform_ping;
-use crate::storage::write_ping_result;
+use tsink::Storage;
 use uuid::Uuid;
 
 /// Query parameters for the ping data API
@@ -77,7 +77,7 @@ where
     D: Deserializer<'de>,
 {
     use serde::de::Error;
-    
+
     struct TimeRangeVisitor;
 
     impl<'de> serde::de::Visitor<'de> for TimeRangeVisitor {
@@ -335,38 +335,40 @@ fn query_ping_data_with_labels(
 ) -> Result<Vec<PingDataPoint>, Box<dyn std::error::Error>> {
     let from_ts = query.from;
     let to_ts = query.to;
-    
+
     let mut all_points = Vec::new();
-    
+
     // Query both metrics if needed
     let metrics_to_query = match query.metric.as_deref() {
         Some("latency") => vec!["ping_latency"],
         Some("failed") => vec!["ping_failed"],
         _ => vec!["ping_latency", "ping_failed"],
     };
-    
+
     for metric_name in metrics_to_query {
         if let Some(ref target) = &query.target {
             // Query all label combinations and filter by target
             let all_results = storage.select_all(metric_name, from_ts, to_ts)?;
             for (labels, points) in all_results {
                 // Check if this matches our target filter
-                let matches_target = labels.iter().any(|l| {
-                    l.name == "target" && &l.value == target
-                });
-                
+                let matches_target = labels
+                    .iter()
+                    .any(|l| l.name == "target" && &l.value == target);
+
                 if matches_target {
-                    let target_name = labels.iter()
+                    let target_name = labels
+                        .iter()
                         .find(|l| l.name == "target_name")
                         .map(|l| l.value.clone());
-                    
-                    let sequence = labels.iter()
+
+                    let sequence = labels
+                        .iter()
                         .find(|l| l.name == "sequence")
                         .and_then(|l| l.value.parse::<u16>().ok())
                         .unwrap_or(0);
-                    
+
                     let success = metric_name == "ping_latency";
-                    
+
                     for point in points {
                         all_points.push(PingDataPoint {
                             timestamp: DateTime::from_timestamp(point.timestamp, 0)
@@ -387,22 +389,25 @@ fn query_ping_data_with_labels(
             // Query all label combinations
             let all_results = storage.select_all(metric_name, from_ts, to_ts)?;
             for (labels, points) in all_results {
-                let target = labels.iter()
+                let target = labels
+                    .iter()
                     .find(|l| l.name == "target")
                     .map(|l| l.value.clone())
                     .unwrap_or_else(|| "unknown".to_string());
-                
-                let target_name = labels.iter()
+
+                let target_name = labels
+                    .iter()
                     .find(|l| l.name == "target_name")
                     .map(|l| l.value.clone());
-                
-                let sequence = labels.iter()
+
+                let sequence = labels
+                    .iter()
                     .find(|l| l.name == "sequence")
                     .and_then(|l| l.value.parse::<u16>().ok())
                     .unwrap_or(0);
-                
+
                 let success = metric_name == "ping_latency";
-                
+
                 for point in points {
                     all_points.push(PingDataPoint {
                         timestamp: DateTime::from_timestamp(point.timestamp, 0)
@@ -420,15 +425,15 @@ fn query_ping_data_with_labels(
             }
         }
     }
-    
+
     // Sort by timestamp
     all_points.sort_by_key(|p| p.timestamp_unix);
-    
+
     // Apply limit if specified
     if let Some(limit) = query.limit {
         all_points.truncate(limit);
     }
-    
+
     Ok(all_points)
 }
 
@@ -437,30 +442,39 @@ fn parse_bucket_duration(bucket_str: &str) -> Result<i64, String> {
     if bucket_str.is_empty() {
         return Err("Bucket duration cannot be empty".to_string());
     }
-    
+
     let bucket_str = bucket_str.trim().to_lowercase();
     let (number_str, unit) = if let Some(pos) = bucket_str.chars().position(|c| c.is_alphabetic()) {
         let (num, unit) = bucket_str.split_at(pos);
         (num, unit)
     } else {
-        return Err(format!("Invalid bucket format: '{}'. Expected format like '5m', '1h', '30s'", bucket_str));
+        return Err(format!(
+            "Invalid bucket format: '{}'. Expected format like '5m', '1h', '30s'",
+            bucket_str
+        ));
     };
-    
-    let number: i64 = number_str.parse()
+
+    let number: i64 = number_str
+        .parse()
         .map_err(|_| format!("Invalid number in bucket duration: '{}'", number_str))?;
-    
+
     let seconds = match unit {
         "s" | "sec" | "second" | "seconds" => number,
         "m" | "min" | "minute" | "minutes" => number * 60,
         "h" | "hour" | "hours" => number * 3600,
         "d" | "day" | "days" => number * 86400,
-        _ => return Err(format!("Unknown time unit: '{}'. Supported: s, m, h, d", unit)),
+        _ => {
+            return Err(format!(
+                "Unknown time unit: '{}'. Supported: s, m, h, d",
+                unit
+            ))
+        }
     };
-    
+
     if seconds <= 0 {
         return Err("Bucket duration must be positive".to_string());
     }
-    
+
     Ok(seconds)
 }
 
@@ -492,40 +506,34 @@ fn aggregate_into_buckets(
     if points.is_empty() || bucket_duration_seconds <= 0 {
         return Vec::new();
     }
-    
+
     // Create buckets grouped by (target, bucket_start)
     let mut buckets: HashMap<(String, i64), Vec<&PingDataPoint>> = HashMap::new();
-    
+
     for point in points {
         // Calculate which bucket this point belongs to
-        let bucket_start = (point.timestamp_unix / bucket_duration_seconds) * bucket_duration_seconds;
+        let bucket_start =
+            (point.timestamp_unix / bucket_duration_seconds) * bucket_duration_seconds;
         let key = (point.target.clone(), bucket_start);
         buckets.entry(key).or_insert_with(Vec::new).push(point);
     }
-    
+
     // Convert buckets to sorted vector of BucketDataPoint
     let mut bucket_points: Vec<_> = buckets
         .into_iter()
         .map(|((target, bucket_start), bucket_points)| {
             let bucket_end = bucket_start + bucket_duration_seconds;
-            
+
             // Get target_name from first point (should be same for all points with same target)
-            let target_name = bucket_points.first()
-                .and_then(|p| p.target_name.clone());
-            
+            let target_name = bucket_points.first().and_then(|p| p.target_name.clone());
+
             // Separate successful and failed pings
-            let successful: Vec<_> = bucket_points.iter()
-                .filter(|p| p.success)
-                .collect();
-            let failed: Vec<_> = bucket_points.iter()
-                .filter(|p| !p.success)
-                .collect();
-            
+            let successful: Vec<_> = bucket_points.iter().filter(|p| p.success).collect();
+            let failed: Vec<_> = bucket_points.iter().filter(|p| !p.success).collect();
+
             // Calculate min, max, avg for successful pings (latency)
-            let latencies: Vec<f64> = successful.iter()
-                .filter_map(|p| p.latency_ms)
-                .collect();
-            
+            let latencies: Vec<f64> = successful.iter().filter_map(|p| p.latency_ms).collect();
+
             let min = latencies.iter().copied().reduce(f64::min);
             let max = latencies.iter().copied().reduce(f64::max);
             let avg = if !latencies.is_empty() {
@@ -533,7 +541,7 @@ fn aggregate_into_buckets(
             } else {
                 None
             };
-            
+
             BucketDataPoint {
                 timestamp: DateTime::from_timestamp(bucket_start, 0)
                     .unwrap_or_else(|| Utc::now())
@@ -551,13 +559,14 @@ fn aggregate_into_buckets(
             }
         })
         .collect();
-    
+
     // Sort by target, then by timestamp
     bucket_points.sort_by(|a, b| {
-        a.target.cmp(&b.target)
+        a.target
+            .cmp(&b.target)
             .then_with(|| a.timestamp_unix.cmp(&b.timestamp_unix))
     });
-    
+
     bucket_points
 }
 
@@ -565,30 +574,28 @@ fn aggregate_into_buckets(
 fn calculate_statistics(points: &[PingDataPoint]) -> PingStatistics {
     let successful: Vec<_> = points.iter().filter(|p| p.success).collect();
     let failed: Vec<_> = points.iter().filter(|p| !p.success).collect();
-    
+
     let successful_count = successful.len();
     let failed_count = failed.len();
     let total = successful_count + failed_count;
-    
+
     let success_rate = if total > 0 {
         (successful_count as f64 / total as f64) * 100.0
     } else {
         0.0
     };
-    
-    let latencies: Vec<f64> = successful.iter()
-        .filter_map(|p| p.latency_ms)
-        .collect();
-    
+
+    let latencies: Vec<f64> = successful.iter().filter_map(|p| p.latency_ms).collect();
+
     let avg_latency_ms = if !latencies.is_empty() {
         Some(latencies.iter().sum::<f64>() / latencies.len() as f64)
     } else {
         None
     };
-    
+
     let min_latency_ms = latencies.iter().copied().reduce(f64::min);
     let max_latency_ms = latencies.iter().copied().reduce(f64::max);
-    
+
     PingStatistics {
         successful_count,
         failed_count,
@@ -606,22 +613,21 @@ pub async fn get_ping_data(
 ) -> Result<Json<PingDataResponse>, (StatusCode, String)> {
     let storage = &*state.storage;
     info!("Querying ping data: {:?}", query);
-    
+
     // Resolve relative time range to absolute timestamp
     let resolved_from = if let Some(ref from_value) = query.from {
-        resolve_time_range_value(from_value)
-            .map_err(|e| {
-                error!("Invalid time range: {}", e);
-                (StatusCode::BAD_REQUEST, e)
-            })?
+        resolve_time_range_value(from_value).map_err(|e| {
+            error!("Invalid time range: {}", e);
+            (StatusCode::BAD_REQUEST, e)
+        })?
     } else {
         0
     };
     let resolved_to = query.to.unwrap_or(i64::MAX);
-    
+
     // Store resolved timestamp for response metadata
     let resolved_from_timestamp = Some(resolved_from);
-    
+
     // Create resolved query for internal use
     let resolved_query = ResolvedPingDataQuery {
         target: query.target.clone(),
@@ -630,15 +636,14 @@ pub async fn get_ping_data(
         metric: query.metric.clone(),
         limit: query.limit,
     };
-    
-    let points = query_ping_data_with_labels(storage, &resolved_query)
-        .map_err(|e| {
-            error!("Error querying ping data: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
-    
+
+    let points = query_ping_data_with_labels(storage, &resolved_query).map_err(|e| {
+        error!("Error querying ping data: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+
     let statistics = calculate_statistics(&points);
-    
+
     let data_time_range = if !points.is_empty() {
         Some(TimeRange {
             earliest: points.first().unwrap().timestamp_unix,
@@ -647,7 +652,7 @@ pub async fn get_ping_data(
     } else {
         None
     };
-    
+
     let response = PingDataResponse {
         query: QueryMetadata {
             target_filter: query.target.clone(),
@@ -661,12 +666,12 @@ pub async fn get_ping_data(
         statistics,
         total_count: 0, // Will be set below
     };
-    
+
     // Set total_count after creating response
     let total_count = response.data.len();
     let mut response = response;
     response.total_count = total_count;
-    
+
     Ok(Json(response))
 }
 
@@ -677,29 +682,27 @@ pub async fn get_ping_aggregated(
 ) -> Result<Json<PingAggregatedResponse>, (StatusCode, String)> {
     let storage = &*state.storage;
     info!("Querying aggregated ping data: {:?}", query);
-    
+
     // Parse bucket duration
-    let bucket_duration_seconds = parse_bucket_duration(&query.bucket)
-        .map_err(|e| {
-            error!("Invalid bucket duration: {}", e);
-            (StatusCode::BAD_REQUEST, e)
-        })?;
-    
+    let bucket_duration_seconds = parse_bucket_duration(&query.bucket).map_err(|e| {
+        error!("Invalid bucket duration: {}", e);
+        (StatusCode::BAD_REQUEST, e)
+    })?;
+
     // Resolve relative time range to absolute timestamp
     let resolved_from = if let Some(ref from_value) = query.from {
-        resolve_time_range_value(from_value)
-            .map_err(|e| {
-                error!("Invalid time range: {}", e);
-                (StatusCode::BAD_REQUEST, e)
-            })?
+        resolve_time_range_value(from_value).map_err(|e| {
+            error!("Invalid time range: {}", e);
+            (StatusCode::BAD_REQUEST, e)
+        })?
     } else {
         0
     };
     let resolved_to = query.to.unwrap_or(i64::MAX);
-    
+
     // Store resolved timestamp for response metadata
     let resolved_from_timestamp = Some(resolved_from);
-    
+
     // Create resolved query for internal use
     let resolved_query = ResolvedPingDataQuery {
         target: query.target.clone(),
@@ -708,16 +711,15 @@ pub async fn get_ping_aggregated(
         metric: query.metric.clone(),
         limit: None, // No limit for aggregation
     };
-    
-    let points = query_ping_data_with_labels(storage, &resolved_query)
-        .map_err(|e| {
-            error!("Error querying ping data: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
-    
+
+    let points = query_ping_data_with_labels(storage, &resolved_query).map_err(|e| {
+        error!("Error querying ping data: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+
     // Aggregate into buckets
     let bucket_data = aggregate_into_buckets(&points, bucket_duration_seconds);
-    
+
     let data_time_range = if !points.is_empty() {
         Some(TimeRange {
             earliest: points.first().unwrap().timestamp_unix,
@@ -726,9 +728,9 @@ pub async fn get_ping_aggregated(
     } else {
         None
     };
-    
+
     let total_count = bucket_data.len();
-    
+
     let response = PingAggregatedResponse {
         query: QueryMetadata {
             target_filter: query.target.clone(),
@@ -742,38 +744,37 @@ pub async fn get_ping_aggregated(
         total_count,
         bucket_duration_seconds,
     };
-    
+
     Ok(Json(response))
 }
 
 /// Start a ping task for a target and return its abort handle
-fn start_ping_task(
-    target: &Target,
-    storage: Arc<dyn Storage>,
-) -> tokio::task::AbortHandle {
+fn start_ping_task(target: &Target, storage: Arc<dyn Storage>) -> tokio::task::AbortHandle {
     let target_id = target.id.clone();
     let target_address = target.address.clone();
     let target_name = target.name.clone();
     let ping_count = target.ping_count;
     let ping_interval = target.ping_interval;
-    
+
     let handle = tokio::spawn(async move {
         loop {
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
-                let result = perform_ping(&target_id, &target_address, sequence, &target_name).await;
-                
+                let result =
+                    perform_ping(&target_id, &target_address, sequence, &target_name).await;
+
                 // Write result to tsink
                 if let Err(e) = write_ping_result(&*storage, &result) {
                     error!("Error writing ping result to tsink: {}", e);
                 }
             }
-            
+
             // Wait ping_interval seconds before next batch of pings
             tokio::time::sleep(std::time::Duration::from_secs(ping_interval)).await;
         }
-    }).abort_handle();
-    
+    })
+    .abort_handle();
+
     handle
 }
 
@@ -803,9 +804,12 @@ pub async fn get_targets(
 ) -> Result<Json<Vec<Target>>, (StatusCode, String)> {
     let config = state.config.read().map_err(|e| {
         error!("Failed to read config: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read configuration".to_string())
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read configuration".to_string(),
+        )
     })?;
-    
+
     Ok(Json(config.targets.clone()))
 }
 
@@ -818,21 +822,27 @@ pub async fn create_target(
     if request.address.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Address is required".to_string()));
     }
-    
+
     // Read current config
     let mut config = state.config.write().map_err(|e| {
         error!("Failed to write config: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to access configuration".to_string(),
+        )
     })?;
-    
+
     // Generate ID if not provided
     let id = request.id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    
+
     // Check if ID already exists
     if config.targets.iter().any(|t| t.id == id) {
-        return Err((StatusCode::CONFLICT, format!("Target with id '{}' already exists", id)));
+        return Err((
+            StatusCode::CONFLICT,
+            format!("Target with id '{}' already exists", id),
+        ));
     }
-    
+
     // Create new target
     let new_target = Target {
         id: id.clone(),
@@ -841,39 +851,51 @@ pub async fn create_target(
         ping_count: request.ping_count.unwrap_or(3),
         ping_interval: request.ping_interval.unwrap_or(1),
     };
-    
+
     // Read config file
     let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
         error!("Failed to read config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read config file: {}", e),
+        )
     })?;
-    
+
     // Add target to document
     config_file::add_target(&mut doc, &new_target).map_err(|e| {
         error!("Failed to add target: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to add target: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to add target: {}", e),
+        )
     })?;
-    
+
     // Write config file
     config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
         error!("Failed to write config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write config file: {}", e),
+        )
     })?;
-    
+
     // Update in-memory config
     config.targets.push(new_target.clone());
     drop(config);
-    
+
     // Start ping task immediately
     {
         let mut handles = state.task_handles.write().map_err(|e| {
             error!("Failed to write task handles: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to access task handles".to_string(),
+            )
         })?;
         let handle = start_ping_task(&new_target, Arc::clone(&state.storage));
         handles.insert(new_target.id.clone(), handle);
     }
-    
+
     Ok(Json(new_target))
 }
 
@@ -887,53 +909,82 @@ pub async fn update_target(
     if request.address.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Address is required".to_string()));
     }
-    
+
     // Read current config
     let mut config = state.config.write().map_err(|e| {
         error!("Failed to write config: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to access configuration".to_string(),
+        )
     })?;
-    
+
     // Find target
-    let target_idx = config.targets.iter().position(|t| t.id == id)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Target with id '{}' not found", id)))?;
-    
+    let target_idx = config
+        .targets
+        .iter()
+        .position(|t| t.id == id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Target with id '{}' not found", id),
+            )
+        })?;
+
     // Create updated target
     let updated_target = Target {
-        id: request.id.unwrap_or_else(|| config.targets[target_idx].id.clone()),
+        id: request
+            .id
+            .unwrap_or_else(|| config.targets[target_idx].id.clone()),
         address: request.address,
         name: request.name,
-        ping_count: request.ping_count.unwrap_or(config.targets[target_idx].ping_count),
-        ping_interval: request.ping_interval.unwrap_or(config.targets[target_idx].ping_interval),
+        ping_count: request
+            .ping_count
+            .unwrap_or(config.targets[target_idx].ping_count),
+        ping_interval: request
+            .ping_interval
+            .unwrap_or(config.targets[target_idx].ping_interval),
     };
-    
+
     // Read config file
     let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
         error!("Failed to read config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read config file: {}", e),
+        )
     })?;
-    
+
     // Update target in document
     config_file::update_target(&mut doc, &id, &updated_target).map_err(|e| {
         error!("Failed to update target: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to update target: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to update target: {}", e),
+        )
     })?;
-    
+
     // Write config file
     config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
         error!("Failed to write config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write config file: {}", e),
+        )
     })?;
-    
+
     // Update in-memory config
     config.targets[target_idx] = updated_target.clone();
     drop(config);
-    
+
     // Restart ping task immediately
     {
         let mut handles = state.task_handles.write().map_err(|e| {
             error!("Failed to write task handles: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to access task handles".to_string(),
+            )
         })?;
         if let Some(old_handle) = handles.remove(&id) {
             old_handle.abort();
@@ -941,7 +992,7 @@ pub async fn update_target(
         let handle = start_ping_task(&updated_target, Arc::clone(&state.storage));
         handles.insert(updated_target.id.clone(), handle);
     }
-    
+
     Ok(Json(updated_target))
 }
 
@@ -953,47 +1004,65 @@ pub async fn delete_target(
     // Read current config
     let mut config = state.config.write().map_err(|e| {
         error!("Failed to write config: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to access configuration".to_string(),
+        )
     })?;
-    
+
     // Check if target exists
     if !config.targets.iter().any(|t| t.id == id) {
-        return Err((StatusCode::NOT_FOUND, format!("Target with id '{}' not found", id)));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Target with id '{}' not found", id),
+        ));
     }
-    
+
     // Read config file
     let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
         error!("Failed to read config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read config file: {}", e),
+        )
     })?;
-    
+
     // Remove target from document
     config_file::remove_target(&mut doc, &id).map_err(|e| {
         error!("Failed to remove target: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to remove target: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to remove target: {}", e),
+        )
     })?;
-    
+
     // Write config file
     config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
         error!("Failed to write config file: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write config file: {}", e),
+        )
     })?;
-    
+
     // Update in-memory config
     config.targets.retain(|t| t.id != id);
     drop(config);
-    
+
     // Stop ping task
     {
         let mut handles = state.task_handles.write().map_err(|e| {
             error!("Failed to write task handles: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to access task handles".to_string(),
+            )
         })?;
         if let Some(handle) = handles.remove(&id) {
             handle.abort();
         }
     }
-    
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1025,31 +1094,27 @@ pub fn create_router(
         write_flag,
         config_path,
     };
-    
+
     let mut router = Router::new()
         .route("/api/ping/data", get(get_ping_data))
         .route("/api/ping/aggregated", get(get_ping_aggregated))
         .route("/api/targets", get(get_targets).post(create_target))
         .route("/api/targets/:id", put(update_target).delete(delete_target))
         .with_state(state);
-    
+
     // Add static file serving if static directory is provided
     if let Some(static_path) = static_dir {
         let static_path_for_fallback = static_path.clone();
-        
+
         // Nest static file service - API routes take precedence
-        router = router.nest_service(
-            "/",
-            ServeDir::new(&static_path)
-        );
-        
+        router = router.nest_service("/", ServeDir::new(&static_path));
+
         // Add fallback to serve index.html for SPA routing
         router = router.fallback(move || {
             let path = static_path_for_fallback.clone();
             async move { spa_fallback(path).await }
         });
     }
-    
+
     router
 }
-

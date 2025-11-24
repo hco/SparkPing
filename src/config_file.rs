@@ -2,7 +2,7 @@ use crate::config::Target;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use toml_edit::{DocumentMut, Item, Value, Table};
+use toml_edit::{DocumentMut, Item, Table, Value};
 use uuid::Uuid;
 
 #[cfg(unix)]
@@ -23,18 +23,18 @@ pub fn write_config_file(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set write flag before writing
     write_flag.store(true, Ordering::SeqCst);
-    
+
     // Write to temp file first, then rename atomically
     let temp_path = path.with_extension("tmp");
     let content = doc.to_string();
     std::fs::write(&temp_path, content)?;
-    
+
     // Preserve permissions and owner from original file if it exists
     if path.exists() {
         let metadata = std::fs::metadata(path)?;
         let permissions = metadata.permissions();
         std::fs::set_permissions(&temp_path, permissions)?;
-        
+
         #[cfg(unix)]
         {
             use std::ffi::CString;
@@ -44,17 +44,20 @@ pub fn write_config_file(
             let gid = metadata.gid();
             let result = unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
             if result != 0 {
-                return Err(format!("Failed to preserve file owner: chown failed with errno {}", 
-                    std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)).into());
+                return Err(format!(
+                    "Failed to preserve file owner: chown failed with errno {}",
+                    std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)
+                )
+                .into());
             }
         }
     }
-    
+
     std::fs::rename(&temp_path, path)?;
-    
+
     // Clear write flag after writing
     write_flag.store(false, Ordering::SeqCst);
-    
+
     Ok(())
 }
 
@@ -77,38 +80,44 @@ pub fn add_target(
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Ensure targets array exists
     ensure_targets_array(doc);
-    
+
     let targets_array = doc
         .get_mut("targets")
         .and_then(|item| item.as_array_of_tables_mut())
         .ok_or("targets array not found or invalid")?;
-    
+
     // Generate ID if not provided
     let id = if target.id.is_empty() {
         generate_target_id()
     } else {
         target.id.clone()
     };
-    
+
     // Create new target table
     let mut target_table = Table::new();
     target_table["id"] = Item::Value(Value::String(toml_edit::Formatted::new(id.clone())));
-    target_table["address"] = Item::Value(Value::String(toml_edit::Formatted::new(target.address.clone())));
-    
+    target_table["address"] = Item::Value(Value::String(toml_edit::Formatted::new(
+        target.address.clone(),
+    )));
+
     if let Some(ref name) = target.name {
         target_table["name"] = Item::Value(Value::String(toml_edit::Formatted::new(name.clone())));
     }
-    
+
     if target.ping_count != 3 {
-        target_table["ping_count"] = Item::Value(Value::Integer(toml_edit::Formatted::new(target.ping_count as i64)));
+        target_table["ping_count"] = Item::Value(Value::Integer(toml_edit::Formatted::new(
+            target.ping_count as i64,
+        )));
     }
-    
+
     if target.ping_interval != 1 {
-        target_table["ping_interval"] = Item::Value(Value::Integer(toml_edit::Formatted::new(target.ping_interval as i64)));
+        target_table["ping_interval"] = Item::Value(Value::Integer(toml_edit::Formatted::new(
+            target.ping_interval as i64,
+        )));
     }
-    
+
     targets_array.push(target_table);
-    
+
     Ok(id)
 }
 
@@ -122,42 +131,47 @@ pub fn update_target(
         .get_mut("targets")
         .and_then(|item| item.as_array_of_tables_mut())
         .ok_or("targets array not found or invalid")?;
-    
+
     // Find the target by ID
     for target_table in targets_array.iter_mut() {
         if let Some(Item::Value(Value::String(existing_id))) = target_table.get("id") {
             if existing_id.value() == id {
                 // Update fields
-                target_table["id"] = Item::Value(Value::String(toml_edit::Formatted::new(target.id.clone())));
-                target_table["address"] = Item::Value(Value::String(toml_edit::Formatted::new(target.address.clone())));
-                
+                target_table["id"] =
+                    Item::Value(Value::String(toml_edit::Formatted::new(target.id.clone())));
+                target_table["address"] = Item::Value(Value::String(toml_edit::Formatted::new(
+                    target.address.clone(),
+                )));
+
                 if let Some(ref name) = target.name {
-                    target_table["name"] = Item::Value(Value::String(toml_edit::Formatted::new(name.clone())));
+                    target_table["name"] =
+                        Item::Value(Value::String(toml_edit::Formatted::new(name.clone())));
                 } else {
                     target_table.remove("name");
                 }
-                
-                target_table["ping_count"] = Item::Value(Value::Integer(toml_edit::Formatted::new(target.ping_count as i64)));
-                target_table["ping_interval"] = Item::Value(Value::Integer(toml_edit::Formatted::new(target.ping_interval as i64)));
-                
+
+                target_table["ping_count"] = Item::Value(Value::Integer(
+                    toml_edit::Formatted::new(target.ping_count as i64),
+                ));
+                target_table["ping_interval"] = Item::Value(Value::Integer(
+                    toml_edit::Formatted::new(target.ping_interval as i64),
+                ));
+
                 return Ok(());
             }
         }
     }
-    
+
     Err(format!("Target with id '{}' not found", id).into())
 }
 
 /// Remove a target from the config document by ID
-pub fn remove_target(
-    doc: &mut DocumentMut,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn remove_target(doc: &mut DocumentMut, id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let targets_array = doc
         .get_mut("targets")
         .and_then(|item| item.as_array_of_tables_mut())
         .ok_or("targets array not found or invalid")?;
-    
+
     // Find and remove the target by ID
     let mut index_to_remove = None;
     for (idx, target_table) in targets_array.iter().enumerate() {
@@ -168,7 +182,7 @@ pub fn remove_target(
             }
         }
     }
-    
+
     if let Some(idx) = index_to_remove {
         targets_array.remove(idx);
         Ok(())
@@ -176,4 +190,3 @@ pub fn remove_target(
         Err(format!("Target with id '{}' not found", id).into())
     }
 }
-

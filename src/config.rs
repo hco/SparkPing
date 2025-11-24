@@ -47,4 +47,3 @@ fn default_ping_count() -> u16 {
 fn default_ping_interval() -> u64 {
     1
 }
-

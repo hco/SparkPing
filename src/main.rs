@@ -5,25 +5,25 @@ mod logging;
 mod ping;
 mod storage;
 
-use clap::Parser;
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use tsink::{StorageBuilder, TimestampPrecision};
-use tracing::{error, info, debug, warn};
-use chrono::{DateTime, Utc};
-use tokio::signal;
-use std::sync::RwLock;
-use notify::{Watcher, RecommendedWatcher, RecursiveMode, EventKind};
-use uuid::Uuid;
 use crate::api::create_router;
 use crate::config::AppConfig;
 use crate::logging::init_logging;
 use crate::ping::perform_ping;
 use crate::storage::write_ping_result;
+use chrono::{DateTime, Utc};
+use clap::Parser;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::time::Duration;
+use tokio::signal;
+use tracing::{debug, error, info, warn};
+use tsink::{StorageBuilder, TimestampPrecision};
+use uuid::Uuid;
 
 /// SparkPing - A Rust application with configurable settings
 #[derive(Parser, Debug)]
@@ -35,10 +35,12 @@ struct Args {
 }
 
 /// Get the time range of all data in tsink storage
-fn get_data_time_range(storage: &dyn tsink::Storage) -> Result<Option<(i64, i64)>, Box<dyn std::error::Error>> {
+fn get_data_time_range(
+    storage: &dyn tsink::Storage,
+) -> Result<Option<(i64, i64)>, Box<dyn std::error::Error>> {
     let mut earliest: Option<i64> = None;
     let mut latest: Option<i64> = None;
-    
+
     // Query both metrics
     for metric_name in &["ping_latency", "ping_failed"] {
         let all_results = storage.select_all(metric_name, 0, i64::MAX)?;
@@ -53,7 +55,7 @@ fn get_data_time_range(storage: &dyn tsink::Storage) -> Result<Option<(i64, i64)
             }
         }
     }
-    
+
     match (earliest, latest) {
         (Some(e), Some(l)) => Ok(Some((e, l))),
         _ => Ok(None),
@@ -63,7 +65,7 @@ fn get_data_time_range(storage: &dyn tsink::Storage) -> Result<Option<(i64, i64)
 /// Count total number of data points in tsink storage
 fn count_data_points(storage: &dyn tsink::Storage) -> Result<usize, Box<dyn std::error::Error>> {
     let mut count = 0;
-    
+
     // Query both metrics
     for metric_name in &["ping_latency", "ping_failed"] {
         let all_results = storage.select_all(metric_name, 0, i64::MAX)?;
@@ -71,7 +73,7 @@ fn count_data_points(storage: &dyn tsink::Storage) -> Result<usize, Box<dyn std:
             count += points.len();
         }
     }
-    
+
     Ok(count)
 }
 
@@ -83,8 +85,9 @@ fn reload_config(path: &PathBuf) -> Result<AppConfig, String> {
         ))
         .build()
         .map_err(|e| format!("Failed to build config: {}", e))?;
-    
-    let app_config: AppConfig = settings.try_deserialize()
+
+    let app_config: AppConfig = settings
+        .try_deserialize()
         .map_err(|e| format!("Failed to deserialize config: {}", e))?;
     Ok(app_config)
 }
@@ -99,24 +102,26 @@ pub fn start_ping_task(
     let target_name = target.name.clone();
     let ping_count = target.ping_count;
     let ping_interval = target.ping_interval;
-    
+
     let handle = tokio::spawn(async move {
         loop {
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
-                let result = perform_ping(&target_id, &target_address, sequence, &target_name).await;
-                
+                let result =
+                    perform_ping(&target_id, &target_address, sequence, &target_name).await;
+
                 // Write result to tsink
                 if let Err(e) = write_ping_result(&*storage, &result) {
                     error!("Error writing ping result to tsink: {}", e);
                 }
             }
-            
+
             // Wait ping_interval seconds before next batch of pings
             tokio::time::sleep(Duration::from_secs(ping_interval)).await;
         }
-    }).abort_handle();
-    
+    })
+    .abort_handle();
+
     handle
 }
 
@@ -128,25 +133,25 @@ async fn reload_targets(
     task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
 ) {
     info!("Reloading targets due to config change");
-    
+
     let mut handles = task_handles.write().unwrap_or_else(|e| {
         error!("Failed to acquire write lock on task handles: {}", e);
         panic!("Failed to acquire write lock");
     });
-    
+
     // Build maps for comparison
     let old_targets: HashMap<String, &crate::config::Target> = old_config
         .targets
         .iter()
         .map(|t| (t.id.clone(), t))
         .collect();
-    
+
     let new_targets: HashMap<String, &crate::config::Target> = new_config
         .targets
         .iter()
         .map(|t| (t.id.clone(), t))
         .collect();
-    
+
     // Find removed targets
     for (id, _) in old_targets.iter() {
         if !new_targets.contains_key(id) {
@@ -156,7 +161,7 @@ async fn reload_targets(
             }
         }
     }
-    
+
     // Find modified or new targets
     for (id, new_target) in new_targets.iter() {
         let needs_restart = if let Some(old_target) = old_targets.get(id) {
@@ -169,7 +174,7 @@ async fn reload_targets(
             // New target
             true
         };
-        
+
         if needs_restart {
             if let Some(old_handle) = handles.remove(id) {
                 info!("Restarting ping task for modified target: {}", id);
@@ -177,7 +182,7 @@ async fn reload_targets(
             } else {
                 info!("Starting ping task for new target: {}", id);
             }
-            
+
             let handle = start_ping_task(new_target, Arc::clone(&storage));
             handles.insert(id.clone(), handle);
         }
@@ -197,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let mut app_config: AppConfig = settings.try_deserialize()?;
-    
+
     // Ensure all targets have IDs (migrate if needed)
     let mut needs_save = false;
     for target in &mut app_config.targets {
@@ -206,19 +211,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             needs_save = true;
         }
     }
-    
+
     // Save migrated config if needed
     if needs_save {
         info!("Migrating config: adding IDs to targets without IDs");
         let mut doc = config_file::read_config_file(&config_path)?;
-        if let Some(targets_array) = doc.get_mut("targets").and_then(|item| item.as_array_of_tables_mut()) {
+        if let Some(targets_array) = doc
+            .get_mut("targets")
+            .and_then(|item| item.as_array_of_tables_mut())
+        {
             let mut idx = 0;
             for target_table in targets_array.iter_mut() {
                 if !target_table.contains_key("id") {
                     if idx < app_config.targets.len() {
                         let id = app_config.targets[idx].id.clone();
                         target_table["id"] = toml_edit::Item::Value(toml_edit::Value::String(
-                            toml_edit::Formatted::new(id)
+                            toml_edit::Formatted::new(id),
                         ));
                     }
                 }
@@ -228,13 +236,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let write_flag = Arc::new(AtomicBool::new(false));
         config_file::write_config_file(&config_path, &doc, &write_flag)?;
     }
-    
+
     // Initialize logging before any other output
     init_logging(&app_config.logging)?;
-    
+
     info!("Configuration loaded successfully from: {:?}", args.config);
-    info!("Server: {}:{}", app_config.server.host, app_config.server.port);
-    debug!("Logging: level={}, file={}", app_config.logging.level, app_config.logging.file);
+    info!(
+        "Server: {}:{}",
+        app_config.server.host, app_config.server.port
+    );
+    debug!(
+        "Logging: level={}, file={}",
+        app_config.logging.level, app_config.logging.file
+    );
     info!("Database path: {}", app_config.database.path);
     info!("Targets to ping:");
     for target in &app_config.targets {
@@ -246,20 +260,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize tsink storage with configured path
     // WAL is enabled by default, but let's make sure
-    let storage = Arc::new(StorageBuilder::new()
-        .with_data_path(&app_config.database.path)
-        .with_wal_enabled(true)
-        .with_retention(Duration::from_secs(365 * 24 * 3600 * 20))  // 20 years
-        .with_timestamp_precision(TimestampPrecision::Milliseconds)
-        .with_max_writers(16)
-        .with_write_timeout(Duration::from_secs(60))
-        .with_partition_duration(Duration::from_secs(6 * 3600))  // 6 hours
-        .with_wal_buffer_size(16384)  // 16KB
-        .build()?);
+    let storage = Arc::new(
+        StorageBuilder::new()
+            .with_data_path(&app_config.database.path)
+            .with_wal_enabled(true)
+            .with_retention(Duration::from_secs(365 * 24 * 3600 * 20)) // 20 years
+            .with_timestamp_precision(TimestampPrecision::Milliseconds)
+            .with_max_writers(16)
+            .with_write_timeout(Duration::from_secs(60))
+            .with_partition_duration(Duration::from_secs(6 * 3600)) // 6 hours
+            .with_wal_buffer_size(16384) // 16KB
+            .build()?,
+    );
 
+    info!(
+        "tsink database initialized at: {}",
+        app_config.database.path
+    );
 
-    info!("tsink database initialized at: {}", app_config.database.path);
-    
     // Check if WAL directory exists and has files
     let wal_path = std::path::Path::new(&app_config.database.path).join("wal");
     if wal_path.exists() {
@@ -270,7 +288,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("WAL-Verzeichnis gefunden mit {} Dateien", wal_files.len());
         for entry in wal_files.iter().take(5) {
             if let Ok(metadata) = entry.metadata() {
-                info!("  WAL-Datei: {} ({} Bytes)", 
+                info!(
+                    "  WAL-Datei: {} ({} Bytes)",
                     entry.file_name().to_string_lossy(),
                     metadata.len()
                 );
@@ -279,15 +298,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("WAL-Verzeichnis nicht gefunden: {:?}", wal_path);
     }
-    
+
     // Query and display data time range
     match get_data_time_range(&**storage) {
         Ok(Some((earliest, latest))) => {
-            let earliest_dt = DateTime::from_timestamp(earliest, 0)
-                .unwrap_or_else(|| Utc::now());
-            let latest_dt = DateTime::from_timestamp(latest, 0)
-                .unwrap_or_else(|| Utc::now());
-            info!("Daten in tsink vorhanden von {} bis {} ({} Datenpunkte)", 
+            let earliest_dt = DateTime::from_timestamp(earliest, 0).unwrap_or_else(|| Utc::now());
+            let latest_dt = DateTime::from_timestamp(latest, 0).unwrap_or_else(|| Utc::now());
+            info!(
+                "Daten in tsink vorhanden von {} bis {} ({} Datenpunkte)",
                 earliest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
                 latest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
                 count_data_points(&**storage).unwrap_or(0)
@@ -302,7 +320,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     info!("Starting ping loop (each target runs independently in parallel)...");
     for target in &app_config.targets {
-        info!("  - {} (id: {}): {} pings back-to-back, then wait {}s", 
+        info!(
+            "  - {} (id: {}): {} pings back-to-back, then wait {}s",
             target.name.as_ref().unwrap_or(&target.address),
             target.id,
             target.ping_count,
@@ -314,9 +333,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_host = app_config.server.host.clone();
     let server_port = app_config.server.port;
     let config_state = Arc::new(RwLock::new(app_config));
-    let task_handles = Arc::new(RwLock::new(HashMap::<String, tokio::task::AbortHandle>::new()));
+    let task_handles = Arc::new(RwLock::new(
+        HashMap::<String, tokio::task::AbortHandle>::new(),
+    ));
     let write_flag = Arc::new(AtomicBool::new(false));
-    
+
     // Start initial ping tasks
     {
         let config = config_state.read().unwrap();
@@ -340,13 +361,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None
             }
         });
-    
+
     if let Some(ref dir) = static_dir {
         info!("Serving static files from: {:?}", dir);
     } else {
         info!("Static file serving disabled (no static directory found)");
     }
-    
+
     // Create HTTP API router with shared state
     let app = create_router(
         Arc::clone(&storage),
@@ -359,27 +380,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
         .expect("Invalid server address");
-    
+
     info!("Starting HTTP API server on http://{}", addr);
-    
+
     // Spawn HTTP server task
     let server_task = tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(addr).await
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
             .expect("Failed to bind HTTP server");
-        axum::serve(listener, app).await
-            .expect("HTTP server error");
+        axum::serve(listener, app).await.expect("HTTP server error");
     });
-    
+
     // Set up file watcher for config reloading
     let config_path_for_watcher = config_path.clone();
     let config_state_for_watcher = Arc::clone(&config_state);
     let storage_for_watcher = Arc::clone(&storage);
     let task_handles_for_watcher = Arc::clone(&task_handles);
     let write_flag_for_watcher = Arc::clone(&write_flag);
-    
+
     let watcher_task = tokio::spawn(async move {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<notify::Result<notify::Event>>(100);
-        
+
         let mut watcher: RecommendedWatcher = match Watcher::new(
             move |res| {
                 if tx.blocking_send(res).is_err() {
@@ -394,14 +415,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok::<(), String>(());
             }
         };
-        
+
         if let Err(e) = watcher.watch(&config_path_for_watcher, RecursiveMode::NonRecursive) {
             error!("Failed to watch config file: {}", e);
             return Ok::<(), String>(());
         }
-        
-        info!("Watching config file for changes: {:?}", config_path_for_watcher);
-        
+
+        info!(
+            "Watching config file for changes: {:?}",
+            config_path_for_watcher
+        );
+
         while let Some(event) = rx.recv().await {
             match event {
                 Ok(event) => {
@@ -412,32 +436,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             debug!("Ignoring config file change (our own write)");
                             continue;
                         }
-                        
+
                         // Small delay to ensure file write is complete
                         tokio::time::sleep(Duration::from_millis(100)).await;
-                        
+
                         // Reload config
                         info!("Config file changed, reloading...");
                         match reload_config(&config_path_for_watcher) {
                             Ok(new_config) => {
                                 let old_config = {
-                                    let config = config_state_for_watcher.read().map_err(|e| format!("Failed to read config: {}", e))?;
+                                    let config = config_state_for_watcher
+                                        .read()
+                                        .map_err(|e| format!("Failed to read config: {}", e))?;
                                     config.clone()
                                 };
-                                
+
                                 // Update config state
                                 {
-                                    let mut config = config_state_for_watcher.write().map_err(|e| format!("Failed to write config: {}", e))?;
+                                    let mut config = config_state_for_watcher
+                                        .write()
+                                        .map_err(|e| format!("Failed to write config: {}", e))?;
                                     *config = new_config.clone();
                                 }
-                                
+
                                 // Reload targets
                                 reload_targets(
                                     &old_config,
                                     &new_config,
                                     Arc::clone(&storage_for_watcher),
                                     Arc::clone(&task_handles_for_watcher),
-                                ).await;
+                                )
+                                .await;
                             }
                             Err(e) => {
                                 error!("Failed to reload config: {}", e);
@@ -450,10 +479,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        
+
         Ok::<(), String>(())
     });
-    
+
     // Setup signal handler for graceful shutdown
     let storage_for_shutdown = storage.clone();
     let shutdown_task = tokio::spawn(async move {
@@ -503,7 +532,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Shutdown handler completed");
         }
     }
-    
+
     // Ensure storage is closed before exit
     info!("Closing storage before exit...");
     if let Err(e) = storage.close() {
@@ -511,6 +540,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("Storage closed successfully");
     }
-    
+
     Ok(())
 }

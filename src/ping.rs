@@ -14,9 +14,14 @@ pub struct PingResult {
     pub latency_ms: Option<f64>,
 }
 
-pub async fn perform_ping(target_id: &str, address: &str, sequence: u16, name: &Option<String>) -> PingResult {
+pub async fn perform_ping(
+    target_id: &str,
+    address: &str,
+    sequence: u16,
+    name: &Option<String>,
+) -> PingResult {
     let timestamp = Utc::now();
-    
+
     // Parse the address to IpAddr
     let ip_addr: IpAddr = match address.parse() {
         Ok(ip) => ip,
@@ -33,20 +38,20 @@ pub async fn perform_ping(target_id: &str, address: &str, sequence: u16, name: &
             };
         }
     };
-    
+
     // Perform the ping with a 2 second timeout
     // Measure time manually since ping() doesn't return latency
     let start = Instant::now();
     let ping_result = ping(
-        ip_addr, 
-        Some(Duration::from_secs(2)), 
-        Some(64), 
-        None,  // ident
-        Some(sequence),  // seq_cnt
-        None  // payload
+        ip_addr,
+        Some(Duration::from_secs(2)),
+        Some(64),
+        None,           // ident
+        Some(sequence), // seq_cnt
+        None,           // payload
     );
     let elapsed = start.elapsed();
-    
+
     match ping_result {
         Ok(_) => {
             let latency_ms = elapsed.as_secs_f64() * 1000.0;
@@ -88,4 +93,3 @@ pub async fn perform_ping(target_id: &str, address: &str, sequence: u16, name: &
         }
     }
 }
-
