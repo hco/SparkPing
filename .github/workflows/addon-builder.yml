@@ -61,7 +61,7 @@ jobs:
             --privileged \
             -v ${{ github.workspace }}:/data \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ~/.docker:/root/.docker:ro \
+            -v ~/.docker:/root/.docker \
             -e GITHUB_TOKEN \
             -e GITHUB_USER \
             ${{ matrix.builder_image }} \
