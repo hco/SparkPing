@@ -15,13 +15,14 @@ postinstall = "npx corepack enable"
 # Add node_modules/.bin to PATH so binaries installed with pnpm are available
 _.path = ["{{config_root}}/frontend/node_modules/.bin"]
 
-[tasks."install:rust"]
-description = "Install Rust dependencies"
+# Installation tasks
+[tasks."server:install"]
+description = "Install server dependencies"
 run = "cargo fetch && touch .cargo-fetched"
 sources = ["Cargo.toml", "Cargo.lock"]
 outputs = [".cargo-fetched"]
 
-[tasks."install:frontend"]
+[tasks."frontend:install"]
 description = "Install frontend dependencies"
 run = "pnpm install"
 dir = "frontend"
@@ -29,51 +30,57 @@ sources = ["frontend/package.json", "frontend/pnpm-lock.yaml"]
 outputs = ["frontend/node_modules/"]
 
 [tasks.install]
-description = "Install all dependencies (Rust and frontend)"
-depends = ["install:rust", "install:frontend"]
+description = "Install all dependencies (server and frontend)"
+depends = ["server:install", "frontend:install"]
 
-[tasks.build]
-description = "Build the project"
+# Server tasks
+[tasks."server:build"]
+description = "Build the server"
 depends = ["install"]
 run = "cargo build"
 
-[tasks.release]
-description = "Build the project in release mode"
+[tasks."server:build:release"]
+description = "Build the server in release mode"
 depends = ["install"]
 run = "cargo build --release"
 
-[tasks.test]
-description = "Run tests"
+[tasks."server:test"]
+description = "Run server tests"
 depends = ["install"]
 run = "cargo test"
 
-[tasks.check]
-description = "Check code without building"
+[tasks."server:check"]
+description = "Check server code without building"
 depends = ["install"]
 run = "cargo check"
 
-[tasks.fmt]
-description = "Format code"
+[tasks."server:fmt"]
+description = "Format server code"
 depends = ["install"]
 run = "cargo fmt --all"
 
-[tasks.fmt-check]
+[tasks."server:fmt-check"]
+description = "Check server code formatting"
 depends = ["install"]
-description = "Check code formatting"
 run = "cargo fmt --check --all"
 
-[tasks.clippy]
-description = "Run clippy linter"
+[tasks."server:clippy"]
+description = "Run clippy linter on server code"
 depends = ["install"]
 run = "cargo clippy"
 
-[tasks.clippy-pedantic]
+[tasks."server:clippy-pedantic"]
 description = "Run clippy with pedantic lints"
 depends = ["install"]
 run = "cargo clippy -- -W clippy::pedantic"
 
-[tasks.run]
-description = "Run the project"
+[tasks."server:lint"]
+description = "Run all server linting checks (fmt-check + clippy)"
+depends = ["install"]
+run = "cargo fmt --check --all && cargo clippy"
+
+[tasks."server:run"]
+description = "Run the server"
 depends = ["install"]
 run = '''
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -83,9 +90,10 @@ else
 fi
 '''
 
-[tasks.dev]
-description = "Run the project with watch support (auto-reload on file changes)"
+[tasks."server:dev"]
+description = "Run the server with watch support (auto-reload on file changes)"
 depends = ["install"]
+watch = ["**/*.rs", "Cargo.toml", "Cargo.lock"]
 run = '''
 if [[ "$(uname)" == "Darwin" ]]; then
   sudo cargo watch -x run
@@ -94,25 +102,16 @@ else
 fi
 '''
 
-[tasks.watch-check]
+[tasks."server:watch-check"]
 description = "Watch for changes and run cargo check (faster feedback loop)"
 depends = ["install"]
 run = "cargo watch -x check"
 
-[tasks.clean]
-description = "Clean build artifacts"
+[tasks."server:clean"]
+description = "Clean server build artifacts"
 run = "cargo clean"
 
-[tasks.lint]
-description = "Run all linting checks (fmt-check + clippy)"
-depends = ["install"]
-run = "cargo fmt --check --all && cargo clippy"
-
-[tasks.all]
-description = "Run check, fmt-check, and clippy"
-depends = ["install"]
-run = "cargo check && cargo fmt --check --all && cargo clippy"
-
+# Frontend tasks
 [tasks."frontend:dev"]
 description = "Start the frontend development server"
 depends = ["install"]
@@ -144,8 +143,27 @@ dir = "frontend"
 run = "pnpm exec tsc --noEmit"
 
 [tasks."frontend:verify"]
-depends = ["install", "frontend:type-check", "frontend:lint"]
+description = "Verify frontend code (type check + lint)"
+depends = ["frontend:type-check", "frontend:lint"]
 
-[tasks."ci"]
+# Combined tasks
+[tasks.build]
+description = "Build both server and frontend"
+depends = ["server:build", "frontend:build"]
+
+[tasks.lint]
+description = "Lint both server and frontend"
+depends = ["server:lint", "frontend:lint"]
+
+[tasks.develop]
+description = "Run both server and frontend in development mode"
+depends = ["server:dev", "frontend:dev"]
+
+[tasks.dev]
+description = "Alias for develop"
+depends = ["develop"]
+
+# CI task
+[tasks.ci]
 description = "Run all CI checks (linting, type checking, and tests)"
-depends = ["lint", "frontend:verify", "check", "clippy", "fmt-check"]
+depends = ["server:lint", "frontend:verify", "server:check", "server:clippy", "server:fmt-check"]
