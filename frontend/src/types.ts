@@ -43,7 +43,7 @@ export interface PingDataResponse {
 
 export interface PingDataQuery {
   target?: string;
-  from?: number;
+  from?: number | string; // Can be absolute timestamp (number) or relative time range (string like "24h", "7d")
   to?: number;
   metric?: 'latency' | 'failed' | 'all';
   limit?: number;
@@ -65,7 +65,7 @@ export interface BucketDataPoint {
 
 export interface PingAggregatedQuery {
   target?: string;
-  from?: number;
+  from?: number | string; // Can be absolute timestamp (number) or relative time range (string like "24h", "7d")
   to?: number;
   metric?: 'latency' | 'failed' | 'all';
   bucket?: string;

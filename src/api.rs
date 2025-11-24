@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::collections::HashMap;
@@ -21,12 +21,13 @@ use crate::storage::write_ping_result;
 use uuid::Uuid;
 
 /// Query parameters for the ping data API
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct PingDataQuery {
     /// Filter by target address (optional)
     pub target: Option<String>,
-    /// Start timestamp (Unix timestamp in seconds, optional)
-    pub from: Option<i64>,
+    /// Start timestamp (Unix timestamp in seconds) or relative time range (e.g., "24h", "7d")
+    /// Can be either a number (absolute timestamp) or a string (relative time range)
+    pub from: Option<TimeRangeValue>,
     /// End timestamp (Unix timestamp in seconds, optional)
     pub to: Option<i64>,
     /// Filter by metric type: "latency", "failed", or "all" (default: "all")
@@ -35,20 +36,165 @@ pub struct PingDataQuery {
     pub limit: Option<usize>,
 }
 
+/// Represents either an absolute timestamp or a relative time range string
+#[derive(Debug, Clone)]
+pub enum TimeRangeValue {
+    Absolute(i64),
+    Relative(String),
+}
+
+impl<'de> Deserialize<'de> for PingDataQuery {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct PingDataQueryHelper {
+            target: Option<String>,
+            #[serde(deserialize_with = "deserialize_time_range")]
+            from: Option<TimeRangeValue>,
+            to: Option<i64>,
+            metric: Option<String>,
+            limit: Option<usize>,
+        }
+
+        let helper = PingDataQueryHelper::deserialize(deserializer)?;
+        Ok(PingDataQuery {
+            target: helper.target,
+            from: helper.from,
+            to: helper.to,
+            metric: helper.metric,
+            limit: helper.limit,
+        })
+    }
+}
+
+/// Custom deserializer for time range values
+/// Tries to parse as i64 first (absolute timestamp), otherwise treats as relative string
+fn deserialize_time_range<'de, D>(deserializer: D) -> Result<Option<TimeRangeValue>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    
+    struct TimeRangeVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for TimeRangeVisitor {
+        type Value = Option<TimeRangeValue>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an integer timestamp or a relative time range string")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_any(self)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(Some(TimeRangeValue::Absolute(value)))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(Some(TimeRangeValue::Absolute(value as i64)))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            // Try to parse as i64 first (for backward compatibility)
+            if let Ok(timestamp) = value.parse::<i64>() {
+                return Ok(Some(TimeRangeValue::Absolute(timestamp)));
+            }
+            // Otherwise treat as relative time range string
+            Ok(Some(TimeRangeValue::Relative(value.to_string())))
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            // Try to parse as i64 first (for backward compatibility)
+            if let Ok(timestamp) = value.parse::<i64>() {
+                return Ok(Some(TimeRangeValue::Absolute(timestamp)));
+            }
+            // Otherwise treat as relative time range string
+            Ok(Some(TimeRangeValue::Relative(value)))
+        }
+    }
+
+    deserializer.deserialize_option(TimeRangeVisitor)
+}
+
 /// Query parameters for the aggregated ping data API
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct PingAggregatedQuery {
     /// Filter by target address (optional)
     pub target: Option<String>,
-    /// Start timestamp (Unix timestamp in seconds, optional)
-    pub from: Option<i64>,
+    /// Start timestamp (Unix timestamp in seconds) or relative time range (e.g., "24h", "7d")
+    /// Can be either a number (absolute timestamp) or a string (relative time range)
+    pub from: Option<TimeRangeValue>,
     /// End timestamp (Unix timestamp in seconds, optional)
     pub to: Option<i64>,
     /// Filter by metric type: "latency", "failed", or "all" (default: "all")
     pub metric: Option<String>,
     /// Time bucket duration (e.g., "5m", "1h", "30s"). Default: "5m"
-    #[serde(default = "default_bucket")]
     pub bucket: String,
+}
+
+impl<'de> Deserialize<'de> for PingAggregatedQuery {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(default)]
+        struct PingAggregatedQueryHelper {
+            target: Option<String>,
+            #[serde(deserialize_with = "deserialize_time_range")]
+            from: Option<TimeRangeValue>,
+            to: Option<i64>,
+            metric: Option<String>,
+            bucket: Option<String>,
+        }
+
+        impl Default for PingAggregatedQueryHelper {
+            fn default() -> Self {
+                PingAggregatedQueryHelper {
+                    target: None,
+                    from: None,
+                    to: None,
+                    metric: None,
+                    bucket: None,
+                }
+            }
+        }
+
+        let helper = PingAggregatedQueryHelper::deserialize(deserializer)?;
+        Ok(PingAggregatedQuery {
+            target: helper.target,
+            from: helper.from,
+            to: helper.to,
+            metric: helper.metric,
+            bucket: helper.bucket.unwrap_or_else(default_bucket),
+        })
+    }
 }
 
 fn default_bucket() -> String {
@@ -172,13 +318,22 @@ pub struct PingAggregatedResponse {
     pub bucket_duration_seconds: i64,
 }
 
+/// Internal query structure with resolved timestamps
+struct ResolvedPingDataQuery {
+    target: Option<String>,
+    from: i64,
+    to: i64,
+    metric: Option<String>,
+    limit: Option<usize>,
+}
+
 /// Query ping data with labels properly extracted
 fn query_ping_data_with_labels(
     storage: &dyn Storage,
-    query: &PingDataQuery,
+    query: &ResolvedPingDataQuery,
 ) -> Result<Vec<PingDataPoint>, Box<dyn std::error::Error>> {
-    let from_ts = query.from.unwrap_or(0);
-    let to_ts = query.to.unwrap_or(i64::MAX);
+    let from_ts = query.from;
+    let to_ts = query.to;
     
     let mut all_points = Vec::new();
     
@@ -190,7 +345,7 @@ fn query_ping_data_with_labels(
     };
     
     for metric_name in metrics_to_query {
-        if let Some(ref target) = query.target {
+        if let Some(ref target) = &query.target {
             // Query all label combinations and filter by target
             let all_results = storage.select_all(metric_name, from_ts, to_ts)?;
             for (labels, points) in all_results {
@@ -306,6 +461,26 @@ fn parse_bucket_duration(bucket_str: &str) -> Result<i64, String> {
     }
     
     Ok(seconds)
+}
+
+/// Parse relative time range string (e.g., "1h", "24h", "7d") into seconds
+/// Uses the same logic as parse_bucket_duration for consistency
+fn parse_relative_time_range(range_str: &str) -> Result<i64, String> {
+    parse_bucket_duration(range_str)
+}
+
+/// Resolve a TimeRangeValue to an absolute timestamp
+/// If it's already absolute, return it as-is
+/// If it's relative, parse it and calculate: current_time - seconds
+fn resolve_time_range_value(value: &TimeRangeValue) -> Result<i64, String> {
+    match value {
+        TimeRangeValue::Absolute(timestamp) => Ok(*timestamp),
+        TimeRangeValue::Relative(range_str) => {
+            let seconds = parse_relative_time_range(range_str)?;
+            let now = Utc::now().timestamp();
+            Ok(now - seconds)
+        }
+    }
 }
 
 /// Aggregate ping data points into time buckets, grouped by target
@@ -431,7 +606,31 @@ pub async fn get_ping_data(
     let storage = &*state.storage;
     info!("Querying ping data: {:?}", query);
     
-    let points = query_ping_data_with_labels(storage, &query)
+    // Resolve relative time range to absolute timestamp
+    let resolved_from = if let Some(ref from_value) = query.from {
+        resolve_time_range_value(from_value)
+            .map_err(|e| {
+                error!("Invalid time range: {}", e);
+                (StatusCode::BAD_REQUEST, e)
+            })?
+    } else {
+        0
+    };
+    let resolved_to = query.to.unwrap_or(i64::MAX);
+    
+    // Store resolved timestamp for response metadata
+    let resolved_from_timestamp = Some(resolved_from);
+    
+    // Create resolved query for internal use
+    let resolved_query = ResolvedPingDataQuery {
+        target: query.target.clone(),
+        from: resolved_from,
+        to: resolved_to,
+        metric: query.metric.clone(),
+        limit: query.limit,
+    };
+    
+    let points = query_ping_data_with_labels(storage, &resolved_query)
         .map_err(|e| {
             error!("Error querying ping data: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -451,7 +650,7 @@ pub async fn get_ping_data(
     let response = PingDataResponse {
         query: QueryMetadata {
             target_filter: query.target.clone(),
-            from_timestamp: query.from,
+            from_timestamp: resolved_from_timestamp,
             to_timestamp: query.to,
             metric_filter: query.metric.clone(),
             limit: query.limit,
@@ -485,16 +684,31 @@ pub async fn get_ping_aggregated(
             (StatusCode::BAD_REQUEST, e)
         })?;
     
-    // Get raw data points
-    let ping_query = PingDataQuery {
+    // Resolve relative time range to absolute timestamp
+    let resolved_from = if let Some(ref from_value) = query.from {
+        resolve_time_range_value(from_value)
+            .map_err(|e| {
+                error!("Invalid time range: {}", e);
+                (StatusCode::BAD_REQUEST, e)
+            })?
+    } else {
+        0
+    };
+    let resolved_to = query.to.unwrap_or(i64::MAX);
+    
+    // Store resolved timestamp for response metadata
+    let resolved_from_timestamp = Some(resolved_from);
+    
+    // Create resolved query for internal use
+    let resolved_query = ResolvedPingDataQuery {
         target: query.target.clone(),
-        from: query.from,
-        to: query.to,
+        from: resolved_from,
+        to: resolved_to,
         metric: query.metric.clone(),
         limit: None, // No limit for aggregation
     };
     
-    let points = query_ping_data_with_labels(storage, &ping_query)
+    let points = query_ping_data_with_labels(storage, &resolved_query)
         .map_err(|e| {
             error!("Error querying ping data: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -517,7 +731,7 @@ pub async fn get_ping_aggregated(
     let response = PingAggregatedResponse {
         query: QueryMetadata {
             target_filter: query.target.clone(),
-            from_timestamp: query.from,
+            from_timestamp: resolved_from_timestamp,
             to_timestamp: query.to,
             metric_filter: query.metric.clone(),
             limit: None,

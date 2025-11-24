@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Statistics } from './components/Statistics';
 import { FiltersPanel } from './components/FiltersPanel';
 import { ErrorDisplay } from './components/ErrorDisplay';
@@ -8,7 +8,7 @@ import { ChartGrid } from './components/ChartGrid';
 import { usePingData } from './hooks/usePingData';
 import { useStatistics } from './hooks/useStatistics';
 import { useSynchronizedYDomain } from './hooks/useSynchronizedYDomain';
-import { calculateTimeRangeQuery, getTimeRangeSeconds, type TimeRangeOption } from './utils/timeRangeUtils';
+import { calculateTimeRangeQuery, type TimeRangeOption } from './utils/timeRangeUtils';
 import type { PingDataQuery } from './types';
 import './App.css';
 
@@ -31,27 +31,9 @@ function App() {
     }));
   };
 
-  // Auto-refresh effect - update query to maintain rolling time window
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      const seconds = getTimeRangeSeconds(timeRange);
-      if (seconds !== null) {
-        const now = Math.floor(Date.now() / 1000);
-        setQuery((prev) => ({
-          ...prev,
-          from: now - seconds,
-        }));
-      }
-    }, refreshInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, timeRange]);
-
-  // For rolling time windows, query key changes trigger refetch automatically
-  // For 'all' time range, use refetchInterval since query key doesn't change
-  const shouldUseRefetchInterval = autoRefresh && timeRange === 'all';
+  // With relative time ranges, the backend calculates from "now" on each request
+  // So we just need to use refetchInterval for auto-refresh
+  const shouldUseRefetchInterval = autoRefresh;
 
   const {
     data,

@@ -23,14 +23,13 @@ export function getTimeRangeSeconds(range: TimeRangeOption): number | null {
   }
 }
 
-export function calculateTimeRangeQuery(range: TimeRangeOption): { from?: number; to?: number } {
-  const seconds = getTimeRangeSeconds(range);
-  if (seconds === null) {
+export function calculateTimeRangeQuery(range: TimeRangeOption): { from?: string; to?: number } {
+  if (range === 'all') {
     return {}; // No time filter for 'all'
   }
-  const now = Math.floor(Date.now() / 1000);
+  // Return relative time range string instead of calculating timestamp
   return {
-    from: now - seconds,
+    from: range,
     to: undefined,
   };
 }
