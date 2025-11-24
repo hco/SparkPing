@@ -2,3 +2,4 @@
 /sparkping.log
 /tsink-data
 .tanstack
+.cargo-fetched

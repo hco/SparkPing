@@ -3,21 +3,40 @@ rust = "1.91.1"
 node = "24"
 "cargo:cargo-watch" = {version = "latest"}
 
+[tasks."install:rust"]
+description = "Install Rust dependencies"
+run = "cargo fetch && touch .cargo-fetched"
+sources = ["Cargo.toml", "Cargo.lock"]
+outputs = [".cargo-fetched"]
+
+[tasks."install:frontend"]
+description = "Install frontend dependencies"
+run = "cd frontend && pnpm install"
+sources = ["frontend/package.json", "frontend/pnpm-lock.yaml"]
+outputs = ["frontend/node_modules/"]
+
+[tasks.install]
+description = "Install all dependencies (Rust and frontend)"
+depends = ["install:rust", "install:frontend"]
 
 [tasks.build]
 description = "Build the project"
+depends = ["install"]
 run = "cargo build"
 
 [tasks.release]
 description = "Build the project in release mode"
+depends = ["install"]
 run = "cargo build --release"
 
 [tasks.test]
 description = "Run tests"
+depends = ["install"]
 run = "cargo test"
 
 [tasks.check]
 description = "Check code without building"
+depends = ["install"]
 run = "cargo check"
 
 [tasks.fmt]
@@ -30,14 +49,17 @@ run = "cargo fmt --check"
 
 [tasks.clippy]
 description = "Run clippy linter"
+depends = ["install"]
 run = "cargo clippy"
 
 [tasks.clippy-pedantic]
 description = "Run clippy with pedantic lints"
+depends = ["install"]
 run = "cargo clippy -- -W clippy::pedantic"
 
 [tasks.run]
 description = "Run the project"
+depends = ["install"]
 run = '''
 if [[ "$(uname)" == "Darwin" ]]; then
   sudo cargo run
@@ -48,6 +70,7 @@ fi
 
 [tasks.dev]
 description = "Run the project with watch support (auto-reload on file changes)"
+depends = ["install"]
 run = '''
 if [[ "$(uname)" == "Darwin" ]]; then
   sudo cargo watch -x run
@@ -58,6 +81,7 @@ fi
 
 [tasks.watch-check]
 description = "Watch for changes and run cargo check (faster feedback loop)"
+depends = ["install"]
 run = "cargo watch -x check"
 
 [tasks.clean]
@@ -66,8 +90,37 @@ run = "cargo clean"
 
 [tasks.lint]
 description = "Run all linting checks (fmt-check + clippy)"
+depends = ["install"]
 run = "cargo fmt --check && cargo clippy"
 
 [tasks.all]
 description = "Run check, fmt-check, and clippy"
+depends = ["install"]
 run = "cargo check && cargo fmt --check && cargo clippy"
+
+[tasks."frontend:dev"]
+description = "Start the frontend development server"
+depends = ["install"]
+run = "cd frontend && pnpm dev"
+
+[tasks."frontend:build"]
+description = "Build the frontend for production"
+depends = ["install"]
+run = "cd frontend && pnpm build"
+
+[tasks."frontend:lint"]
+description = "Lint the frontend code"
+depends = ["install"]
+run = "cd frontend && pnpm lint"
+
+[tasks."frontend:type-check"]
+description = "Run TypeScript type checking"
+depends = ["install"]
+run = "cd frontend && pnpm exec tsc --noEmit"
+
+[tasks."frontend:verify"]
+depends = ["install", "frontend:type-check", "frontend:lint"]
+
+[tasks."ci"]
+description = "Run all CI checks (linting, type checking, and tests)"
+depends = ["lint", "frontend:verify", "cargo-check", "clippy", "fmt-check"]
