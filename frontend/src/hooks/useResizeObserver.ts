@@ -5,8 +5,8 @@ interface Size {
   height: number;
 }
 
-export function useResizeObserver<T extends HTMLElement = HTMLDivElement>(): [React.RefObject<T>, Size] {
-  const ref = useRef<T>(null);
+export function useResizeObserver<T extends HTMLElement = HTMLDivElement>(): [React.RefObject<T | null>, Size] {
+  const ref = useRef<T | null>(null);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
 
   useEffect(() => {

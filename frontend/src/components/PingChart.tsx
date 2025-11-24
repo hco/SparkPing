@@ -24,7 +24,7 @@ interface PingChartProps {
 
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: Array<{
+  payload?: readonly Array<{
     payload: {
       timestampFormatted: string;
       avgLatency: number | null;
