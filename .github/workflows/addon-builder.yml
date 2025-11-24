@@ -54,17 +54,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
         run: |
-          # Ensure Docker config is available to the builder container
-          mkdir -p ~/.docker
+          # Ensure Docker config and Buildx state are available to the builder container
+          mkdir -p ~/.docker ~/.docker/buildx
           docker run \
             --rm \
             --privileged \
             -v ${{ github.workspace }}:/data \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v ~/.docker:/root/.docker \
+            -v ~/.docker/buildx:/root/.docker/buildx \
             -e GITHUB_TOKEN \
             -e GITHUB_USER \
             ${{ matrix.builder_image }} \
             --${{ matrix.arch }} \
-            --target /data/home-assistant-addon
+            --target /data/home-assistant-addon \
+            --push
 
