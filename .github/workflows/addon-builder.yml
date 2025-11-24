@@ -18,10 +18,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      - name: Prepare build files
+        run: |
+          cp home-assistant-addon/build.yaml build.yaml
+          cp home-assistant-addon/Dockerfile Dockerfile
+      
       - name: Build add-on
         uses: home-assistant/builder@master
         with:
           args: |
             --all \
-            --target home-assistant-addon
+            --target .
 
