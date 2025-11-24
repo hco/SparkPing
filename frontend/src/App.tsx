@@ -72,6 +72,7 @@ function App() {
   const handleClearTimeFilter = () => {
     setTimeRange('all');
     setQuery((prev) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { from, to, ...rest } = prev;
       return rest;
     });

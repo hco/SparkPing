@@ -46,7 +46,10 @@ export function D3RRDStyleChart({
     if (!containerRef.current) return;
     
     if (width) {
-      setDimensions({ width, height });
+      // Use requestAnimationFrame to avoid synchronous setState in effect
+      requestAnimationFrame(() => {
+        setDimensions({ width, height });
+      });
     } else {
       const updateDimensions = () => {
         if (containerRef.current) {
@@ -112,7 +115,6 @@ export function D3RRDStyleChart({
     const yScale = d3.scaleLinear().domain([0, latencyMax * 1.15]).nice().range([innerHeight, 0]);
 
     // Calculate bar width
-    const timeRange = xScale.domain()[1].getTime() - xScale.domain()[0].getTime();
     const barWidth = Math.min(
       Math.max(8, (innerWidth / chartData.length) * 0.7),
       40

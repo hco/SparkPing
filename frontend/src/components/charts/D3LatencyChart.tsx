@@ -32,7 +32,10 @@ export function D3LatencyChart({
     if (!containerRef.current) return;
     
     if (width) {
-      setDimensions({ width, height });
+      // Use requestAnimationFrame to avoid synchronous setState in effect
+      requestAnimationFrame(() => {
+        setDimensions({ width, height });
+      });
     } else {
       // Use container width if width not specified
       const updateDimensions = () => {

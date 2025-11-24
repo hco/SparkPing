@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Statistics } from '@/components/Statistics'
 import { FiltersPanel } from '@/components/FiltersPanel'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
@@ -77,6 +77,7 @@ function Dashboard() {
   const handleClearTimeFilter = () => {
     setTimeRange('all')
     setQuery((prev) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { from, to, ...rest } = prev
       return rest
     })

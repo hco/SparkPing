@@ -22,6 +22,56 @@ interface PingChartProps {
   synchronizedYDomain?: [number, number] | null;
 }
 
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: {
+      timestampFormatted: string;
+      avgLatency: number | null;
+      minLatency: number | null;
+      maxLatency: number | null;
+      successCount: number;
+      failCount: number;
+      packetLossPercent: number;
+    };
+  }>;
+  latencyFormatter?: Intl.NumberFormat;
+  integerFormatter?: Intl.NumberFormat;
+  percentageValueFormatter?: Intl.NumberFormat;
+}
+
+// Custom tooltip component - defined outside to avoid recreation
+function CustomTooltip({ active, payload, latencyFormatter, integerFormatter, percentageValueFormatter }: CustomTooltipProps) {
+  if (!active || !payload || !payload.length || !latencyFormatter || !integerFormatter || !percentageValueFormatter) {
+    return null;
+  }
+  
+  const data = payload[0].payload;
+  return (
+    <div className="bg-white p-3 border border-gray-300 rounded shadow-lg">
+      <p className="font-semibold">{data.timestampFormatted}</p>
+      {data.avgLatency !== null && (
+        <>
+          <p className="text-blue-500">Avg Latency: {latencyFormatter.format(data.avgLatency)} ms</p>
+          {data.minLatency !== null && (
+            <p className="text-blue-400">Min: {latencyFormatter.format(data.minLatency)} ms</p>
+          )}
+          {data.maxLatency !== null && (
+            <p className="text-blue-600">Max: {latencyFormatter.format(data.maxLatency)} ms</p>
+          )}
+        </>
+      )}
+      <p className="text-gray-600">Success: {integerFormatter.format(data.successCount)}</p>
+      {data.failCount > 0 && (
+        <p className="text-red-600">Failed: {integerFormatter.format(data.failCount)}</p>
+      )}
+      <p className="text-red-600 font-semibold">
+        Packet Loss: {percentageValueFormatter.format(data.packetLossPercent)}%
+      </p>
+    </div>
+  );
+}
+
 export function PingChart({ data, bucketData, target, targetName, isAggregated, synchronizedYDomain }: PingChartProps) {
   // Prepare chart data - use aggregated bucket data if available, otherwise aggregate from raw data
   const chartData = useMemo(() => {
@@ -110,63 +160,24 @@ export function PingChart({ data, bucketData, target, targetName, isAggregated, 
     ? navigator.language 
     : 'en-US';
 
-  // Number formatters using browser locale
-  const integerFormatter = new Intl.NumberFormat(locale, {
+  // Number formatters using browser locale - memoized to avoid recreation
+  const integerFormatter = useMemo(() => new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
-  });
+  }), [locale]);
 
-  const latencyFormatter = new Intl.NumberFormat(locale, {
+  const latencyFormatter = useMemo(() => new Intl.NumberFormat(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  }), [locale]);
 
-  const percentageValueFormatter = new Intl.NumberFormat(locale, {
+  const percentageValueFormatter = useMemo(() => new Intl.NumberFormat(locale, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
-  });
+  }), [locale]);
 
-  const latencyAxisFormatter = new Intl.NumberFormat(locale, {
+  const latencyAxisFormatter = useMemo(() => new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
-  });
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-3 border border-gray-300 rounded shadow-lg">
-          <p className="font-semibold">{data.timestampFormatted}</p>
-          {data.avgLatency !== null && (
-            <>
-              <p className="text-blue-500">Avg Latency: {latencyFormatter.format(data.avgLatency)} ms</p>
-              {data.minLatency !== null && (
-                <p className="text-blue-400">Min: {latencyFormatter.format(data.minLatency)} ms</p>
-              )}
-              {data.maxLatency !== null && (
-                <p className="text-blue-600">Max: {latencyFormatter.format(data.maxLatency)} ms</p>
-              )}
-            </>
-          )}
-          <p className="text-gray-600">Success: {integerFormatter.format(data.successCount)}</p>
-          {data.failCount > 0 && (
-            <p className="text-red-600">Failed: {integerFormatter.format(data.failCount)}</p>
-          )}
-          <p className="text-red-600 font-semibold">
-            Packet Loss: {percentageValueFormatter.format(data.packetLossPercent)}%
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  if (chartData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
-        <p className="text-gray-500">No data available</p>
-      </div>
-    );
-  }
+  }), [locale]);
 
   // Calculate Y-axis domain - use synchronized domain if provided, otherwise calculate own
   const yDomain = useMemo(() => {
@@ -182,8 +193,28 @@ export function PingChart({ data, bucketData, target, targetName, isAggregated, 
       ? [0, Math.max(...allLatencies) + 10]
       : [0, 100];
   }, [chartData, synchronizedYDomain]);
+
+  // Memoize tooltip component with formatters
+  const tooltipComponent = useMemo(() => {
+    return (props: CustomTooltipProps) => (
+      <CustomTooltip
+        {...props}
+        latencyFormatter={latencyFormatter}
+        integerFormatter={integerFormatter}
+        percentageValueFormatter={percentageValueFormatter}
+      />
+    );
+  }, [latencyFormatter, integerFormatter, percentageValueFormatter]);
+
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+        <p className="text-gray-500">No data available</p>
+      </div>
+    );
+  }
   
-    const displayTarget = targetName || target || 'All Targets';  
+  const displayTarget = targetName || target || 'All Targets';  
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-800 mb-2">{displayTarget}</h2>
@@ -212,7 +243,7 @@ export function PingChart({ data, bucketData, target, targetName, isAggregated, 
             domain={[0, 100]}
             label={{ value: 'Packet Loss (%)', angle: 90, position: 'insideRight' }}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={tooltipComponent} />
           <Legend />
           <Area
             yAxisId="packetLoss"
