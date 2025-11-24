@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { PingChart } from './PingChart';
 import type { PingDataResponse, PingAggregatedResponse } from '../types';
 
@@ -31,6 +32,16 @@ export function ChartGrid({
         
         return (
           <div key={target} className="bg-white p-6 rounded-lg shadow w-full">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-800">{displayName}</h2>
+              <Link
+                to="/targets/$targetId"
+                params={{ targetId: target }}
+                className="text-sm text-blue-600 hover:text-blue-800 underline"
+              >
+                View Details →
+              </Link>
+            </div>
             <PingChart
               data={data?.data || []}
               bucketData={aggregatedData?.data}
