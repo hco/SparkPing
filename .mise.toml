@@ -1,7 +1,7 @@
 [tools]
 rust = "1.91.1"
 node = "24"
-"cargo:cargo-watch" = {version = "latest"}
+"cargo:cargo-watch" = { version = "latest" }
 
 [tasks."install:rust"]
 description = "Install Rust dependencies"
@@ -41,11 +41,11 @@ run = "cargo check"
 
 [tasks.fmt]
 description = "Format code"
-run = "cargo fmt"
+run = "cargo fmt --all"
 
 [tasks.fmt-check]
 description = "Check code formatting"
-run = "cargo fmt --check"
+run = "cargo fmt --check --all"
 
 [tasks.clippy]
 description = "Run clippy linter"
@@ -91,12 +91,12 @@ run = "cargo clean"
 [tasks.lint]
 description = "Run all linting checks (fmt-check + clippy)"
 depends = ["install"]
-run = "cargo fmt --check && cargo clippy"
+run = "cargo fmt --check --all && cargo clippy"
 
 [tasks.all]
 description = "Run check, fmt-check, and clippy"
 depends = ["install"]
-run = "cargo check && cargo fmt --check && cargo clippy"
+run = "cargo check && cargo fmt --check --all && cargo clippy"
 
 [tasks."frontend:dev"]
 description = "Start the frontend development server"
@@ -123,4 +123,4 @@ depends = ["install", "frontend:type-check", "frontend:lint"]
 
 [tasks."ci"]
 description = "Run all CI checks (linting, type checking, and tests)"
-depends = ["lint", "frontend:verify", "cargo-check", "clippy", "fmt-check"]
+depends = ["lint", "frontend:verify", "check", "clippy", "fmt-check"]
