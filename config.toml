@@ -8,27 +8,3 @@ file = "sparkping.log"
 
 [database]
 path = "./tsink-data"
-
-[[targets]]
-address = "192.168.83.11"
-name = "Home Assistant"
-ping_count = 3        # Number of pings back-to-back (default: 3)
-ping_interval = 5     # Wait time in seconds after each batch (default: 1)
-id = "f99073bc-78a1-4189-a602-4ec6e4dc9ce9"
-
-[[targets]]
-address = "192.168.83.1"
-id = "18aabb24-d95f-4000-ac8c-61654401b649"
-# Uses defaults: 3 pings, 1 second interval
-
-[[targets]]
-address = "8.8.8.8"
-name = "Google DNS"
-ping_count = 5        # Custom: 5 pings back-to-back
-ping_interval = 30     # Custom: wait 30 seconds after each batch
-id = "d96d79e6-f5d5-4965-b3ef-e4b73403455c"
-
-[[targets]]
-id = "51ce5baf-ccaa-4d0f-b5c2-71cf87f47239"
-address = "192.168.83.199"
-name = "Sonos Küche"
