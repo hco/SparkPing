@@ -93,7 +93,6 @@ fi
 [tasks."server:dev"]
 description = "Run the server with watch support (auto-reload on file changes)"
 depends = ["install"]
-watch = ["**/*.rs", "Cargo.toml", "Cargo.lock"]
 run = '''
 if [[ "$(uname)" == "Darwin" ]]; then
   sudo cargo watch -x run
