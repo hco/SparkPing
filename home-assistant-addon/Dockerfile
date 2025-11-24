@@ -60,8 +60,8 @@ COPY --from=rust-builder /app/target/release/SparkPing /app/sparkping
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Copy default config template and startup script
-COPY home-assistant-addon/config.toml /app/config.toml.template
-COPY home-assistant-addon/run.sh /run.sh
+COPY config.toml /app/config.toml.template
+COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
 ENV STATIC_DIR=/app/frontend/dist
