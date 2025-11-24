@@ -1,7 +1,8 @@
 [tools]
-rust = { version = "1.91.1", components = "rustfmt,clippy" }
+rust = { version = "1.91.1", components = "clippy,cargo,rustc,rust-std,rust-analyzer,rustfmt" }
 node = "24"
 "cargo:cargo-watch" = { version = "latest" }
+
 
 [settings]
 # Enable hooks (required for postinstall hook to work)
