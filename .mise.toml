@@ -23,7 +23,8 @@ outputs = [".cargo-fetched"]
 
 [tasks."install:frontend"]
 description = "Install frontend dependencies"
-run = "cd frontend && pnpm install"
+run = "pnpm install"
+dir = "frontend"
 sources = ["frontend/package.json", "frontend/pnpm-lock.yaml"]
 outputs = ["frontend/node_modules/"]
 
@@ -113,27 +114,32 @@ run = "cargo check && cargo fmt --check --all && cargo clippy"
 [tasks."frontend:dev"]
 description = "Start the frontend development server"
 depends = ["install"]
-run = "cd frontend && pnpm dev"
+dir = "frontend"
+run = "pnpm dev"
 
 [tasks."frontend:build"]
 description = "Build the frontend for production"
 depends = ["install"]
-run = "cd frontend && pnpm build"
+dir = "frontend"
+run = "pnpm build"
 
 [tasks."frontend:lint"]
 description = "Lint the frontend code"
 depends = ["install"]
-run = "cd frontend && pnpm lint"
+dir = "frontend"
+run = "pnpm lint"
 
 [tasks."frontend:lint-fix"]
 description = "Lint the frontend code and fix errors"
 depends = ["install"]
-run = "cd frontend && pnpm exec eslint . --fix"
+dir = "frontend"
+run = "pnpm exec eslint . --fix"
 
 [tasks."frontend:type-check"]
 description = "Run TypeScript type checking"
 depends = ["install"]
-run = "cd frontend && pnpm exec tsc --noEmit"
+dir = "frontend"
+run = "pnpm exec tsc --noEmit"
 
 [tasks."frontend:verify"]
 depends = ["install", "frontend:type-check", "frontend:lint"]
