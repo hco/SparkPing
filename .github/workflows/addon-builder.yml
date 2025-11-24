@@ -50,12 +50,20 @@ jobs:
         run: docker pull ${{ matrix.builder_image }}
 
       - name: Build add-on
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.actor }}
         run: |
+          # Ensure Docker config is available to the builder container
+          mkdir -p ~/.docker
           docker run \
             --rm \
             --privileged \
             -v ${{ github.workspace }}:/data \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ~/.docker:/root/.docker:ro \
+            -e GITHUB_TOKEN \
+            -e GITHUB_USER \
             ${{ matrix.builder_image }} \
             --${{ matrix.arch }} \
             --target /data/home-assistant-addon
