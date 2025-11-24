@@ -7,6 +7,7 @@ pub fn write_ping_result(storage: &dyn tsink::Storage, result: &PingResult) -> R
     
     // Build labels for the metric
     let mut labels = vec![
+        Label::new("target_id", &result.target_id),
         Label::new("target", &result.target),
         Label::new("sequence", &result.sequence.to_string()),
     ];

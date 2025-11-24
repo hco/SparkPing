@@ -6,6 +6,7 @@ use tracing::{debug, error, warn};
 
 pub struct PingResult {
     pub timestamp: DateTime<Utc>,
+    pub target_id: String,
     pub target: String,
     pub target_name: Option<String>,
     pub sequence: u16,
@@ -13,7 +14,7 @@ pub struct PingResult {
     pub latency_ms: Option<f64>,
 }
 
-pub async fn perform_ping(address: &str, sequence: u16, name: &Option<String>) -> PingResult {
+pub async fn perform_ping(target_id: &str, address: &str, sequence: u16, name: &Option<String>) -> PingResult {
     let timestamp = Utc::now();
     
     // Parse the address to IpAddr
@@ -23,6 +24,7 @@ pub async fn perform_ping(address: &str, sequence: u16, name: &Option<String>) -
             error!("Invalid IP address {}: {}", address, e);
             return PingResult {
                 timestamp,
+                target_id: target_id.to_string(),
                 target: address.to_string(),
                 target_name: name.clone(),
                 sequence,
@@ -58,6 +60,7 @@ pub async fn perform_ping(address: &str, sequence: u16, name: &Option<String>) -
             );
             PingResult {
                 timestamp,
+                target_id: target_id.to_string(),
                 target: address.to_string(),
                 target_name: name.clone(),
                 sequence,
@@ -75,6 +78,7 @@ pub async fn perform_ping(address: &str, sequence: u16, name: &Option<String>) -
             );
             PingResult {
                 timestamp,
+                target_id: target_id.to_string(),
                 target: address.to_string(),
                 target_name: name.clone(),
                 sequence,

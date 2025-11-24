@@ -1,19 +1,24 @@
 mod api;
 mod config;
+mod config_file;
 mod logging;
 mod ping;
 mod storage;
 
 use clap::Parser;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tsink::{StorageBuilder, TimestampPrecision};
-use futures::future::join_all;
-use tracing::{error, info, debug};
+use tracing::{error, info, debug, warn};
 use chrono::{DateTime, Utc};
 use tokio::signal;
+use std::sync::RwLock;
+use notify::{Watcher, RecommendedWatcher, RecursiveMode, EventKind};
+use uuid::Uuid;
 use crate::api::create_router;
 use crate::config::AppConfig;
 use crate::logging::init_logging;
@@ -70,18 +75,159 @@ fn count_data_points(storage: &dyn tsink::Storage) -> Result<usize, Box<dyn std:
     Ok(count)
 }
 
+/// Reload config from file
+fn reload_config(path: &PathBuf) -> Result<AppConfig, String> {
+    let settings = ::config::Config::builder()
+        .add_source(::config::File::with_name(
+            path.to_str().expect("Invalid config file path"),
+        ))
+        .build()
+        .map_err(|e| format!("Failed to build config: {}", e))?;
+    
+    let app_config: AppConfig = settings.try_deserialize()
+        .map_err(|e| format!("Failed to deserialize config: {}", e))?;
+    Ok(app_config)
+}
+
+/// Start a ping task for a target and return its abort handle
+pub fn start_ping_task(
+    target: &crate::config::Target,
+    storage: Arc<dyn tsink::Storage>,
+) -> tokio::task::AbortHandle {
+    let target_id = target.id.clone();
+    let target_address = target.address.clone();
+    let target_name = target.name.clone();
+    let ping_count = target.ping_count;
+    let ping_interval = target.ping_interval;
+    
+    let handle = tokio::spawn(async move {
+        loop {
+            // Perform ping_count pings back-to-back (no delay between them)
+            for sequence in 1..=ping_count {
+                let result = perform_ping(&target_id, &target_address, sequence, &target_name).await;
+                
+                // Write result to tsink
+                if let Err(e) = write_ping_result(&*storage, &result) {
+                    error!("Error writing ping result to tsink: {}", e);
+                }
+            }
+            
+            // Wait ping_interval seconds before next batch of pings
+            tokio::time::sleep(Duration::from_secs(ping_interval)).await;
+        }
+    }).abort_handle();
+    
+    handle
+}
+
+/// Reload targets by comparing old and new configs
+async fn reload_targets(
+    old_config: &AppConfig,
+    new_config: &AppConfig,
+    storage: Arc<dyn tsink::Storage>,
+    task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
+) {
+    info!("Reloading targets due to config change");
+    
+    let mut handles = task_handles.write().unwrap_or_else(|e| {
+        error!("Failed to acquire write lock on task handles: {}", e);
+        panic!("Failed to acquire write lock");
+    });
+    
+    // Build maps for comparison
+    let old_targets: HashMap<String, &crate::config::Target> = old_config
+        .targets
+        .iter()
+        .map(|t| (t.id.clone(), t))
+        .collect();
+    
+    let new_targets: HashMap<String, &crate::config::Target> = new_config
+        .targets
+        .iter()
+        .map(|t| (t.id.clone(), t))
+        .collect();
+    
+    // Find removed targets
+    for (id, _) in old_targets.iter() {
+        if !new_targets.contains_key(id) {
+            info!("Stopping ping task for removed target: {}", id);
+            if let Some(handle) = handles.remove(id) {
+                handle.abort();
+            }
+        }
+    }
+    
+    // Find modified or new targets
+    for (id, new_target) in new_targets.iter() {
+        let needs_restart = if let Some(old_target) = old_targets.get(id) {
+            // Check if any field changed
+            old_target.address != new_target.address
+                || old_target.name != new_target.name
+                || old_target.ping_count != new_target.ping_count
+                || old_target.ping_interval != new_target.ping_interval
+        } else {
+            // New target
+            true
+        };
+        
+        if needs_restart {
+            if let Some(old_handle) = handles.remove(id) {
+                info!("Restarting ping task for modified target: {}", id);
+                old_handle.abort();
+            } else {
+                info!("Starting ping task for new target: {}", id);
+            }
+            
+            let handle = start_ping_task(new_target, Arc::clone(&storage));
+            handles.insert(id.clone(), handle);
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    let config_path = args.config.clone();
 
     // Load configuration from the specified file
     let settings = ::config::Config::builder()
         .add_source(::config::File::with_name(
-            args.config.to_str().expect("Invalid config file path"),
+            config_path.to_str().expect("Invalid config file path"),
         ))
         .build()?;
 
-    let app_config: AppConfig = settings.try_deserialize()?;
+    let mut app_config: AppConfig = settings.try_deserialize()?;
+    
+    // Ensure all targets have IDs (migrate if needed)
+    let mut needs_save = false;
+    for target in &mut app_config.targets {
+        if target.id.is_empty() {
+            target.id = Uuid::new_v4().to_string();
+            needs_save = true;
+        }
+    }
+    
+    // Save migrated config if needed
+    if needs_save {
+        info!("Migrating config: adding IDs to targets without IDs");
+        let mut doc = config_file::read_config_file(&config_path)?;
+        if let Some(targets_array) = doc.get_mut("targets").and_then(|item| item.as_array_of_tables_mut()) {
+            let mut idx = 0;
+            for target_table in targets_array.iter_mut() {
+                if !target_table.contains_key("id") {
+                    if idx < app_config.targets.len() {
+                        let id = app_config.targets[idx].id.clone();
+                        target_table["id"] = toml_edit::Item::Value(toml_edit::Value::String(
+                            toml_edit::Formatted::new(id)
+                        ));
+                    }
+                }
+                idx += 1;
+            }
+        }
+        let write_flag = Arc::new(AtomicBool::new(false));
+        config_file::write_config_file(&config_path, &doc, &write_flag)?;
+    }
     
     // Initialize logging before any other output
     init_logging(&app_config.logging)?;
@@ -156,16 +302,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     info!("Starting ping loop (each target runs independently in parallel)...");
     for target in &app_config.targets {
-        info!("  - {}: {} pings back-to-back, then wait {}s", 
+        info!("  - {} (id: {}): {} pings back-to-back, then wait {}s", 
             target.name.as_ref().unwrap_or(&target.address),
+            target.id,
             target.ping_count,
             target.ping_interval
         );
     }
 
-    // Create HTTP API router
-    let app = create_router(Arc::clone(&storage));
-    let addr: SocketAddr = format!("{}:{}", app_config.server.host, app_config.server.port)
+    // Create shared state for config and task management
+    let server_host = app_config.server.host.clone();
+    let server_port = app_config.server.port;
+    let config_state = Arc::new(RwLock::new(app_config));
+    let task_handles = Arc::new(RwLock::new(HashMap::<String, tokio::task::AbortHandle>::new()));
+    let write_flag = Arc::new(AtomicBool::new(false));
+    
+    // Start initial ping tasks
+    {
+        let config = config_state.read().unwrap();
+        let mut handles = task_handles.write().unwrap();
+        for target in config.targets.iter() {
+            let handle = start_ping_task(target, Arc::clone(&storage));
+            handles.insert(target.id.clone(), handle);
+        }
+    }
+
+    // Create HTTP API router with shared state
+    let app = create_router(
+        Arc::clone(&storage),
+        Arc::clone(&config_state),
+        Arc::clone(&task_handles),
+        Arc::clone(&write_flag),
+        config_path.clone(),
+    );
+    let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
         .expect("Invalid server address");
     
@@ -179,31 +349,89 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("HTTP server error");
     });
     
-    // Spawn a continuous loop for each target
-    let target_tasks: Vec<_> = app_config.targets.iter().map(|target| {
-        let target_address = target.address.clone();
-        let target_name = target.name.clone();
-        let ping_count = target.ping_count;
-        let ping_interval = target.ping_interval;
-        let storage_clone = storage.clone();
+    // Set up file watcher for config reloading
+    let config_path_for_watcher = config_path.clone();
+    let config_state_for_watcher = Arc::clone(&config_state);
+    let storage_for_watcher = Arc::clone(&storage);
+    let task_handles_for_watcher = Arc::clone(&task_handles);
+    let write_flag_for_watcher = Arc::clone(&write_flag);
+    
+    let watcher_task = tokio::spawn(async move {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<notify::Result<notify::Event>>(100);
         
-        tokio::spawn(async move {
-            loop {
-                // Perform ping_count pings back-to-back (no delay between them)
-                for sequence in 1..=ping_count {
-                    let result = perform_ping(&target_address, sequence, &target_name).await;
-                    
-                    // Write result to tsink
-                    if let Err(e) = write_ping_result(&**storage_clone, &result) {
-                        error!("Error writing ping result to tsink: {}", e);
+        let mut watcher: RecommendedWatcher = match Watcher::new(
+            move |res| {
+                if tx.blocking_send(res).is_err() {
+                    // Channel closed, ignore
+                }
+            },
+            notify::Config::default(),
+        ) {
+            Ok(w) => w,
+            Err(e) => {
+                error!("Failed to create file watcher: {}", e);
+                return Ok::<(), String>(());
+            }
+        };
+        
+        if let Err(e) = watcher.watch(&config_path_for_watcher, RecursiveMode::NonRecursive) {
+            error!("Failed to watch config file: {}", e);
+            return Ok::<(), String>(());
+        }
+        
+        info!("Watching config file for changes: {:?}", config_path_for_watcher);
+        
+        while let Some(event) = rx.recv().await {
+            match event {
+                Ok(event) => {
+                    // Check if this is a modify event for our config file
+                    if matches!(event.kind, EventKind::Modify(_)) {
+                        // Check write flag - if true, ignore (it's our own write)
+                        if write_flag_for_watcher.load(Ordering::SeqCst) {
+                            debug!("Ignoring config file change (our own write)");
+                            continue;
+                        }
+                        
+                        // Small delay to ensure file write is complete
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        
+                        // Reload config
+                        info!("Config file changed, reloading...");
+                        match reload_config(&config_path_for_watcher) {
+                            Ok(new_config) => {
+                                let old_config = {
+                                    let config = config_state_for_watcher.read().map_err(|e| format!("Failed to read config: {}", e))?;
+                                    config.clone()
+                                };
+                                
+                                // Update config state
+                                {
+                                    let mut config = config_state_for_watcher.write().map_err(|e| format!("Failed to write config: {}", e))?;
+                                    *config = new_config.clone();
+                                }
+                                
+                                // Reload targets
+                                reload_targets(
+                                    &old_config,
+                                    &new_config,
+                                    Arc::clone(&storage_for_watcher),
+                                    Arc::clone(&task_handles_for_watcher),
+                                ).await;
+                            }
+                            Err(e) => {
+                                error!("Failed to reload config: {}", e);
+                            }
+                        }
                     }
                 }
-                
-                // Wait ping_interval seconds before next batch of pings
-                tokio::time::sleep(Duration::from_secs(ping_interval)).await;
+                Err(e) => {
+                    warn!("File watcher error: {}", e);
+                }
             }
-        })
-    }).collect();
+        }
+        
+        Ok::<(), String>(())
+    });
     
     // Setup signal handler for graceful shutdown
     let storage_for_shutdown = storage.clone();
@@ -238,14 +466,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Run HTTP server, ping tasks, and shutdown handler concurrently
+    // Run HTTP server, file watcher, and shutdown handler concurrently
     tokio::select! {
         result = server_task => {
             error!("HTTP server task ended: {:?}", result);
         }
-        _ = join_all(target_tasks) => {
-            // Ping tasks run forever, so this should never complete
-            info!("All ping tasks completed (unexpected)");
+        result = watcher_task => {
+            match result {
+                Ok(Ok(())) => info!("File watcher completed"),
+                Ok(Err(e)) => error!("File watcher error: {}", e),
+                Err(e) => error!("File watcher task panicked: {:?}", e),
+            }
         }
         _ = shutdown_task => {
             info!("Shutdown handler completed");

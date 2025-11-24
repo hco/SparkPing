@@ -78,3 +78,19 @@ export interface PingAggregatedResponse {
   bucket_duration_seconds: number;
 }
 
+export interface Target {
+  id: string;
+  address: string;
+  name?: string | null;
+  ping_count: number;
+  ping_interval: number;
+}
+
+export interface TargetRequest {
+  id?: string;
+  address: string;
+  name?: string | null;
+  ping_count?: number;
+  ping_interval?: number;
+}
+

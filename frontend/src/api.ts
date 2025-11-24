@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { PingDataResponse, PingDataQuery, PingAggregatedResponse, PingAggregatedQuery } from './types';
+import type { PingDataResponse, PingDataQuery, PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest } from './types';
 
 // const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080';
 const API_BASE_URL = '/';
@@ -55,5 +55,26 @@ export async function fetchPingAggregated(query: PingAggregatedQuery = {}): Prom
 
   const response = await apiClient.get<PingAggregatedResponse>(`/api/ping/aggregated?${params.toString()}`);
   return response.data;
+}
+
+// Target management API functions
+
+export async function fetchTargets(): Promise<Target[]> {
+  const response = await apiClient.get<Target[]>('/api/targets');
+  return response.data;
+}
+
+export async function createTarget(target: TargetRequest): Promise<Target> {
+  const response = await apiClient.post<Target>('/api/targets', target);
+  return response.data;
+}
+
+export async function updateTarget(id: string, target: TargetRequest): Promise<Target> {
+  const response = await apiClient.put<Target>(`/api/targets/${id}`, target);
+  return response.data;
+}
+
+export async function deleteTarget(id: string): Promise<void> {
+  await apiClient.delete(`/api/targets/${id}`);
 }
 

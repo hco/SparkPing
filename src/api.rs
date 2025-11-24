@@ -1,16 +1,24 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Query, State, Path},
     http::StatusCode,
     response::Json,
-    routing::get,
+    routing::{get, put},
     Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::RwLock;
 use tsink::Storage;
 use tracing::{error, info};
+use crate::config::{AppConfig, Target};
+use crate::config_file;
+use crate::ping::perform_ping;
+use crate::storage::write_ping_result;
+use uuid::Uuid;
 
 /// Query parameters for the ping data API
 #[derive(Debug, Deserialize)]
@@ -417,12 +425,13 @@ fn calculate_statistics(points: &[PingDataPoint]) -> PingStatistics {
 
 /// HTTP handler for GET /api/ping/data
 pub async fn get_ping_data(
-    State(storage): State<Arc<dyn Storage>>,
+    State(state): State<AppState>,
     Query(query): Query<PingDataQuery>,
 ) -> Result<Json<PingDataResponse>, (StatusCode, String)> {
+    let storage = &*state.storage;
     info!("Querying ping data: {:?}", query);
     
-    let points = query_ping_data_with_labels(&*storage, &query)
+    let points = query_ping_data_with_labels(storage, &query)
         .map_err(|e| {
             error!("Error querying ping data: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -463,9 +472,10 @@ pub async fn get_ping_data(
 
 /// HTTP handler for GET /api/ping/aggregated
 pub async fn get_ping_aggregated(
-    State(storage): State<Arc<dyn Storage>>,
+    State(state): State<AppState>,
     Query(query): Query<PingAggregatedQuery>,
 ) -> Result<Json<PingAggregatedResponse>, (StatusCode, String)> {
+    let storage = &*state.storage;
     info!("Querying aggregated ping data: {:?}", query);
     
     // Parse bucket duration
@@ -484,7 +494,7 @@ pub async fn get_ping_aggregated(
         limit: None, // No limit for aggregation
     };
     
-    let points = query_ping_data_with_labels(&*storage, &ping_query)
+    let points = query_ping_data_with_labels(storage, &ping_query)
         .map_err(|e| {
             error!("Error querying ping data: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -521,11 +531,278 @@ pub async fn get_ping_aggregated(
     Ok(Json(response))
 }
 
+/// Start a ping task for a target and return its abort handle
+fn start_ping_task(
+    target: &Target,
+    storage: Arc<dyn Storage>,
+) -> tokio::task::AbortHandle {
+    let target_id = target.id.clone();
+    let target_address = target.address.clone();
+    let target_name = target.name.clone();
+    let ping_count = target.ping_count;
+    let ping_interval = target.ping_interval;
+    
+    let handle = tokio::spawn(async move {
+        loop {
+            // Perform ping_count pings back-to-back (no delay between them)
+            for sequence in 1..=ping_count {
+                let result = perform_ping(&target_id, &target_address, sequence, &target_name).await;
+                
+                // Write result to tsink
+                if let Err(e) = write_ping_result(&*storage, &result) {
+                    error!("Error writing ping result to tsink: {}", e);
+                }
+            }
+            
+            // Wait ping_interval seconds before next batch of pings
+            tokio::time::sleep(std::time::Duration::from_secs(ping_interval)).await;
+        }
+    }).abort_handle();
+    
+    handle
+}
+
+/// Application state for API routes
+#[derive(Clone)]
+pub struct AppState {
+    pub storage: Arc<dyn Storage>,
+    pub config: Arc<RwLock<AppConfig>>,
+    pub task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
+    pub write_flag: Arc<AtomicBool>,
+    pub config_path: PathBuf,
+}
+
+/// Request body for creating/updating a target
+#[derive(Debug, Deserialize)]
+pub struct TargetRequest {
+    pub id: Option<String>,
+    pub address: String,
+    pub name: Option<String>,
+    pub ping_count: Option<u16>,
+    pub ping_interval: Option<u64>,
+}
+
+/// HTTP handler for GET /api/targets
+pub async fn get_targets(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Target>>, (StatusCode, String)> {
+    let config = state.config.read().map_err(|e| {
+        error!("Failed to read config: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read configuration".to_string())
+    })?;
+    
+    Ok(Json(config.targets.clone()))
+}
+
+/// HTTP handler for POST /api/targets
+pub async fn create_target(
+    State(state): State<AppState>,
+    Json(request): Json<TargetRequest>,
+) -> Result<Json<Target>, (StatusCode, String)> {
+    // Validate address
+    if request.address.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Address is required".to_string()));
+    }
+    
+    // Read current config
+    let mut config = state.config.write().map_err(|e| {
+        error!("Failed to write config: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+    })?;
+    
+    // Generate ID if not provided
+    let id = request.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    
+    // Check if ID already exists
+    if config.targets.iter().any(|t| t.id == id) {
+        return Err((StatusCode::CONFLICT, format!("Target with id '{}' already exists", id)));
+    }
+    
+    // Create new target
+    let new_target = Target {
+        id: id.clone(),
+        address: request.address,
+        name: request.name,
+        ping_count: request.ping_count.unwrap_or(3),
+        ping_interval: request.ping_interval.unwrap_or(1),
+    };
+    
+    // Read config file
+    let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
+        error!("Failed to read config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+    })?;
+    
+    // Add target to document
+    config_file::add_target(&mut doc, &new_target).map_err(|e| {
+        error!("Failed to add target: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to add target: {}", e))
+    })?;
+    
+    // Write config file
+    config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
+        error!("Failed to write config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+    })?;
+    
+    // Update in-memory config
+    config.targets.push(new_target.clone());
+    drop(config);
+    
+    // Start ping task immediately
+    {
+        let mut handles = state.task_handles.write().map_err(|e| {
+            error!("Failed to write task handles: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+        })?;
+        let handle = start_ping_task(&new_target, Arc::clone(&state.storage));
+        handles.insert(new_target.id.clone(), handle);
+    }
+    
+    Ok(Json(new_target))
+}
+
+/// HTTP handler for PUT /api/targets/{id}
+pub async fn update_target(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<TargetRequest>,
+) -> Result<Json<Target>, (StatusCode, String)> {
+    // Validate address
+    if request.address.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Address is required".to_string()));
+    }
+    
+    // Read current config
+    let mut config = state.config.write().map_err(|e| {
+        error!("Failed to write config: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+    })?;
+    
+    // Find target
+    let target_idx = config.targets.iter().position(|t| t.id == id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Target with id '{}' not found", id)))?;
+    
+    // Create updated target
+    let updated_target = Target {
+        id: request.id.unwrap_or_else(|| config.targets[target_idx].id.clone()),
+        address: request.address,
+        name: request.name,
+        ping_count: request.ping_count.unwrap_or(config.targets[target_idx].ping_count),
+        ping_interval: request.ping_interval.unwrap_or(config.targets[target_idx].ping_interval),
+    };
+    
+    // Read config file
+    let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
+        error!("Failed to read config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+    })?;
+    
+    // Update target in document
+    config_file::update_target(&mut doc, &id, &updated_target).map_err(|e| {
+        error!("Failed to update target: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to update target: {}", e))
+    })?;
+    
+    // Write config file
+    config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
+        error!("Failed to write config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+    })?;
+    
+    // Update in-memory config
+    config.targets[target_idx] = updated_target.clone();
+    drop(config);
+    
+    // Restart ping task immediately
+    {
+        let mut handles = state.task_handles.write().map_err(|e| {
+            error!("Failed to write task handles: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+        })?;
+        if let Some(old_handle) = handles.remove(&id) {
+            old_handle.abort();
+        }
+        let handle = start_ping_task(&updated_target, Arc::clone(&state.storage));
+        handles.insert(updated_target.id.clone(), handle);
+    }
+    
+    Ok(Json(updated_target))
+}
+
+/// HTTP handler for DELETE /api/targets/{id}
+pub async fn delete_target(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    // Read current config
+    let mut config = state.config.write().map_err(|e| {
+        error!("Failed to write config: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access configuration".to_string())
+    })?;
+    
+    // Check if target exists
+    if !config.targets.iter().any(|t| t.id == id) {
+        return Err((StatusCode::NOT_FOUND, format!("Target with id '{}' not found", id)));
+    }
+    
+    // Read config file
+    let mut doc = config_file::read_config_file(&state.config_path).map_err(|e| {
+        error!("Failed to read config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config file: {}", e))
+    })?;
+    
+    // Remove target from document
+    config_file::remove_target(&mut doc, &id).map_err(|e| {
+        error!("Failed to remove target: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to remove target: {}", e))
+    })?;
+    
+    // Write config file
+    config_file::write_config_file(&state.config_path, &doc, &state.write_flag).map_err(|e| {
+        error!("Failed to write config file: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config file: {}", e))
+    })?;
+    
+    // Update in-memory config
+    config.targets.retain(|t| t.id != id);
+    drop(config);
+    
+    // Stop ping task
+    {
+        let mut handles = state.task_handles.write().map_err(|e| {
+            error!("Failed to write task handles: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to access task handles".to_string())
+        })?;
+        if let Some(handle) = handles.remove(&id) {
+            handle.abort();
+        }
+    }
+    
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Create the API router
-pub fn create_router(storage: Arc<dyn Storage>) -> Router {
+pub fn create_router(
+    storage: Arc<dyn Storage>,
+    config: Arc<RwLock<AppConfig>>,
+    task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
+    write_flag: Arc<AtomicBool>,
+    config_path: PathBuf,
+) -> Router {
+    let state = AppState {
+        storage,
+        config,
+        task_handles,
+        write_flag,
+        config_path,
+    };
+    
     Router::new()
         .route("/api/ping/data", get(get_ping_data))
         .route("/api/ping/aggregated", get(get_ping_aggregated))
-        .with_state(storage)
+        .route("/api/targets", get(get_targets).post(create_target))
+        .route("/api/targets/:id", put(update_target).delete(delete_target))
+        .with_state(state)
 }
 
