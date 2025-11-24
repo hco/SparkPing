@@ -1,3 +1,7 @@
+# ARG must be declared before any FROM in multi-stage builds
+# Home Assistant builder will override this with the appropriate base image
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
+
 # Stage 1: Build frontend
 FROM node:24-slim AS frontend-builder
 
@@ -44,7 +48,6 @@ COPY src ./src
 RUN cargo build --release
 
 # Stage 3: Final image - use Home Assistant base
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
 FROM ${BUILD_FROM}
 
 # Install runtime dependencies
