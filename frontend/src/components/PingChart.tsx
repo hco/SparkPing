@@ -34,9 +34,15 @@ interface TooltipPayloadItem {
   };
 }
 
-interface CustomTooltipProps {
+// Base type for Recharts tooltip props - matches TooltipContentProps structure
+interface BaseTooltipProps {
   active?: boolean;
-  payload?: readonly TooltipPayloadItem[] | readonly any[];
+  payload?: readonly unknown[];
+  label?: unknown;
+}
+
+interface CustomTooltipProps extends BaseTooltipProps {
+  payload?: readonly TooltipPayloadItem[];
   latencyFormatter?: Intl.NumberFormat;
   integerFormatter?: Intl.NumberFormat;
   percentageValueFormatter?: Intl.NumberFormat;
@@ -199,9 +205,11 @@ export function PingChart({ data, bucketData, target, targetName, isAggregated, 
 
   // Memoize tooltip component with formatters
   const tooltipComponent = useMemo(() => {
-    return (props: any) => (
+    return (props: BaseTooltipProps) => (
       <CustomTooltip
-        {...props}
+        active={props.active}
+        payload={props.payload as readonly TooltipPayloadItem[] | undefined}
+        label={props.label}
         latencyFormatter={latencyFormatter}
         integerFormatter={integerFormatter}
         percentageValueFormatter={percentageValueFormatter}
