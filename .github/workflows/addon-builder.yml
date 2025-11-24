@@ -10,10 +10,19 @@ on:
 jobs:
   build:
     name: Build add-on
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +38,6 @@ jobs:
         uses: home-assistant/builder@master
         with:
           args: |
-            --all \
+            --${{ matrix.arch }} \
             --target home-assistant-addon
 
