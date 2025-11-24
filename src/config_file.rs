@@ -38,12 +38,21 @@ fn generate_target_id() -> String {
     Uuid::new_v4().to_string()
 }
 
+/// Ensure the targets array exists in the document, creating it if necessary
+fn ensure_targets_array(doc: &mut DocumentMut) {
+    if doc.get("targets").is_none() {
+        doc["targets"] = Item::ArrayOfTables(toml_edit::ArrayOfTables::new());
+    }
+}
+
 /// Add a target to the config document
 pub fn add_target(
     doc: &mut DocumentMut,
     target: &Target,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Ensure targets array exists
+    ensure_targets_array(doc);
+    
     let targets_array = doc
         .get_mut("targets")
         .and_then(|item| item.as_array_of_tables_mut())

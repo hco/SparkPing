@@ -5,6 +5,7 @@ pub struct AppConfig {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
     pub database: DatabaseConfig,
+    #[serde(default)]
     pub targets: Vec<Target>,
 }
 
