@@ -1,0 +1,20 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[logging]
+level = "info"
+file = "/data/sparkping.log"
+
+[database]
+path = "/data/tsink-data"
+
+# Add ping targets through the web UI or edit this file
+# Example:
+# [[targets]]
+# address = "8.8.8.8"
+# name = "Google DNS"
+# ping_count = 3
+# ping_interval = 5
+# id = "generated-uuid"
+
