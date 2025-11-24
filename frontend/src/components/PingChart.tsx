@@ -22,19 +22,21 @@ interface PingChartProps {
   synchronizedYDomain?: [number, number] | null;
 }
 
+interface TooltipPayloadItem {
+  payload: {
+    timestampFormatted: string;
+    avgLatency: number | null;
+    minLatency: number | null;
+    maxLatency: number | null;
+    successCount: number;
+    failCount: number;
+    packetLossPercent: number;
+  };
+}
+
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: readonly Array<{
-    payload: {
-      timestampFormatted: string;
-      avgLatency: number | null;
-      minLatency: number | null;
-      maxLatency: number | null;
-      successCount: number;
-      failCount: number;
-      packetLossPercent: number;
-    };
-  }>;
+  payload?: readonly TooltipPayloadItem[] | readonly any[];
   latencyFormatter?: Intl.NumberFormat;
   integerFormatter?: Intl.NumberFormat;
   percentageValueFormatter?: Intl.NumberFormat;
@@ -46,7 +48,8 @@ function CustomTooltip({ active, payload, latencyFormatter, integerFormatter, pe
     return null;
   }
   
-  const data = payload[0].payload;
+  const firstItem = payload[0] as TooltipPayloadItem;
+  const data = firstItem.payload;
   return (
     <div className="bg-white p-3 border border-gray-300 rounded shadow-lg">
       <p className="font-semibold">{data.timestampFormatted}</p>
@@ -196,7 +199,7 @@ export function PingChart({ data, bucketData, target, targetName, isAggregated, 
 
   // Memoize tooltip component with formatters
   const tooltipComponent = useMemo(() => {
-    return (props: CustomTooltipProps) => (
+    return (props: any) => (
       <CustomTooltip
         {...props}
         latencyFormatter={latencyFormatter}
