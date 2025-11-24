@@ -31,24 +31,11 @@ function App() {
     }));
   };
 
-  const {
-    data,
-    aggregatedData,
-    loading,
-    error,
-    loadData,
-  } = usePingData({
-    useAggregated,
-    bucketDuration,
-    query,
-  });
-
-  // Auto-refresh effect
+  // Auto-refresh effect - update query to maintain rolling time window
   useEffect(() => {
     if (!autoRefresh) return;
 
     const interval = setInterval(() => {
-      // Update query to maintain rolling time window when auto-refreshing
       const seconds = getTimeRangeSeconds(timeRange);
       if (seconds !== null) {
         const now = Math.floor(Date.now() / 1000);
@@ -56,15 +43,33 @@ function App() {
           ...prev,
           from: now - seconds,
         }));
-        // loadData will be called automatically when query changes
-      } else {
-        // For 'all' time range, query doesn't change, so call loadData directly
-        loadData();
       }
     }, refreshInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, timeRange, loadData]);
+  }, [autoRefresh, refreshInterval, timeRange]);
+
+  // For rolling time windows, query key changes trigger refetch automatically
+  // For 'all' time range, use refetchInterval since query key doesn't change
+  const shouldUseRefetchInterval = autoRefresh && timeRange === 'all';
+
+  const {
+    data,
+    aggregatedData,
+    loading,
+    error,
+    refetch,
+  } = usePingData({
+    useAggregated,
+    bucketDuration,
+    query,
+    enabled: true,
+    refetchInterval: shouldUseRefetchInterval ? refreshInterval * 1000 : false,
+  });
+
+  const loadData = () => {
+    refetch();
+  };
 
   const aggregatedStatistics = useStatistics(aggregatedData);
   const synchronizedYDomain = useSynchronizedYDomain(
@@ -125,7 +130,7 @@ function App() {
           onRefresh={loadData}
         />
 
-        {error && <ErrorDisplay error={error} />}
+        {error && <ErrorDisplay error={error instanceof Error ? error.message : 'Failed to fetch data'} />}
 
         {data && <Statistics statistics={data.statistics} />}
         {aggregatedData && aggregatedStatistics && (
