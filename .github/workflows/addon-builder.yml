@@ -68,5 +68,4 @@ jobs:
             ${{ matrix.builder_image }} \
             --${{ matrix.arch }} \
             --target /data/home-assistant-addon \
-            --push
 
