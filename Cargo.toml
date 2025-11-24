@@ -21,3 +21,4 @@ tower-http = { version = "0.5", features = ["cors", "fs"] }
 toml_edit = "0.22"
 notify = "7.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
+libc = "0.2"
