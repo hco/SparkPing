@@ -327,6 +327,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Determine static files directory (from env var or default)
+    let static_dir = std::env::var("STATIC_DIR")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            // Default to ./frontend/dist if it exists
+            let default_path = PathBuf::from("./frontend/dist");
+            if default_path.exists() {
+                Some(default_path)
+            } else {
+                None
+            }
+        });
+    
+    if let Some(ref dir) = static_dir {
+        info!("Serving static files from: {:?}", dir);
+    } else {
+        info!("Static file serving disabled (no static directory found)");
+    }
+    
     // Create HTTP API router with shared state
     let app = create_router(
         Arc::clone(&storage),
@@ -334,6 +354,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&task_handles),
         Arc::clone(&write_flag),
         config_path.clone(),
+        static_dir,
     );
     let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()

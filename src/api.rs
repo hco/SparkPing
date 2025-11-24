@@ -1,10 +1,11 @@
 use axum::{
     extract::{Query, State, Path},
     http::StatusCode,
-    response::Json,
+    response::{Html, Json},
     routing::{get, put},
     Router,
 };
+use tower_http::services::ServeDir;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::sync::Arc;
@@ -996,6 +997,18 @@ pub async fn delete_target(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// SPA fallback handler - serves index.html for non-API routes
+async fn spa_fallback(static_dir: PathBuf) -> Result<Html<String>, StatusCode> {
+    let index_path = static_dir.join("index.html");
+    match std::fs::read_to_string(&index_path) {
+        Ok(content) => Ok(Html(content)),
+        Err(_) => {
+            error!("Failed to read index.html from {:?}", index_path);
+            Err(StatusCode::NOT_FOUND)
+        }
+    }
+}
+
 /// Create the API router
 pub fn create_router(
     storage: Arc<dyn Storage>,
@@ -1003,6 +1016,7 @@ pub fn create_router(
     task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
     write_flag: Arc<AtomicBool>,
     config_path: PathBuf,
+    static_dir: Option<PathBuf>,
 ) -> Router {
     let state = AppState {
         storage,
@@ -1012,11 +1026,30 @@ pub fn create_router(
         config_path,
     };
     
-    Router::new()
+    let mut router = Router::new()
         .route("/api/ping/data", get(get_ping_data))
         .route("/api/ping/aggregated", get(get_ping_aggregated))
         .route("/api/targets", get(get_targets).post(create_target))
         .route("/api/targets/:id", put(update_target).delete(delete_target))
-        .with_state(state)
+        .with_state(state);
+    
+    // Add static file serving if static directory is provided
+    if let Some(static_path) = static_dir {
+        let static_path_for_fallback = static_path.clone();
+        
+        // Nest static file service - API routes take precedence
+        router = router.nest_service(
+            "/",
+            ServeDir::new(&static_path)
+        );
+        
+        // Add fallback to serve index.html for SPA routing
+        router = router.fallback(move || {
+            let path = static_path_for_fallback.clone();
+            async move { spa_fallback(path).await }
+        });
+    }
+    
+    router
 }
 

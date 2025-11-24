@@ -1,5 +1,6 @@
 [tools]
 rust = "1.91.1"
+node = "24"
 "cargo:cargo-watch" = {version = "latest"}
 
 

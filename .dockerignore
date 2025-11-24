@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+frontend/dist/
+frontend/node_modules/
+
+# Data directories
+tsink-data/
+sparkping.log
+
+# Git
+.git/
+.gitignore
+
+# IDE files
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in image)
+docs/
+
+# Other
+*.md
+!README.md
+
