@@ -54,9 +54,11 @@ run = "cargo check"
 
 [tasks.fmt]
 description = "Format code"
+depends = ["install"]
 run = "cargo fmt --all"
 
 [tasks.fmt-check]
+depends = ["install"]
 description = "Check code formatting"
 run = "cargo fmt --check --all"
 
