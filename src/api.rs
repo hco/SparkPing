@@ -1102,12 +1102,20 @@ pub fn create_router(
     config_path: PathBuf,
     static_dir: Option<PathBuf>,
 ) -> Router {
+    // Convert config_path to actual file path (config crate uses path without extension)
+    // The API needs the full path with .toml extension to read/write the file
+    let config_file_path = if config_path.extension().is_none() {
+        config_path.with_extension("toml")
+    } else {
+        config_path
+    };
+    
     let state = AppState {
         storage,
         config,
         task_handles,
         write_flag,
-        config_path,
+        config_path: config_file_path,
     };
 
     let mut router = Router::new()

@@ -15,7 +15,7 @@ pub fn read_config_file(path: &Path) -> Result<DocumentMut, Box<dyn std::error::
     Ok(doc)
 }
 
-/// Write the config file atomically
+/// Write the config file atomically (with fallback for Docker bind mounts)
 pub fn write_config_file(
     path: &Path,
     doc: &DocumentMut,
@@ -24,10 +24,11 @@ pub fn write_config_file(
     // Set write flag before writing
     write_flag.store(true, Ordering::SeqCst);
 
-    // Write to temp file first, then rename atomically
-    let temp_path = path.with_extension("tmp");
     let content = doc.to_string();
-    std::fs::write(&temp_path, content)?;
+
+    // Try atomic rename approach first
+    let temp_path = path.with_extension("tmp");
+    std::fs::write(&temp_path, &content)?;
 
     // Preserve permissions and owner from original file if it exists
     if path.exists() {
@@ -42,18 +43,29 @@ pub fn write_config_file(
             let path_cstr = CString::new(temp_path.as_os_str().as_bytes())?;
             let uid = metadata.uid();
             let gid = metadata.gid();
-            let result = unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
-            if result != 0 {
-                return Err(format!(
-                    "Failed to preserve file owner: chown failed with errno {}",
-                    std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)
-                )
-                .into());
-            }
+            // Ignore chown errors - not critical and may fail in containers
+            unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
         }
     }
 
-    std::fs::rename(&temp_path, path)?;
+    // Try atomic rename, fall back to direct write if it fails
+    // (rename fails on Docker bind mounts with EBUSY)
+    match std::fs::rename(&temp_path, path) {
+        Ok(()) => {}
+        Err(e) => {
+            // Clean up temp file
+            let _ = std::fs::remove_file(&temp_path);
+
+            // Fall back to direct write (works with Docker bind mounts)
+            std::fs::write(path, &content)?;
+
+            // Log that we used fallback (but don't fail)
+            tracing::debug!(
+                "Used direct write fallback for config file (rename failed: {})",
+                e
+            );
+        }
+    }
 
     // Clear write flag after writing
     write_flag.store(false, Ordering::SeqCst);
