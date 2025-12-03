@@ -35,18 +35,23 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
-    rm -rf src
+    rm -rf src target/release/SparkPing target/release/deps/SparkPing*
 
 # Copy source code
 COPY src ./src
 
 # Build release binary (will rebuild with actual source)
-RUN cargo build --release
+RUN touch src/main.rs && cargo build --release
 
 # Stage 3: Final image
-FROM gcr.io/distroless/cc-debian12
+FROM debian:bookworm-slim
 
 WORKDIR /app
+
+# Install ca-certificates for HTTPS and basic runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy built binary
 COPY --from=rust-builder /app/target/release/SparkPing /app/sparkping
@@ -55,7 +60,9 @@ COPY --from=rust-builder /app/target/release/SparkPing /app/sparkping
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Copy config file (can be overridden via volume)
-COPY config.toml /app/config.toml
+# Use config_empty.toml as template, but modify host to 0.0.0.0 for Docker
+COPY config_empty.toml /app/config.toml
+RUN sed -i 's/^host = "127.0.0.1"/host = "0.0.0.0"/' /app/config.toml
 
 # Expose port
 EXPOSE 8080
@@ -63,6 +70,44 @@ EXPOSE 8080
 # Set environment variable for static files directory
 ENV STATIC_DIR=/app/frontend/dist
 
-# Run the application
-ENTRYPOINT ["/app/sparkping", "--config", "/app/config.toml"]
+# Create directory for database
+RUN mkdir -p /app/tsink-data
+
+# Make binary executable (should be already, but ensure it)
+RUN chmod +x /app/sparkping
+
+# Create a startup script that provides better error visibility
+RUN echo '#!/bin/sh\n\
+set -e\n\
+echo "=== SparkPing Container Starting ==="\n\
+echo "Working directory: $(pwd)"\n\
+cd /app\n\
+CONFIG_PATH="config"\n\
+echo "Config file path (for config crate): $CONFIG_PATH"\n\
+CONFIG_FILE="${CONFIG_PATH}.toml"\n\
+if [ ! -f "$CONFIG_FILE" ]; then\n\
+    echo "ERROR: Config file not found: $CONFIG_FILE"\n\
+    echo "Looking for: $CONFIG_FILE"\n\
+    ls -la /app/ || true\n\
+    exit 1\n\
+fi\n\
+echo "Config file exists: $CONFIG_FILE"\n\
+echo "Config file contents:"\n\
+cat "$CONFIG_FILE"\n\
+echo ""\n\
+echo "=== Starting SparkPing ==="\n\
+echo "Binary: /app/sparkping"\n\
+echo "Arguments: --config $CONFIG_PATH"\n\
+if [ ! -x /app/sparkping ]; then\n\
+    echo "ERROR: Binary is not executable"\n\
+    ls -la /app/sparkping\n\
+    exit 1\n\
+fi\n\
+# Run with error handling - capture stderr and stdout\n\
+exec /app/sparkping --config "$CONFIG_PATH" 2>&1\n\
+' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+# Run the application with relative config path
+# The config crate File::with_name() works better with relative paths
+ENTRYPOINT ["/app/entrypoint.sh"]
 
