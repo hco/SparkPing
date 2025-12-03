@@ -25,38 +25,58 @@ RUN pnpm build
 # Stage 2: Build Rust backend
 FROM rust:1.91-slim AS rust-builder
 
+# Get the target architecture from BUILD_FROM (passed from final stage)
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
+
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies including musl for static linking
 RUN apt-get update && \
-    apt-get install -y pkg-config libssl-dev && \
+    apt-get install -y pkg-config libssl-dev musl-tools && \
+    rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabihf && \
     rm -rf /var/lib/apt/lists/*
+
+# Determine target architecture from BUILD_FROM image name
+RUN ARCH=$(echo "$BUILD_FROM" | sed -n 's/.*\/\([^/]*\)-base:.*/\1/p') && \
+    case "$ARCH" in \
+        "amd64") TARGET="x86_64-unknown-linux-musl" ;; \
+        "aarch64") TARGET="aarch64-unknown-linux-musl" ;; \
+        "armv7") TARGET="armv7-unknown-linux-musleabihf" ;; \
+        *) TARGET="x86_64-unknown-linux-musl" ;; \
+    esac && \
+    echo "Building for architecture: $ARCH -> $TARGET" && \
+    echo "$TARGET" > /tmp/rust_target
 
 # Copy Cargo files first for better layer caching
 COPY Cargo.toml Cargo.lock ./
 
-# Create a dummy main.rs to build dependencies (for caching)
-RUN mkdir src && \
+# Build dependencies for the target architecture
+RUN TARGET=$(cat /tmp/rust_target) && \
+    mkdir src && \
     echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
+    cargo build --release --target "$TARGET" && \
     rm -rf src
 
 # Copy source code
 COPY src ./src
 
-# Build release binary (will rebuild with actual source)
-RUN cargo build --release
+# Build for the target architecture
+RUN TARGET=$(cat /tmp/rust_target) && \
+    cargo build --release --target "$TARGET" && \
+    cp "/app/target/$TARGET/release/SparkPing" /app/sparkping && \
+    chmod +x /app/sparkping
 
 # Stage 3: Final image - use Home Assistant base
 FROM ${BUILD_FROM}
 
-# Install runtime dependencies
-RUN apk add --no-cache libgcc libstdc++ ca-certificates bash
+# Install runtime dependencies (minimal since we're using static binary)
+RUN apk add --no-cache ca-certificates bash
 
 WORKDIR /app
 
-# Copy built binary and frontend
-COPY --from=rust-builder /app/target/release/SparkPing /app/sparkping
+# Copy the binary from rust-builder (already copied to known location)
+COPY --from=rust-builder --chmod=755 /app/sparkping /app/sparkping
+
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Copy default config template and startup script
@@ -67,4 +87,3 @@ RUN chmod a+x /run.sh
 ENV STATIC_DIR=/app/frontend/dist
 
 CMD [ "/run.sh" ]
-
