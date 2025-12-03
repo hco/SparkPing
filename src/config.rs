@@ -6,7 +6,35 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
     pub database: DatabaseConfig,
     #[serde(default)]
+    pub ping: PingConfig,
+    #[serde(default)]
     pub targets: Vec<Target>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PingConfig {
+    /// Socket type to use for ICMP pings: "dgram" (default, unprivileged) or "raw" (requires root)
+    #[serde(default)]
+    pub socket_type: SocketType,
+}
+
+impl Default for PingConfig {
+    fn default() -> Self {
+        Self {
+            socket_type: SocketType::default(),
+        }
+    }
+}
+
+/// Socket type for ICMP ping operations
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SocketType {
+    /// DGRAM socket - unprivileged, works without root on modern systems (default)
+    #[default]
+    Dgram,
+    /// RAW socket - requires elevated privileges (root/sudo)
+    Raw,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

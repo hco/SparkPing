@@ -1,5 +1,5 @@
+use crate::config::SocketType;
 use chrono::{DateTime, Utc};
-use ping::ping;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
@@ -19,6 +19,7 @@ pub async fn perform_ping(
     address: &str,
     sequence: u16,
     name: &Option<String>,
+    socket_type: SocketType,
 ) -> PingResult {
     let timestamp = Utc::now();
 
@@ -39,17 +40,21 @@ pub async fn perform_ping(
         }
     };
 
-    // Perform the ping with a 2 second timeout
+    // Convert our SocketType to ping crate's SocketType
+    let ping_socket_type = match socket_type {
+        SocketType::Dgram => ping::SocketType::DGRAM,
+        SocketType::Raw => ping::SocketType::RAW,
+    };
+
+    // Perform the ping with a 2 second timeout using the builder pattern
     // Measure time manually since ping() doesn't return latency
     let start = Instant::now();
-    let ping_result = ping(
-        ip_addr,
-        Some(Duration::from_secs(2)),
-        Some(64),
-        None,           // ident
-        Some(sequence), // seq_cnt
-        None,           // payload
-    );
+    let ping_result = ping::new(ip_addr)
+        .timeout(Duration::from_secs(2))
+        .ttl(64)
+        .seq_cnt(sequence)
+        .socket_type(ping_socket_type)
+        .send();
     let elapsed = start.elapsed();
 
     match ping_result {

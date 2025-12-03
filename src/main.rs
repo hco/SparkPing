@@ -96,6 +96,7 @@ fn reload_config(path: &PathBuf) -> Result<AppConfig, String> {
 pub fn start_ping_task(
     target: &crate::config::Target,
     storage: Arc<dyn tsink::Storage>,
+    socket_type: crate::config::SocketType,
 ) -> tokio::task::AbortHandle {
     let target_id = target.id.clone();
     let target_address = target.address.clone();
@@ -108,7 +109,7 @@ pub fn start_ping_task(
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
                 let result =
-                    perform_ping(&target_id, &target_address, sequence, &target_name).await;
+                    perform_ping(&target_id, &target_address, sequence, &target_name, socket_type).await;
 
                 // Write result to tsink
                 if let Err(e) = write_ping_result(&*storage, &result) {
@@ -152,6 +153,13 @@ async fn reload_targets(
         .map(|t| (t.id.clone(), t))
         .collect();
 
+    // Check if socket_type changed - if so, restart all tasks
+    let socket_type_changed = old_config.ping.socket_type != new_config.ping.socket_type;
+    if socket_type_changed {
+        info!("Socket type changed from {:?} to {:?}, restarting all ping tasks", 
+              old_config.ping.socket_type, new_config.ping.socket_type);
+    }
+
     // Find removed targets
     for (id, _) in old_targets.iter() {
         if !new_targets.contains_key(id) {
@@ -165,8 +173,9 @@ async fn reload_targets(
     // Find modified or new targets
     for (id, new_target) in new_targets.iter() {
         let needs_restart = if let Some(old_target) = old_targets.get(id) {
-            // Check if any field changed
-            old_target.address != new_target.address
+            // Check if any field changed or socket_type changed
+            socket_type_changed
+                || old_target.address != new_target.address
                 || old_target.name != new_target.name
                 || old_target.ping_count != new_target.ping_count
                 || old_target.ping_interval != new_target.ping_interval
@@ -183,7 +192,7 @@ async fn reload_targets(
                 info!("Starting ping task for new target: {}", id);
             }
 
-            let handle = start_ping_task(new_target, Arc::clone(&storage));
+            let handle = start_ping_task(new_target, Arc::clone(&storage), new_config.ping.socket_type);
             handles.insert(id.clone(), handle);
         }
     }
@@ -195,13 +204,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_path = args.config.clone();
 
     // Load configuration from the specified file
+    // Output errors to stderr before logging is initialized
     let settings = ::config::Config::builder()
         .add_source(::config::File::with_name(
             config_path.to_str().expect("Invalid config file path"),
         ))
-        .build()?;
+        .build()
+        .map_err(|e| {
+            eprintln!("ERROR: Failed to load config file '{}': {}", config_path.display(), e);
+            e
+        })?;
 
-    let mut app_config: AppConfig = settings.try_deserialize()?;
+    let mut app_config: AppConfig = settings.try_deserialize()
+        .map_err(|e| {
+            eprintln!("ERROR: Failed to deserialize config: {}", e);
+            e
+        })?;
 
     // Ensure all targets have IDs (migrate if needed)
     let mut needs_save = false;
@@ -238,7 +256,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize logging before any other output
-    init_logging(&app_config.logging)?;
+    init_logging(&app_config.logging)
+        .map_err(|e| {
+            eprintln!("ERROR: Failed to initialize logging: {}", e);
+            e
+        })?;
 
     info!("Configuration loaded successfully from: {:?}", args.config);
     info!(
@@ -270,7 +292,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_write_timeout(Duration::from_secs(60))
             .with_partition_duration(Duration::from_secs(6 * 3600)) // 6 hours
             .with_wal_buffer_size(16384) // 16KB
-            .build()?,
+            .build()
+            .map_err(|e| {
+                eprintln!("ERROR: Failed to initialize storage at '{}': {}", app_config.database.path, e);
+                e
+            })?,
     );
 
     info!(
@@ -342,8 +368,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let config = config_state.read().unwrap();
         let mut handles = task_handles.write().unwrap();
+        let socket_type = config.ping.socket_type;
         for target in config.targets.iter() {
-            let handle = start_ping_task(target, Arc::clone(&storage));
+            let handle = start_ping_task(target, Arc::clone(&storage), socket_type);
             handles.insert(target.id.clone(), handle);
         }
     }
@@ -392,7 +419,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Set up file watcher for config reloading
-    let config_path_for_watcher = config_path.clone();
+    // The config_path might not have .toml extension (config crate adds it)
+    // So we need to construct the actual file path for watching
+    let config_file_path = if config_path.extension().is_none() {
+        config_path.with_extension("toml")
+    } else {
+        config_path.clone()
+    };
+    let config_path_for_watcher = config_file_path.clone();
     let config_state_for_watcher = Arc::clone(&config_state);
     let storage_for_watcher = Arc::clone(&storage);
     let task_handles_for_watcher = Arc::clone(&task_handles);

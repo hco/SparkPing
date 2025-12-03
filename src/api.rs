@@ -749,7 +749,11 @@ pub async fn get_ping_aggregated(
 }
 
 /// Start a ping task for a target and return its abort handle
-fn start_ping_task(target: &Target, storage: Arc<dyn Storage>) -> tokio::task::AbortHandle {
+fn start_ping_task(
+    target: &Target,
+    storage: Arc<dyn Storage>,
+    socket_type: crate::config::SocketType,
+) -> tokio::task::AbortHandle {
     let target_id = target.id.clone();
     let target_address = target.address.clone();
     let target_name = target.name.clone();
@@ -761,7 +765,7 @@ fn start_ping_task(target: &Target, storage: Arc<dyn Storage>) -> tokio::task::A
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
                 let result =
-                    perform_ping(&target_id, &target_address, sequence, &target_name).await;
+                    perform_ping(&target_id, &target_address, sequence, &target_name, socket_type).await;
 
                 // Write result to tsink
                 if let Err(e) = write_ping_result(&*storage, &result) {
@@ -885,6 +889,16 @@ pub async fn create_target(
 
     // Start ping task immediately
     {
+        let config = state.config.read().map_err(|e| {
+            error!("Failed to read config: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to access config".to_string(),
+            )
+        })?;
+        let socket_type = config.ping.socket_type;
+        drop(config);
+
         let mut handles = state.task_handles.write().map_err(|e| {
             error!("Failed to write task handles: {}", e);
             (
@@ -892,7 +906,7 @@ pub async fn create_target(
                 "Failed to access task handles".to_string(),
             )
         })?;
-        let handle = start_ping_task(&new_target, Arc::clone(&state.storage));
+        let handle = start_ping_task(&new_target, Arc::clone(&state.storage), socket_type);
         handles.insert(new_target.id.clone(), handle);
     }
 
@@ -973,8 +987,9 @@ pub async fn update_target(
         )
     })?;
 
-    // Update in-memory config
+    // Update in-memory config and get socket_type before dropping
     config.targets[target_idx] = updated_target.clone();
+    let socket_type = config.ping.socket_type;
     drop(config);
 
     // Restart ping task immediately
@@ -989,7 +1004,7 @@ pub async fn update_target(
         if let Some(old_handle) = handles.remove(&id) {
             old_handle.abort();
         }
-        let handle = start_ping_task(&updated_target, Arc::clone(&state.storage));
+        let handle = start_ping_task(&updated_target, Arc::clone(&state.storage), socket_type);
         handles.insert(updated_target.id.clone(), handle);
     }
 
