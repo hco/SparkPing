@@ -28,6 +28,9 @@ sed -i 's/^host = .*/host = "0.0.0.0"/' "$CONFIG_PATH"
 # Ensure required directories exist
 mkdir -p /data/tsink-data
 mkdir -p "$(dirname "$(grep '^file = ' "$CONFIG_PATH" | cut -d'"' -f2)")" 2>/dev/null || true
+ls -al /data || true
+ls -al /data/tsink-data || true
+ls -al /data/sparkping.log || true
 
 # Verify binary exists and is executable
 if [ ! -f "/app/sparkping" ]; then
@@ -48,7 +51,11 @@ if [ ! -f "$CONFIG_PATH" ]; then
     exit 1
 fi
 
-bashio::log.info "Binary verified, launching SparkPing..."
+bashio::log.info "Binary version:"
+/app/sparkping --version 2>&1
+/app/sparkping --version
+
+bashio::log.info "Launching SparkPing..."
 
 # Launch SparkPing with stderr redirected to stdout so errors are visible
 # Use exec to replace shell process, but ensure errors are captured

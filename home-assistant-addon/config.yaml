@@ -1,5 +1,5 @@
 name: SparkPing
-version: "0.1.5"
+version: "0.1.6"
 slug: sparkping
 image: ghcr.io/hco/sparkping
 description: Network latency and packet loss monitoring tool
@@ -8,6 +8,8 @@ arch:
   - amd64
 init: false
 host_network: false
+privileged:
+  - NET_RAW
 ports:
   8080/tcp: null
 ports_description:

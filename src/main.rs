@@ -198,21 +198,21 @@ async fn reload_targets(
     }
 }
 
-// Install panic handler to ensure panics are visible
-std::panic::set_hook(Box::new(|panic_info| {
-    eprintln!("PANIC: {}", panic_info);
-    if let Some(location) = panic_info.location() {
-        eprintln!("Location: {}:{}:{}", location.file(), location.line(), location.column());
-    }
-    if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-        eprintln!("Message: {}", s);
-    } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
-        eprintln!("Message: {}", s);
-    }
-}));
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install panic handler to ensure panics are visible
+    std::panic::set_hook(Box::new(|panic_info| {
+        eprintln!("PANIC: {}", panic_info);
+        if let Some(location) = panic_info.location() {
+            eprintln!("Location: {}:{}:{}", location.file(), location.line(), location.column());
+        }
+        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            eprintln!("Message: {}", s);
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            eprintln!("Message: {}", s);
+        }
+    }));
+
     let args = Args::parse();
     let config_path = args.config.clone();
 
