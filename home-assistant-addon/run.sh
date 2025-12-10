@@ -8,6 +8,18 @@ if [ ! -f "$CONFIG_PATH" ]; then
     cp /app/config.toml.template "$CONFIG_PATH"
 fi
 
+# Migration: Ensure [ping] section exists with raw socket type
+# This is needed for existing installations that were created without this section
+if ! grep -q '^\[ping\]' "$CONFIG_PATH"; then
+    bashio::log.info "Adding [ping] section for raw socket support..."
+    # Insert [ping] section before the targets comment or at the end
+    if grep -q '# Add ping targets' "$CONFIG_PATH"; then
+        sed -i '/# Add ping targets/i\[ping]\n# Use raw sockets (requires NET_RAW capability)\nsocket_type = "raw"\n' "$CONFIG_PATH"
+    else
+        echo -e '\n[ping]\n# Use raw sockets (requires NET_RAW capability)\nsocket_type = "raw"' >> "$CONFIG_PATH"
+    fi
+fi
+
 # Read user options
 PORT=$(bashio::config 'port')
 LOG_LEVEL=$(bashio::config 'log_level')
