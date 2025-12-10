@@ -1,5 +1,5 @@
 name: SparkPing
-version: "0.1.10"
+version: "0.1.11"
 slug: sparkping
 image: ghcr.io/hco/sparkping
 description: Network latency and packet loss monitoring tool
@@ -9,23 +9,20 @@ arch:
 init: false
 host_network: false
 privileged:
-  - NET_ADMIN
-  - SYS_ADMIN
-  - SYS_RAWIO
+  - NET_RAW
 ports:
   8080/tcp: null
 ports_description:
   8080/tcp: SparkPing web interface
 ingress: true
 ingress_port: 8080
-webui: http://[HOST]:[PORT:8080]/
+ingress_stream: true
 panel_icon: mdi:chart-line
 map:
-  - data:rw
+  - type: data
+    read_only: false
 options:
-  port: 8080
   log_level: "info"
 schema:
-  port: port
   log_level: list(trace|debug|info|warn|error)
 

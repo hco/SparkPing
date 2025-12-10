@@ -21,8 +21,10 @@ if ! grep -q '^\[ping\]' "$CONFIG_PATH"; then
 fi
 
 # Read user options
-PORT=$(bashio::config 'port')
 LOG_LEVEL=$(bashio::config 'log_level')
+
+# Port is fixed for ingress - must match ingress_port in config.yaml
+PORT=8080
 
 bashio::log.info "Starting SparkPing..."
 bashio::log.info "Port: $PORT"
