@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info};
 use tsink::Storage;
 use uuid::Uuid;
@@ -1081,17 +1081,6 @@ pub async fn delete_target(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// SPA fallback handler - serves index.html for non-API routes
-async fn spa_fallback(static_dir: PathBuf) -> Result<Html<String>, StatusCode> {
-    let index_path = static_dir.join("index.html");
-    match std::fs::read_to_string(&index_path) {
-        Ok(content) => Ok(Html(content)),
-        Err(_) => {
-            error!("Failed to read index.html from {:?}", index_path);
-            Err(StatusCode::NOT_FOUND)
-        }
-    }
-}
 
 /// Create the API router
 pub fn create_router(
@@ -1127,16 +1116,13 @@ pub fn create_router(
 
     // Add static file serving if static directory is provided
     if let Some(static_path) = static_dir {
-        let static_path_for_fallback = static_path.clone();
-
-        // Nest static file service - API routes take precedence
-        router = router.nest_service("/", ServeDir::new(&static_path));
-
-        // Add fallback to serve index.html for SPA routing
-        router = router.fallback(move || {
-            let path = static_path_for_fallback.clone();
-            async move { spa_fallback(path).await }
-        });
+        let index_path = static_path.join("index.html");
+        
+        // Serve static files with fallback to index.html for SPA routing
+        let serve_dir = ServeDir::new(&static_path)
+            .not_found_service(ServeFile::new(&index_path));
+        
+        router = router.nest_service("/", serve_dir);
     }
 
     router
