@@ -1,12 +1,11 @@
 name: SparkPing
-version: "0.1.3"
+version: "0.1.4"
 slug: sparkping
-image: ghcr.io/hco/aarch64
+image: ghcr.io/hco/sparkping
 description: Network latency and packet loss monitoring tool
 arch:
   - aarch64
   - amd64
-  - armv7
 init: false
 host_network: false
 ports:
