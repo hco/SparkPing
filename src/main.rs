@@ -198,6 +198,19 @@ async fn reload_targets(
     }
 }
 
+// Install panic handler to ensure panics are visible
+std::panic::set_hook(Box::new(|panic_info| {
+    eprintln!("PANIC: {}", panic_info);
+    if let Some(location) = panic_info.location() {
+        eprintln!("Location: {}:{}:{}", location.file(), location.line(), location.column());
+    }
+    if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+        eprintln!("Message: {}", s);
+    } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+        eprintln!("Message: {}", s);
+    }
+}));
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -205,10 +218,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration from the specified file
     // Output errors to stderr before logging is initialized
-    let settings = ::config::Config::builder()
-        .add_source(::config::File::with_name(
+    // Use File::new() for absolute paths, or File::with_name() for relative paths
+    let config_file_source = if config_path.is_absolute() {
+        ::config::File::from(config_path.clone())
+    } else {
+        ::config::File::with_name(
             config_path.to_str().expect("Invalid config file path"),
-        ))
+        )
+    };
+    
+    let settings = ::config::Config::builder()
+        .add_source(config_file_source)
         .build()
         .map_err(|e| {
             eprintln!("ERROR: Failed to load config file '{}': {}", config_path.display(), e);
@@ -406,7 +426,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
-        .expect("Invalid server address");
+        .map_err(|e| {
+            let msg = format!("Invalid server address '{}:{}': {}", server_host, server_port, e);
+            eprintln!("ERROR: {}", msg);
+            msg
+        })?;
 
     info!("Starting HTTP API server on http://{}", addr);
 
@@ -414,8 +438,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_task = tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .expect("Failed to bind HTTP server");
-        axum::serve(listener, app).await.expect("HTTP server error");
+            .unwrap_or_else(|e| {
+                let msg = format!("Failed to bind HTTP server to {}: {}", addr, e);
+                eprintln!("ERROR: {}", msg);
+                panic!("{}", msg);
+            });
+        axum::serve(listener, app).await.unwrap_or_else(|e| {
+            let msg = format!("HTTP server error: {}", e);
+            eprintln!("ERROR: {}", msg);
+            panic!("{}", msg);
+        });
     });
 
     // Set up file watcher for config reloading
