@@ -61,7 +61,9 @@ RUN TARGET=$(cat /tmp/rust_target) && \
 COPY src ./src
 
 # Build for the target architecture
+# Touch main.rs to ensure cargo detects source change after dummy dependency build
 RUN TARGET=$(cat /tmp/rust_target) && \
+    touch src/main.rs && \
     cargo build --release --target "$TARGET" && \
     cp "/app/target/$TARGET/release/SparkPing" /app/sparkping && \
     chmod +x /app/sparkping
