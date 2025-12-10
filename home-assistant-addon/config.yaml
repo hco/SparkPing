@@ -18,6 +18,7 @@ ports_description:
   8080/tcp: SparkPing web interface
 ingress: true
 ingress_port: 8080
+webui: http://[HOST]:[PORT:8080]/
 panel_icon: mdi:chart-line
 map:
   - data:rw
