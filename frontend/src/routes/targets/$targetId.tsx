@@ -18,8 +18,8 @@ export const Route = createFileRoute('/targets/$targetId')({
 
 function TargetDetails() {
   const { targetId } = Route.useParams();
-  const [timeRange, setTimeRange] = useState<TimeRangeOption>('24h');
-  const [bucketDuration, setBucketDuration] = useState('1m');
+  const [timeRange, setTimeRange] = useState<TimeRangeOption>('1h');
+  const [bucketDuration, setBucketDuration] = useState('10s');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(5);
   const [showSeparateCharts, setShowSeparateCharts] = useState(true);
@@ -93,6 +93,9 @@ function TargetDetails() {
                 onChange={(e) => setBucketDuration(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
+                <option value="1s">1 second</option>
+                <option value="5s">5 seconds</option>
+                <option value="10s">10 seconds</option>
                 <option value="30s">30 seconds</option>
                 <option value="1m">1 minute</option>
                 <option value="5m">5 minutes</option>
