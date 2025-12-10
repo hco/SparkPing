@@ -9,7 +9,9 @@ arch:
 init: false
 host_network: false
 privileged:
-  - NET_RAW
+  - NET_ADMIN
+  - SYS_ADMIN
+  - SYS_RAWIO
 ports:
   8080/tcp: null
 ports_description:
