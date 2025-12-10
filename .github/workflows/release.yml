@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+        default: patch
+      custom_version:
+        description: 'Custom version (only used if version_type is "custom", e.g., 0.1.4)'
+        required: false
+        type: string
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        type: boolean
+        default: true
+  release:
+    types: [created]
+
+env:
+  CONFIG_FILE: home-assistant-addon/config.yaml
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.0
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current version
+        id: current_version
+        run: |
+          CONFIG_FILE="${{ env.CONFIG_FILE }}"
+          CURRENT_VERSION=$(grep -E '^version:' "$CONFIG_FILE" | sed -E 's/^version:[[:space:]]*"([^"]+)".*/\1/')
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
+            VERSION_TYPE="${{ github.event.inputs.version_type }}"
+            
+            # Validate current version format
+            if [[ ! "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: Current version '$CURRENT_VERSION' is not in SemVer format (MAJOR.MINOR.PATCH)"
+              exit 1
+            fi
+            
+            # Parse current version
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+            
+            # Calculate new version based on type
+            case "$VERSION_TYPE" in
+              patch)
+                PATCH=$((PATCH + 1))
+                VERSION="$MAJOR.$MINOR.$PATCH"
+                echo "Bumping patch version: $CURRENT_VERSION → $VERSION"
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                VERSION="$MAJOR.$MINOR.$PATCH"
+                echo "Bumping minor version: $CURRENT_VERSION → $VERSION"
+                ;;
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                VERSION="$MAJOR.$MINOR.$PATCH"
+                echo "Bumping major version: $CURRENT_VERSION → $VERSION"
+                ;;
+              custom)
+                if [[ -z "${{ github.event.inputs.custom_version }}" ]]; then
+                  echo "Error: Custom version is required when version_type is 'custom'"
+                  exit 1
+                fi
+                VERSION="${{ github.event.inputs.custom_version }}"
+                echo "Using custom version: $VERSION"
+                ;;
+              *)
+                echo "Error: Unknown version type: $VERSION_TYPE"
+                exit 1
+                ;;
+            esac
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            # Extract version from release tag (remove 'v' prefix if present)
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "Extracted version from release tag: $VERSION"
+          else
+            echo "Unsupported event: ${{ github.event_name }}"
+            exit 1
+          fi
+          
+          # Validate semantic version format (MAJOR.MINOR.PATCH)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid version format. Expected MAJOR.MINOR.PATCH (e.g., 0.1.4)"
+            exit 1
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Final version: $VERSION"
+          echo "Tag: v$VERSION"
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist"
+          fi
+
+      - name: Update config.yaml version
+        id: update_config
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
+          CONFIG_FILE="${{ env.CONFIG_FILE }}"
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $VERSION"
+          
+          # Use sed to update version in config.yaml
+          # This preserves the YAML structure and formatting
+          sed -i "s/^version:.*/version: \"$VERSION\"/" "$CONFIG_FILE"
+          
+          # Check if version actually changed
+          if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version already set to $VERSION, no changes needed"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Updated $CONFIG_FILE from $CURRENT_VERSION to $VERSION"
+          fi
+          
+          cat "$CONFIG_FILE"
+
+      - name: Commit version update
+        if: steps.update_config.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add "${{ env.CONFIG_FILE }}"
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          
+          # Determine the branch to push to
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            # For release events, push to the default branch
+            BRANCH="${{ github.event.repository.default_branch }}"
+          else
+            # For workflow_dispatch, use the current branch
+            BRANCH="${{ github.ref_name }}"
+          fi
+          
+          git push origin HEAD:$BRANCH
+          echo "Committed and pushed version update to $BRANCH"
+
+      - name: Create git tag
+        if: |
+          steps.check_tag.outputs.exists == 'false' &&
+          github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git tag -a "$TAG" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "$TAG"
+          echo "Created and pushed tag: $TAG"
+
+      - name: Create GitHub Release
+        if: |
+          steps.check_tag.outputs.exists == 'false' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Release ${{ steps.version.outputs.version }}
+            
+            See the [changelog](https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.tag }}^...${{ steps.version.outputs.tag }}) for details.
+          draft: false
+          prerelease: false
+          generate_release_notes: true
