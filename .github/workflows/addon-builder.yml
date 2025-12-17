@@ -120,7 +120,7 @@ jobs:
             --target /data/home-assistant-addon \
             --image "${{ steps.check.outputs.image }}" \
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
-            --version "${{ steps.version.outputs.version }}"
+            --version "${{ steps.version.outputs.version }}" \
             --addon
 
   bump-addon-version:
