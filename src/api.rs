@@ -5,7 +5,7 @@ use crate::storage::write_ping_result;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{Html, Json},
+    response::{Json},
     routing::{get, put},
     Router,
 };
