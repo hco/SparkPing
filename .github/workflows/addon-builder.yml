@@ -118,3 +118,37 @@ jobs:
             --image "${{ steps.check.outputs.image }}" \
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
             --addon
+
+  bump-addon-version:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && !contains(needs.build.result, 'failure')
+    name: Bump add-on version
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.0
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          # Remove 'v' prefix if present
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update config.yaml version
+        run: |
+          sed -i 's/^version: ".*"/version: "${{ steps.version.outputs.version }}"/' home-assistant-addon/config.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add home-assistant-addon/config.yaml
+          git diff --staged --quiet || (git commit -m "chore: bump add-on version to ${{ steps.version.outputs.version }}" && git push)
