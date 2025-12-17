@@ -2,7 +2,7 @@ name: SparkPing
 version: "0.1.19"
 slug: sparkping
 image: ghcr.io/hco/sparkping
-description: Network latency and packet loss monitoring tool (wip)
+description: Network latency and packet loss monitoring tool
 arch:
   - aarch64
   - amd64
@@ -18,10 +18,6 @@ ingress: true
 ingress_port: 8080
 ingress_stream: true
 panel_icon: mdi:chart-line
-map:
-  - type: data
-    read_only: false
-    path: /data
 options:
   log_level: "info"
 schema:
