@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as d3 from 'd3';
 import { format, differenceInHours, differenceInDays } from 'date-fns';
 import type { BucketDataPoint } from '../../types';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 
 interface D3SmokeChartProps {
   data: BucketDataPoint[];
@@ -59,7 +60,8 @@ export function D3SmokeChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: width || 800, height });
-  const [showMedianLine, setShowMedianLine] = useState(false);
+  const { preferences, setPreference } = useUserPreferences();
+  const { showMedianLine, showSmokeBars, showPacketLoss } = preferences;
 
   // Throttle function for mouse events
   const throttle = useCallback(<T extends (...args: unknown[]) => void>(
@@ -218,162 +220,168 @@ export function D3SmokeChart({
       bucketInterval = intervals[Math.floor(intervals.length / 2)] || 0;
     }
 
-    validLatencyData.forEach((point, i) => {
-      const x = xScale(point.timestamp);
-      const minY = yScale(point.min!);
-      const maxY = yScale(point.max!);
-      const avgY = yScale(point.avg!);
+    // Only draw smoke bars if enabled
+    if (showSmokeBars) {
+      validLatencyData.forEach((point, i) => {
+        const x = xScale(point.timestamp);
+        const minY = yScale(point.min!);
+        const maxY = yScale(point.max!);
+        const avgY = yScale(point.avg!);
 
-      // Calculate bar boundaries to fill space without gaps
-      const prevPoint = validLatencyData[i - 1];
-      const nextPoint = validLatencyData[i + 1];
+        // Calculate bar boundaries to fill space without gaps
+        const prevPoint = validLatencyData[i - 1];
+        const nextPoint = validLatencyData[i + 1];
 
-      // Check for gaps
-      const hasGapBefore = !prevPoint || (bucketInterval > 0 && (point.timestamp - prevPoint.timestamp) > bucketInterval * 2);
-      const hasGapAfter = !nextPoint || (bucketInterval > 0 && (nextPoint.timestamp - point.timestamp) > bucketInterval * 2);
+        // Check for gaps
+        const hasGapBefore = !prevPoint || (bucketInterval > 0 && (point.timestamp - prevPoint.timestamp) > bucketInterval * 2);
+        const hasGapAfter = !nextPoint || (bucketInterval > 0 && (nextPoint.timestamp - point.timestamp) > bucketInterval * 2);
 
-      const halfBucket = bucketInterval > 0 ? (xScale(bucketInterval) - xScale(0)) / 2 : barWidth / 2;
+        const halfBucket = bucketInterval > 0 ? (xScale(bucketInterval) - xScale(0)) / 2 : barWidth / 2;
 
-      const barStartX = hasGapBefore
-        ? x - halfBucket
-        : (xScale(prevPoint!.timestamp) + x) / 2;
-      const barEndX = hasGapAfter
-        ? x + halfBucket
-        : (x + xScale(nextPoint!.timestamp)) / 2;
-      const actualBarWidth = Math.max(1, barEndX - barStartX);
+        const barStartX = hasGapBefore
+          ? x - halfBucket
+          : (xScale(prevPoint!.timestamp) + x) / 2;
+        const barEndX = hasGapAfter
+          ? x + halfBucket
+          : (x + xScale(nextPoint!.timestamp)) / 2;
+        const actualBarWidth = Math.max(1, barEndX - barStartX);
 
-      // Draw the variance range as a shaded rectangle (the "smoke")
-      const rangeHeight = minY - maxY;
-      if (rangeHeight > 0) {
-        smokeGroup
-          .append('rect')
-          .attr('x', barStartX)
-          .attr('y', maxY)
-          .attr('width', actualBarWidth)
-          .attr('height', rangeHeight)
-          .attr('fill', '#d1d5db')
-          .attr('opacity', 0.5);
+        // Draw the variance range as a shaded rectangle (the "smoke")
+        const rangeHeight = minY - maxY;
+        if (rangeHeight > 0) {
+          smokeGroup
+            .append('rect')
+            .attr('x', barStartX)
+            .attr('y', maxY)
+            .attr('width', actualBarWidth)
+            .attr('height', rangeHeight)
+            .attr('fill', '#d1d5db')
+            .attr('opacity', 0.5);
 
-        // Draw a darker band around the average to show density
-        const densityBandHeight = Math.max(4, rangeHeight * 0.3);
-        smokeGroup
-          .append('rect')
-          .attr('x', barStartX)
-          .attr('y', avgY - densityBandHeight / 2)
-          .attr('width', actualBarWidth)
-          .attr('height', densityBandHeight)
-          .attr('fill', '#9ca3af')
-          .attr('opacity', 0.6);
-      }
-    });
+          // Draw a darker band around the average to show density
+          const densityBandHeight = Math.max(4, rangeHeight * 0.3);
+          smokeGroup
+            .append('rect')
+            .attr('x', barStartX)
+            .attr('y', avgY - densityBandHeight / 2)
+            .attr('width', actualBarWidth)
+            .attr('height', densityBandHeight)
+            .attr('fill', '#9ca3af')
+            .attr('opacity', 0.6);
+        }
+      });
+    }
 
     // === D) Draw packet loss as transparent background areas ===
     // Draw BEFORE smoke layer so it appears behind
-    const packetLossGroup = g
-      .insert('g', '.smoke-layer')
-      .attr('class', 'packet-loss-layer')
-      .attr('clip-path', 'url(#chart-clip)');
+    // Only draw if packet loss display is enabled
+    if (showPacketLoss) {
+      const packetLossGroup = g
+        .insert('g', '.smoke-layer')
+        .attr('class', 'packet-loss-layer')
+        .attr('clip-path', 'url(#chart-clip)');
 
-    // Calculate expected bucket interval to detect gaps
-    let expectedInterval = 0;
-    if (chartData.length >= 2) {
-      const intervals: number[] = [];
-      for (let i = 1; i < Math.min(chartData.length, 20); i++) {
-        intervals.push(chartData[i].timestamp - chartData[i - 1].timestamp);
+      // Calculate expected bucket interval to detect gaps
+      let expectedInterval = 0;
+      if (chartData.length >= 2) {
+        const intervals: number[] = [];
+        for (let i = 1; i < Math.min(chartData.length, 20); i++) {
+          intervals.push(chartData[i].timestamp - chartData[i - 1].timestamp);
+        }
+        intervals.sort((a, b) => a - b);
+        expectedInterval = intervals[Math.floor(intervals.length / 2)] || 0;
       }
-      intervals.sort((a, b) => a - b);
-      expectedInterval = intervals[Math.floor(intervals.length / 2)] || 0;
-    }
 
-    // Group consecutive buckets by packet loss color to draw continuous areas
-    // Include 0% packet loss (green) but exclude buckets with no data
-    type PacketLossRegion = {
-      startX: number;
-      endX: number;
-      color: string;
-    };
+      // Group consecutive buckets by packet loss color to draw continuous areas
+      // Include 0% packet loss (green) but exclude buckets with no data
+      type PacketLossRegion = {
+        startX: number;
+        endX: number;
+        color: string;
+      };
 
-    const regions: PacketLossRegion[] = [];
-    let currentRegion: PacketLossRegion | null = null;
+      const regions: PacketLossRegion[] = [];
+      let currentRegion: PacketLossRegion | null = null;
 
-    // Calculate half bucket width in pixels for boundaries
-    const halfBucketWidth = expectedInterval > 0
-      ? (xScale(expectedInterval) - xScale(0)) / 2
-      : barWidth / 2;
+      // Calculate half bucket width in pixels for boundaries
+      const halfBucketWidth = expectedInterval > 0
+        ? (xScale(expectedInterval) - xScale(0)) / 2
+        : barWidth / 2;
 
-    chartData.forEach((point, i) => {
-      // Only show background if we have data for this bucket
-      const hasData = point.count > 0;
-      const color = hasData ? getPacketLossColor(point.packetLossPercent) : null;
-      const x = xScale(point.timestamp);
+      chartData.forEach((point, i) => {
+        // Only show background if we have data for this bucket
+        const hasData = point.count > 0;
+        const color = hasData ? getPacketLossColor(point.packetLossPercent) : null;
+        const x = xScale(point.timestamp);
 
-      // Calculate bucket boundaries, but don't extend into gaps
-      const prevPoint = chartData[i - 1];
-      const nextPoint = chartData[i + 1];
+        // Calculate bucket boundaries, but don't extend into gaps
+        const prevPoint = chartData[i - 1];
+        const nextPoint = chartData[i + 1];
 
-      // Check for gaps (time difference > 2x expected interval)
-      const hasGapBefore = prevPoint && expectedInterval > 0
-        ? (point.timestamp - prevPoint.timestamp) > expectedInterval * 2
-        : true;
-      const hasGapAfter = nextPoint && expectedInterval > 0
-        ? (nextPoint.timestamp - point.timestamp) > expectedInterval * 2
-        : true;
+        // Check for gaps (time difference > 2x expected interval)
+        const hasGapBefore = prevPoint && expectedInterval > 0
+          ? (point.timestamp - prevPoint.timestamp) > expectedInterval * 2
+          : true;
+        const hasGapAfter = nextPoint && expectedInterval > 0
+          ? (nextPoint.timestamp - point.timestamp) > expectedInterval * 2
+          : true;
 
-      // Calculate boundaries - use midpoint only if no gap, otherwise use half bucket width
-      const bucketStartX = hasGapBefore
-        ? x - halfBucketWidth
-        : (xScale(prevPoint!.timestamp) + x) / 2;
-      const bucketEndX = hasGapAfter
-        ? x + halfBucketWidth
-        : (x + xScale(nextPoint!.timestamp)) / 2;
+        // Calculate boundaries - use midpoint only if no gap, otherwise use half bucket width
+        const bucketStartX = hasGapBefore
+          ? x - halfBucketWidth
+          : (xScale(prevPoint!.timestamp) + x) / 2;
+        const bucketEndX = hasGapAfter
+          ? x + halfBucketWidth
+          : (x + xScale(nextPoint!.timestamp)) / 2;
 
-      if (hasData && color) {
-        // Check if we should extend current region or start new one
-        const canExtend = currentRegion
-          && currentRegion.color === color
-          && !hasGapBefore;
+        if (hasData && color) {
+          // Check if we should extend current region or start new one
+          const canExtend = currentRegion
+            && currentRegion.color === color
+            && !hasGapBefore;
 
-        if (canExtend) {
-          // Extend current region
-          currentRegion!.endX = bucketEndX;
+          if (canExtend) {
+            // Extend current region
+            currentRegion!.endX = bucketEndX;
+          } else {
+            // End previous region if exists
+            if (currentRegion) {
+              regions.push(currentRegion);
+            }
+            // Start new region
+            currentRegion = {
+              startX: bucketStartX,
+              endX: bucketEndX,
+              color,
+            };
+          }
         } else {
-          // End previous region if exists
+          // No data - end current region if exists
           if (currentRegion) {
             regions.push(currentRegion);
+            currentRegion = null;
           }
-          // Start new region
-          currentRegion = {
-            startX: bucketStartX,
-            endX: bucketEndX,
-            color,
-          };
         }
-      } else {
-        // No data - end current region if exists
-        if (currentRegion) {
-          regions.push(currentRegion);
-          currentRegion = null;
-        }
+      });
+
+      // Don't forget the last region
+      if (currentRegion) {
+        regions.push(currentRegion);
       }
-    });
 
-    // Don't forget the last region
-    if (currentRegion) {
-      regions.push(currentRegion);
+      // Draw each region as a continuous area
+      regions.forEach((region) => {
+        packetLossGroup
+          .append('rect')
+          .attr('class', 'packet-loss-bg')
+          .attr('x', region.startX)
+          .attr('y', 0)
+          .attr('width', Math.max(1, region.endX - region.startX))
+          .attr('height', chartHeight)
+          .attr('fill', region.color)
+          .attr('opacity', 0.15);
+      });
     }
-
-    // Draw each region as a continuous area
-    regions.forEach((region) => {
-      packetLossGroup
-        .append('rect')
-        .attr('class', 'packet-loss-bg')
-        .attr('x', region.startX)
-        .attr('y', 0)
-        .attr('width', Math.max(1, region.endX - region.startX))
-        .attr('height', chartHeight)
-        .attr('fill', region.color)
-        .attr('opacity', 0.15);
-    });
 
 
     // === C) Draw median RTT line (using avg as proxy for median) ===
@@ -713,22 +721,31 @@ export function D3SmokeChart({
       .append('g')
       .attr('transform', `translate(0, ${chartHeight + 55})`);
 
-    const legendColors = [
-      { label: '0%', color: '#22c55e' },
-      { label: '≤5%', color: '#60a5fa' },
-      { label: '5-20%', color: '#8b5cf6' },
-      { label: '>20%', color: '#ef4444' },
-      { label: 'Range', color: '#d1d5db' },
-    ];
+    const legendColors: { label: string; color: string; type?: 'line' | 'rect' }[] = [];
+
+    // Add packet loss colors if enabled
+    if (showPacketLoss) {
+      legendColors.push(
+        { label: '0%', color: '#22c55e' },
+        { label: '≤5%', color: '#60a5fa' },
+        { label: '5-20%', color: '#8b5cf6' },
+        { label: '>20%', color: '#ef4444' },
+      );
+    }
+
+    // Add smoke range indicator if enabled
+    if (showSmokeBars) {
+      legendColors.push({ label: 'Range', color: '#d1d5db' });
+    }
 
     // Add median line to legend if shown
     if (showMedianLine) {
-      legendColors.push({ label: 'Median', color: '#22c55e' });
+      legendColors.push({ label: 'Median', color: '#22c55e', type: 'line' });
     }
 
     legendColors.forEach((item, i) => {
       const x = i * 70;
-      if (item.label === 'Median') {
+      if (item.type === 'line') {
         // Draw line for median
         legendGroup
           .append('line')
@@ -883,7 +900,7 @@ export function D3SmokeChart({
     return () => {
       d3.select('body').selectAll('.d3-smoke-tooltip').remove();
     };
-  }, [data, dimensions.width, dimensions.height, margin, throttle, showMedianLine]);
+  }, [data, dimensions.width, dimensions.height, margin, throttle, showMedianLine, showSmokeBars, showPacketLoss]);
 
   if (data.length === 0) {
     return (
@@ -895,12 +912,30 @@ export function D3SmokeChart({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-6 mb-2">
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showSmokeBars}
+            onChange={(e) => setPreference('showSmokeBars', e.target.checked)}
+            className="w-4 h-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">Show Smoke Bars</span>
+        </label>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showPacketLoss}
+            onChange={(e) => setPreference('showPacketLoss', e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">Show Packet Loss</span>
+        </label>
         <label className="inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={showMedianLine}
-            onChange={(e) => setShowMedianLine(e.target.checked)}
+            onChange={(e) => setPreference('showMedianLine', e.target.checked)}
             className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
           />
           <span className="ml-2 text-sm text-gray-700">Show Median Line</span>
