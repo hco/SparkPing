@@ -1,7 +1,7 @@
 name: Build Home Assistant Add-on
 
 env:
-  BUILD_ARGS: "--test"
+  BUILD_ARGS: ""
   MONITORED_FILES: "build.yaml config.yaml Dockerfile rootfs"
 
 on:
@@ -122,10 +122,6 @@ jobs:
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
             --version "${{ steps.version.outputs.version }}" \
             --addon
-      - name: Push add-on to GitHub Container Registry
-        run: |
-          docker push ghcr.io/${{ github.repository_owner }}/${{ steps.check.outputs.image }}:${{ steps.version.outputs.version }}
-          docker push ghcr.io/${{ github.repository_owner }}/${{ steps.check.outputs.image }}:latest
 
   bump-addon-version:
     needs: build
