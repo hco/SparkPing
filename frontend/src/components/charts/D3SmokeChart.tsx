@@ -64,12 +64,12 @@ export function D3SmokeChart({
   const { showMedianLine, showSmokeBars, showPacketLoss } = preferences;
 
   // Throttle function for mouse events
-  const throttle = useCallback(<T extends (...args: unknown[]) => void>(
-    func: T,
+  const throttle = useCallback(<Args extends readonly unknown[]>(
+    func: (...args: Args) => void,
     limit: number
-  ): ((...args: Parameters<T>) => void) => {
+  ): ((...args: Args) => void) => {
     let inThrottle = false;
-    return (...args: Parameters<T>) => {
+    return (...args: Args) => {
       if (!inThrottle) {
         func(...args);
         inThrottle = true;
