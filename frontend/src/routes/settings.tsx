@@ -1,16 +1,41 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { fetchTargets, createTarget, updateTarget, deleteTarget } from '@/api'
-import type { Target, TargetRequest } from '@/types'
+import { useState, useMemo } from 'react'
+import { fetchTargets, createTarget, updateTarget, deleteTarget, fetchStorageStats } from '@/api'
+import type { Target, TargetRequest, TargetStorageStats } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Trash2, Edit2, Plus, X, Save } from 'lucide-react'
+import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
 })
+
+/**
+ * Format bytes into a human-readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+/**
+ * Format a Unix timestamp into a readable date string
+ */
+function formatTimestamp(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 function Settings() {
   const queryClient = useQueryClient()
@@ -27,6 +52,20 @@ function Settings() {
     queryKey: ['targets'],
     queryFn: fetchTargets,
   })
+
+  const { data: storageStats } = useQuery({
+    queryKey: ['storageStats'],
+    queryFn: fetchStorageStats,
+  })
+
+  // Create a map of target_id to storage stats for quick lookup
+  const storageByTarget = useMemo(() => {
+    const map = new Map<string, TargetStorageStats>()
+    storageStats?.targets.forEach((stats) => {
+      map.set(stats.target_id, stats)
+    })
+    return map
+  }, [storageStats])
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -160,6 +199,27 @@ function Settings() {
                               <span className="opacity-60 ml-1">(default)</span>
                             )}
                           </div>
+                          {storageByTarget.get(target.id) && (
+                            <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <HardDrive className="size-3.5 text-muted-foreground" />
+                                <span className="font-medium text-foreground">Storage:</span>{' '}
+                                {formatBytes(storageByTarget.get(target.id)!.size_bytes)}
+                                <span className="text-muted-foreground ml-1">
+                                  ({storageByTarget.get(target.id)!.data_point_count.toLocaleString()} data points)
+                                </span>
+                              </div>
+                              {storageByTarget.get(target.id)!.earliest_timestamp && storageByTarget.get(target.id)!.latest_timestamp && (
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="size-3.5 text-muted-foreground" />
+                                  <span className="font-medium text-foreground">Data range:</span>{' '}
+                                  <span className="text-muted-foreground">
+                                    {formatTimestamp(storageByTarget.get(target.id)!.earliest_timestamp!)} — {formatTimestamp(storageByTarget.get(target.id)!.latest_timestamp!)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-2">

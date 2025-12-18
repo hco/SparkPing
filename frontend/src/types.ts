@@ -94,3 +94,16 @@ export interface TargetRequest {
   ping_interval?: number;
 }
 
+export interface TargetStorageStats {
+  target_id: string;
+  size_bytes: number;
+  data_point_count: number;
+  earliest_timestamp: number | null;
+  latest_timestamp: number | null;
+}
+
+export interface StorageStatsResponse {
+  total_size_bytes: number;
+  targets: TargetStorageStats[];
+}
+

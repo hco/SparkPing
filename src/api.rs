@@ -5,19 +5,20 @@ use crate::storage::write_ping_result;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{Json},
+    response::Json,
     routing::{get, put},
     Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tsink::Storage;
 use uuid::Uuid;
 
@@ -1011,6 +1012,231 @@ pub async fn update_target(
     Ok(Json(updated_target))
 }
 
+/// Storage statistics per target
+#[derive(Debug, Serialize, Clone)]
+pub struct TargetStorageStats {
+    /// Target ID
+    pub target_id: String,
+    /// Total storage size in bytes
+    pub size_bytes: u64,
+    /// Total number of data points
+    pub data_point_count: u64,
+    /// Earliest data point timestamp (Unix seconds)
+    pub earliest_timestamp: Option<i64>,
+    /// Latest data point timestamp (Unix seconds)
+    pub latest_timestamp: Option<i64>,
+}
+
+/// API response for storage statistics
+#[derive(Debug, Serialize)]
+pub struct StorageStatsResponse {
+    /// Total storage size in bytes (all targets)
+    pub total_size_bytes: u64,
+    /// Storage stats per target
+    pub targets: Vec<TargetStorageStats>,
+}
+
+/// Metadata structure for tsink partition files
+#[derive(Debug, Deserialize)]
+struct PartitionMetadata {
+    #[allow(dead_code)]
+    min_timestamp: i64,
+    #[allow(dead_code)]
+    max_timestamp: i64,
+    #[allow(dead_code)]
+    num_data_points: u64,
+    metrics: HashMap<String, MetricMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricMetadata {
+    #[allow(dead_code)]
+    name: String,
+    #[allow(dead_code)]
+    offset: u64,
+    encoded_size: u64,
+    #[allow(dead_code)]
+    min_timestamp: i64,
+    #[allow(dead_code)]
+    max_timestamp: i64,
+    num_data_points: u64,
+}
+
+/// Extract target_id from a hex-encoded metric name
+/// The format is: 2-byte LE length + metric_name, then pairs of (2-byte LE length + label_name, 2-byte LE length + label_value)
+fn extract_target_id_from_metric_name(hex_name: &str) -> Option<String> {
+    // Decode hex to bytes
+    let bytes = hex::decode(hex_name).ok()?;
+    
+    let mut pos = 0;
+    
+    // Helper to read a 2-byte little-endian length and the following string
+    let read_string = |bytes: &[u8], pos: &mut usize| -> Option<String> {
+        if *pos + 2 > bytes.len() {
+            return None;
+        }
+        let len = (bytes[*pos] as usize) | ((bytes[*pos + 1] as usize) << 8);
+        *pos += 2;
+        
+        if *pos + len > bytes.len() {
+            return None;
+        }
+        let s = String::from_utf8_lossy(&bytes[*pos..*pos + len]).to_string();
+        *pos += len;
+        Some(s)
+    };
+    
+    // Skip the metric name (first string)
+    read_string(&bytes, &mut pos)?;
+    
+    // Read label pairs
+    while pos < bytes.len() {
+        let label_name = read_string(&bytes, &mut pos)?;
+        let label_value = read_string(&bytes, &mut pos)?;
+        
+        if label_name == "target_id" {
+            return Some(label_value);
+        }
+    }
+    
+    None
+}
+
+/// Calculate storage statistics per target by reading tsink partition metadata
+fn calculate_storage_stats(data_path: &str) -> Result<StorageStatsResponse, Box<dyn std::error::Error>> {
+    let data_dir = std::path::Path::new(data_path);
+    let mut target_stats: HashMap<String, TargetStorageStats> = HashMap::new();
+    let mut total_size: u64 = 0;
+    
+    // Read all partition directories
+    if data_dir.exists() {
+        for entry in fs::read_dir(data_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            
+            // Skip non-directories and the wal directory
+            if !path.is_dir() {
+                continue;
+            }
+            
+            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if dir_name == "wal" || !dir_name.starts_with("p-") {
+                continue;
+            }
+            
+            // Read meta.json
+            let meta_path = path.join("meta.json");
+            if !meta_path.exists() {
+                continue;
+            }
+            
+            // Also add the data file size
+            let data_path = path.join("data");
+            if data_path.exists() {
+                if let Ok(metadata) = fs::metadata(&data_path) {
+                    total_size += metadata.len();
+                }
+            }
+            
+            let meta_content = match fs::read_to_string(&meta_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    warn!("Failed to read meta.json at {:?}: {}", meta_path, e);
+                    continue;
+                }
+            };
+            
+            let partition_meta: PartitionMetadata = match serde_json::from_str(&meta_content) {
+                Ok(meta) => meta,
+                Err(e) => {
+                    warn!("Failed to parse meta.json at {:?}: {}", meta_path, e);
+                    continue;
+                }
+            };
+            
+            // Process each metric in the partition
+            for (_metric_key, metric_meta) in partition_meta.metrics {
+                // Extract target_id from the metric name (which is hex-encoded)
+                if let Some(target_id) = extract_target_id_from_metric_name(&metric_meta.name) {
+                    let stats = target_stats.entry(target_id.clone()).or_insert(TargetStorageStats {
+                        target_id,
+                        size_bytes: 0,
+                        data_point_count: 0,
+                        earliest_timestamp: None,
+                        latest_timestamp: None,
+                    });
+                    stats.size_bytes += metric_meta.encoded_size;
+                    stats.data_point_count += metric_meta.num_data_points;
+                    
+                    // Update earliest timestamp
+                    stats.earliest_timestamp = Some(match stats.earliest_timestamp {
+                        Some(current) => current.min(metric_meta.min_timestamp),
+                        None => metric_meta.min_timestamp,
+                    });
+                    
+                    // Update latest timestamp
+                    stats.latest_timestamp = Some(match stats.latest_timestamp {
+                        Some(current) => current.max(metric_meta.max_timestamp),
+                        None => metric_meta.max_timestamp,
+                    });
+                }
+            }
+        }
+    }
+    
+    // Add WAL size to total
+    let wal_dir = data_dir.join("wal");
+    if wal_dir.exists() {
+        for entry in fs::read_dir(&wal_dir)? {
+            let entry = entry?;
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_file() {
+                    total_size += metadata.len();
+                }
+            }
+        }
+    }
+    
+    // If we don't have partition data contributing to total, sum up target sizes
+    if total_size == 0 {
+        total_size = target_stats.values().map(|s| s.size_bytes).sum();
+    }
+    
+    let mut targets: Vec<TargetStorageStats> = target_stats.into_values().collect();
+    targets.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+    
+    Ok(StorageStatsResponse {
+        total_size_bytes: total_size,
+        targets,
+    })
+}
+
+/// HTTP handler for GET /api/storage/stats
+pub async fn get_storage_stats(
+    State(state): State<AppState>,
+) -> Result<Json<StorageStatsResponse>, (StatusCode, String)> {
+    let config = state.config.read().map_err(|e| {
+        error!("Failed to read config: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read configuration".to_string(),
+        )
+    })?;
+    
+    let data_path = config.database.path.clone();
+    drop(config);
+    
+    let stats = calculate_storage_stats(&data_path).map_err(|e| {
+        error!("Failed to calculate storage stats: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to calculate storage stats: {}", e),
+        )
+    })?;
+    
+    Ok(Json(stats))
+}
+
 /// HTTP handler for DELETE /api/targets/{id}
 pub async fn delete_target(
     State(state): State<AppState>,
@@ -1112,6 +1338,7 @@ pub fn create_router(
         .route("/api/ping/aggregated", get(get_ping_aggregated))
         .route("/api/targets", get(get_targets).post(create_target))
         .route("/api/targets/:id", put(update_target).delete(delete_target))
+        .route("/api/storage/stats", get(get_storage_stats))
         .with_state(state);
 
     // Add static file serving if static directory is provided
