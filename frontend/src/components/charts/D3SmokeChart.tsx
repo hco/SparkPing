@@ -61,7 +61,7 @@ export function D3SmokeChart({
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: width || 800, height });
   const { preferences, setPreference } = useUserPreferences();
-  const { showMedianLine, showSmokeBars, showPacketLoss } = preferences;
+  const { showMedianLine, showMinLine, showMaxLine, showAvgLine, showSmokeBars, showPacketLoss } = preferences;
 
   // Throttle function for mouse events
   const throttle = useCallback(<Args extends readonly unknown[]>(
@@ -469,6 +469,90 @@ export function D3SmokeChart({
       });
     }
 
+    // === Helper function to draw stat lines ===
+    const drawStatLine = (
+      dataPoints: ChartDataPoint[],
+      getValue: (d: ChartDataPoint) => number | null,
+      color: string,
+      className: string
+    ) => {
+      if (dataPoints.length === 0) return;
+
+      // Calculate expected bucket duration to detect gaps
+      let expectedInterval = 0;
+      if (chartData.length >= 2) {
+        const intervals: number[] = [];
+        for (let i = 1; i < Math.min(chartData.length, 20); i++) {
+          intervals.push(chartData[i].timestamp - chartData[i - 1].timestamp);
+        }
+        intervals.sort((a, b) => a - b);
+        expectedInterval = intervals[Math.floor(intervals.length / 2)] || 0;
+      }
+
+      // Split data into segments where there are no gaps
+      const segments: ChartDataPoint[][] = [];
+      let currentSegment: ChartDataPoint[] = [];
+
+      dataPoints.forEach((point, i) => {
+        if (i === 0) {
+          currentSegment.push(point);
+        } else {
+          const prevPoint = dataPoints[i - 1];
+          const timeDiff = point.timestamp - prevPoint.timestamp;
+          const isGap = expectedInterval > 0 && timeDiff > expectedInterval * 2;
+
+          if (isGap) {
+            if (currentSegment.length > 0) {
+              segments.push(currentSegment);
+            }
+            currentSegment = [point];
+          } else {
+            currentSegment.push(point);
+          }
+        }
+      });
+
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
+
+      // Draw each segment as a separate line
+      const line = d3
+        .line<ChartDataPoint>()
+        .x((d) => xScale(d.timestamp))
+        .y((d) => yScale(getValue(d)!))
+        .curve(d3.curveMonotoneX);
+
+      segments.forEach((segment) => {
+        if (segment.length >= 2) {
+          g.append('path')
+            .datum(segment)
+            .attr('class', className)
+            .attr('fill', 'none')
+            .attr('stroke', color)
+            .attr('stroke-width', 2)
+            .attr('stroke-linecap', 'round')
+            .attr('stroke-linejoin', 'round')
+            .attr('d', line);
+        }
+      });
+    };
+
+    // === Draw Min RTT line ===
+    if (showMinLine && validLatencyData.length > 0) {
+      drawStatLine(validLatencyData, (d) => d.min, '#3b82f6', 'min-line'); // Blue
+    }
+
+    // === Draw Max RTT line ===
+    if (showMaxLine && validLatencyData.length > 0) {
+      drawStatLine(validLatencyData, (d) => d.max, '#ef4444', 'max-line'); // Red
+    }
+
+    // === Draw Avg RTT line ===
+    if (showAvgLine && validLatencyData.length > 0) {
+      drawStatLine(validLatencyData, (d) => d.avg, '#f59e0b', 'avg-line'); // Amber
+    }
+
     // === Grid lines ===
     const yTicks = yScale.ticks(6);
     const gridLines = g
@@ -738,9 +822,18 @@ export function D3SmokeChart({
       legendColors.push({ label: 'Range', color: '#d1d5db' });
     }
 
-    // Add median line to legend if shown
+    // Add stat lines to legend if shown
     if (showMedianLine) {
       legendColors.push({ label: 'Median', color: '#22c55e', type: 'line' });
+    }
+    if (showMinLine) {
+      legendColors.push({ label: 'Min', color: '#3b82f6', type: 'line' });
+    }
+    if (showMaxLine) {
+      legendColors.push({ label: 'Max', color: '#ef4444', type: 'line' });
+    }
+    if (showAvgLine) {
+      legendColors.push({ label: 'Avg', color: '#f59e0b', type: 'line' });
     }
 
     legendColors.forEach((item, i) => {
@@ -900,7 +993,7 @@ export function D3SmokeChart({
     return () => {
       d3.select('body').selectAll('.d3-smoke-tooltip').remove();
     };
-  }, [data, dimensions.width, dimensions.height, margin, throttle, showMedianLine, showSmokeBars, showPacketLoss]);
+  }, [data, dimensions.width, dimensions.height, margin, throttle, showMedianLine, showMinLine, showMaxLine, showAvgLine, showSmokeBars, showPacketLoss]);
 
   if (data.length === 0) {
     return (
@@ -912,7 +1005,7 @@ export function D3SmokeChart({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="flex items-center gap-6 mb-2">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-2">
         <label className="inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -920,7 +1013,7 @@ export function D3SmokeChart({
             onChange={(e) => setPreference('showSmokeBars', e.target.checked)}
             className="w-4 h-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
           />
-          <span className="ml-2 text-sm text-gray-700">Show Smoke Bars</span>
+          <span className="ml-2 text-sm text-gray-700">Smoke Bars</span>
         </label>
         <label className="inline-flex items-center cursor-pointer">
           <input
@@ -929,8 +1022,9 @@ export function D3SmokeChart({
             onChange={(e) => setPreference('showPacketLoss', e.target.checked)}
             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
-          <span className="ml-2 text-sm text-gray-700">Show Packet Loss</span>
+          <span className="ml-2 text-sm text-gray-700">Packet Loss</span>
         </label>
+        <span className="text-gray-300">|</span>
         <label className="inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -938,7 +1032,34 @@ export function D3SmokeChart({
             onChange={(e) => setPreference('showMedianLine', e.target.checked)}
             className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
           />
-          <span className="ml-2 text-sm text-gray-700">Show Median Line</span>
+          <span className="ml-2 text-sm text-gray-700">Median</span>
+        </label>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showMinLine}
+            onChange={(e) => setPreference('showMinLine', e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">Min</span>
+        </label>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showMaxLine}
+            onChange={(e) => setPreference('showMaxLine', e.target.checked)}
+            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">Max</span>
+        </label>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showAvgLine}
+            onChange={(e) => setPreference('showAvgLine', e.target.checked)}
+            className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">Avg</span>
         </label>
       </div>
       <svg

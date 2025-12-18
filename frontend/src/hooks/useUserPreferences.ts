@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 export interface UserPreferences {
   // Chart display options
   showMedianLine: boolean;
+  showMinLine: boolean;
+  showMaxLine: boolean;
+  showAvgLine: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
 }
@@ -11,6 +14,9 @@ export interface UserPreferences {
 // Default values for all preferences
 const defaultPreferences: UserPreferences = {
   showMedianLine: false,
+  showMinLine: false,
+  showMaxLine: false,
+  showAvgLine: false,
   showSmokeBars: true,
   showPacketLoss: true,
 };
@@ -32,6 +38,15 @@ function loadPreferences(): UserPreferences {
       showMedianLine: typeof parsed.showMedianLine === 'boolean' 
         ? parsed.showMedianLine 
         : defaultPreferences.showMedianLine,
+      showMinLine: typeof parsed.showMinLine === 'boolean'
+        ? parsed.showMinLine
+        : defaultPreferences.showMinLine,
+      showMaxLine: typeof parsed.showMaxLine === 'boolean'
+        ? parsed.showMaxLine
+        : defaultPreferences.showMaxLine,
+      showAvgLine: typeof parsed.showAvgLine === 'boolean'
+        ? parsed.showAvgLine
+        : defaultPreferences.showAvgLine,
       showSmokeBars: typeof parsed.showSmokeBars === 'boolean'
         ? parsed.showSmokeBars
         : defaultPreferences.showSmokeBars,
@@ -139,4 +154,6 @@ export function usePreference<K extends keyof UserPreferences>(key: K): [
 
   return [preferences[key], setValue];
 }
+
+
 
