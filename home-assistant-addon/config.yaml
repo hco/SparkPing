@@ -1,5 +1,5 @@
 name: SparkPing
-version: "0.1.21"
+version: "0.1.22"
 slug: sparkping
 image: ghcr.io/hco/sparkping
 description: Network latency and packet loss monitoring tool
