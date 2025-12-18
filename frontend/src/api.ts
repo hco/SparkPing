@@ -1,8 +1,9 @@
 import axios from 'axios';
 import type { PingDataResponse, PingDataQuery, PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest } from './types';
+import { getBasePath } from './lib/basePath';
 
-// const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080';
-const API_BASE_URL = '/';
+// Use dynamic base path for Home Assistant ingress support
+const API_BASE_URL = getBasePath();
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

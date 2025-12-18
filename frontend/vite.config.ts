@@ -6,6 +6,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './', // Use relative paths for all assets (required for Home Assistant ingress)
   plugins: [react(), tanstackRouter(), tailwindcss()],
   resolve: {
     alias: {
