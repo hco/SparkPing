@@ -3,15 +3,8 @@ import * as d3 from 'd3';
 import type { BucketDataPoint } from '../../../types';
 import type { ChartDataPoint, ChartStats } from './types';
 
-/**
- * Color scale for packet loss severity
- */
-export function getPacketLossColor(packetLossPercent: number): string {
-  if (packetLossPercent === 0) return '#22c55e'; // Green - no loss
-  if (packetLossPercent <= 5) return '#60a5fa'; // Light blue - low loss
-  if (packetLossPercent <= 20) return '#8b5cf6'; // Purple - medium loss
-  return '#ef4444'; // Red - high loss
-}
+// Re-export from shared palette for backwards compatibility
+export { getPacketLossColor } from '../../../lib/chartColors';
 
 /**
  * Get time axis format based on time range

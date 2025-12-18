@@ -20,6 +20,7 @@ import {
   setupTooltip,
 } from './layers';
 import { ChartControls } from './ChartControls';
+import { chartColors } from '../../../lib/chartColors';
 
 const DEFAULT_MARGIN: ChartMargin = { top: 40, right: 150, bottom: 80, left: 80 };
 
@@ -162,7 +163,7 @@ export function D3SmokeChart({
         scales,
         dataPoints: validLatencyData,
         getValue: (d) => d.min,
-        color: '#3b82f6',
+        color: chartColors.min,
         className: 'min-line',
         bucketInterval,
       });
@@ -174,7 +175,7 @@ export function D3SmokeChart({
         scales,
         dataPoints: validLatencyData,
         getValue: (d) => d.max,
-        color: '#ef4444',
+        color: chartColors.max,
         className: 'max-line',
         bucketInterval,
       });
@@ -186,7 +187,7 @@ export function D3SmokeChart({
         scales,
         dataPoints: validLatencyData,
         getValue: (d) => d.avg,
-        color: '#f59e0b',
+        color: chartColors.avg,
         className: 'avg-line',
         bucketInterval,
       });

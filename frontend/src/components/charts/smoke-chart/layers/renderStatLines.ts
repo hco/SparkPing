@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import type { ChartDataPoint, ChartScales } from '../types';
 import { splitIntoSegments } from '../utils';
+import { chartColors } from '../../../../lib/chartColors';
 
 interface RenderStatLineOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -72,7 +73,7 @@ export function renderMedianLine({
     scales,
     dataPoints: validLatencyData,
     getValue: (d) => d.avg,
-    color: '#22c55e',
+    color: chartColors.median,
     className: 'median-line',
     bucketInterval,
     strokeWidth: 2.5,
@@ -87,7 +88,7 @@ export function renderMedianLine({
         .attr('cx', xScale(point.timestamp))
         .attr('cy', yScale(point.avg!))
         .attr('r', 3)
-        .attr('fill', '#22c55e')
+        .attr('fill', chartColors.median)
         .attr('stroke', '#fff')
         .attr('stroke-width', 1);
     }

@@ -1,5 +1,6 @@
 import type * as d3 from 'd3';
 import type { ChartVisibilityOptions } from '../types';
+import { chartColors } from '../../../../lib/chartColors';
 
 interface RenderLegendOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -27,25 +28,25 @@ export function renderLegend({
   // Add packet loss colors if enabled
   if (visibility.showPacketLoss) {
     legendColors.push(
-      { label: '0%', color: '#22c55e' },
-      { label: '≤5%', color: '#60a5fa' },
-      { label: '5-20%', color: '#8b5cf6' },
-      { label: '>20%', color: '#ef4444' },
+      { label: '0%', color: chartColors.packetLoss.none },
+      { label: '≤5%', color: chartColors.packetLoss.low },
+      { label: '5-20%', color: chartColors.packetLoss.medium },
+      { label: '>20%', color: chartColors.packetLoss.high },
     );
   }
 
   // Add stat lines to legend if shown
   if (visibility.showMedianLine) {
-    legendColors.push({ label: 'Median', color: '#22c55e', type: 'line' });
+    legendColors.push({ label: 'Median', color: chartColors.median, type: 'line' });
   }
   if (visibility.showMinLine) {
-    legendColors.push({ label: 'Min', color: '#3b82f6', type: 'line' });
+    legendColors.push({ label: 'Min', color: chartColors.min, type: 'line' });
   }
   if (visibility.showMaxLine) {
-    legendColors.push({ label: 'Max', color: '#ef4444', type: 'line' });
+    legendColors.push({ label: 'Max', color: chartColors.max, type: 'line' });
   }
   if (visibility.showAvgLine) {
-    legendColors.push({ label: 'Avg', color: '#f59e0b', type: 'line' });
+    legendColors.push({ label: 'Avg', color: chartColors.avg, type: 'line' });
   }
 
   legendColors.forEach((item, i) => {

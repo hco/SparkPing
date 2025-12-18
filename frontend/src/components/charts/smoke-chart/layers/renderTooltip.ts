@@ -1,7 +1,8 @@
 import * as d3 from 'd3';
 import { format } from 'date-fns';
 import type { ChartDataPoint, ChartScales } from '../types';
-import { getPacketLossColor, createThrottle } from '../utils';
+import { createThrottle } from '../utils';
+import { chartColors, getPacketLossColor } from '../../../../lib/chartColors';
 
 interface SetupTooltipOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -60,7 +61,7 @@ export function setupTooltip({
     .append('circle')
     .attr('class', 'hover-point')
     .attr('r', 6)
-    .attr('fill', '#22c55e')
+    .attr('fill', chartColors.median)
     .attr('stroke', '#fff')
     .attr('stroke-width', 2)
     .style('opacity', 0);
@@ -107,21 +108,24 @@ export function setupTooltip({
         .style('opacity', 1)
         .style('left', `${event.pageX + 15}px`)
         .style('top', `${event.pageY - 15}px`).html(`
-          <div style="font-weight: 600; margin-bottom: 8px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: ${chartColors.text.primary}; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">
             ${format(new Date(d.timestamp), 'MMM dd, yyyy HH:mm:ss')}
           </div>
           <div style="margin-bottom: 8px;">
-            <div style="color: #22c55e; font-weight: 500; font-size: 14px;">
+            <div style="color: ${chartColors.median}; font-weight: 500; font-size: 14px;">
               Median: ${d.avg !== null ? d.avg.toFixed(2) : 'N/A'} ms
             </div>
-            ${d.min !== null ? `<div style="color: #6b7280; font-size: 11px; margin-top: 4px;">Min: ${d.min.toFixed(2)} ms</div>` : ''}
-            ${d.max !== null ? `<div style="color: #6b7280; font-size: 11px;">Max: ${d.max.toFixed(2)} ms</div>` : ''}
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; margin-top: 6px;">
+              ${d.avg !== null ? `<span style="color: ${chartColors.avg}; font-size: 11px;">Avg:</span><span style="color: ${chartColors.avg}; font-size: 11px;">${d.avg.toFixed(2)} ms</span>` : ''}
+              ${d.min !== null ? `<span style="color: ${chartColors.min}; font-size: 11px;">Min:</span><span style="color: ${chartColors.min}; font-size: 11px;">${d.min.toFixed(2)} ms</span>` : ''}
+              ${d.max !== null ? `<span style="color: ${chartColors.max}; font-size: 11px;">Max:</span><span style="color: ${chartColors.max}; font-size: 11px;">${d.max.toFixed(2)} ms</span>` : ''}
+            </div>
           </div>
           <div style="border-top: 1px solid #e5e7eb; padding-top: 6px;">
-            <div style="color: ${d.packetLossPercent > 0 ? getPacketLossColor(d.packetLossPercent) : '#22c55e'}; font-weight: 500;">
+            <div style="color: ${d.packetLossPercent > 0 ? getPacketLossColor(d.packetLossPercent) : chartColors.success}; font-weight: 500;">
               Packet Loss: ${d.packetLossPercent.toFixed(2)}%
             </div>
-            <div style="color: #6b7280; font-size: 11px; margin-top: 2px;">
+            <div style="color: ${chartColors.text.muted}; font-size: 11px; margin-top: 2px;">
               ${d.failedCount} failed / ${d.count} total
             </div>
           </div>
