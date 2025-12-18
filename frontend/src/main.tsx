@@ -6,6 +6,13 @@ import { queryClient } from './lib/queryClient'
 import { getBasePath } from './lib/basePath'
 import { ThemeProvider } from './context/ThemeContext'
 import './index.css'
+import faviconUrl from './assets/logo/sparkping_logo_full.svg'
+
+// Set favicon dynamically (works with Vite's asset handling)
+const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+if (link) {
+  link.href = faviconUrl
+}
 
 // Import the generated route tree
 import { routeTree } from './routeTree.gen'

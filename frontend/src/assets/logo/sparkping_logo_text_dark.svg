@@ -21,27 +21,31 @@
     <circle cx="100" cy="100" r="95" fill="none" stroke="#2A3F4F" stroke-width="2" opacity="0.4"/>
     
     <!-- Signal waves -->
-    <path d="M 100 100 Q 120 80, 140 80" fill="none" stroke="url(#waveGradientDark)" stroke-width="3.5" stroke-linecap="round" opacity="0.9"/>
-    <path d="M 100 100 Q 125 70, 155 65" fill="none" stroke="url(#waveGradientDark)" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
-    <path d="M 100 100 Q 130 60, 170 50" fill="none" stroke="url(#waveGradientDark)" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 100 100 Q 120 75, 150 72" fill="none" stroke="url(#waveGradientDark)" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+    <path d="M 100 100 Q 135 55, 175 48" fill="none" stroke="url(#waveGradientDark)" stroke-width="4.2" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 100 100 Q 150 35, 200 25" fill="none" stroke="url(#waveGradientDark)" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 100 100 Q 165 20, 220 8" fill="none" stroke="url(#waveGradientDark)" stroke-width="2.8" stroke-linecap="round" opacity="0.35"/>
     
-    <path d="M 100 100 Q 120 120, 140 120" fill="none" stroke="url(#waveGradientDark)" stroke-width="3.5" stroke-linecap="round" opacity="0.9"/>
-    <path d="M 100 100 Q 125 130, 155 135" fill="none" stroke="url(#waveGradientDark)" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
-    <path d="M 100 100 Q 130 140, 170 150" fill="none" stroke="url(#waveGradientDark)" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 100 100 Q 120 125, 150 128" fill="none" stroke="url(#waveGradientDark)" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+    <path d="M 100 100 Q 135 145, 175 152" fill="none" stroke="url(#waveGradientDark)" stroke-width="4.2" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 100 100 Q 150 165, 200 175" fill="none" stroke="url(#waveGradientDark)" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 100 100 Q 165 180, 220 192" fill="none" stroke="url(#waveGradientDark)" stroke-width="2.8" stroke-linecap="round" opacity="0.35"/>
     
     <!-- Lightning bolt -->
-    <path d="M 105 40 L 85 90 L 100 90 L 80 145 L 120 85 L 105 85 Z" 
+    <path d="M 115 20 L 75 95 L 105 95 L 60 175 L 140 80 L 110 80 Z" 
           fill="url(#sparkGradientDark)" 
           stroke="none"/>
     
     <!-- Activity dots -->
-    <circle cx="145" cy="80" r="4" fill="#1DB5BB" opacity="1"/>
-    <circle cx="160" cy="65" r="3" fill="#1DB5BB" opacity="0.7"/>
-    <circle cx="175" cy="50" r="2.5" fill="#1DB5BB" opacity="0.4"/>
+    <circle cx="150" cy="72" r="7" fill="#1DB5BB" opacity="1"/>
+    <circle cx="175" cy="48" r="5.5" fill="#1DB5BB" opacity="0.8"/>
+    <circle cx="200" cy="25" r="4.5" fill="#1DB5BB" opacity="0.6"/>
+    <circle cx="220" cy="8" r="3.5" fill="#1DB5BB" opacity="0.4"/>
     
-    <circle cx="145" cy="120" r="4" fill="#1DB5BB" opacity="1"/>
-    <circle cx="160" cy="135" r="3" fill="#1DB5BB" opacity="0.7"/>
-    <circle cx="175" cy="150" r="2.5" fill="#1DB5BB" opacity="0.4"/>
+    <circle cx="150" cy="128" r="7" fill="#1DB5BB" opacity="1"/>
+    <circle cx="175" cy="152" r="5.5" fill="#1DB5BB" opacity="0.8"/>
+    <circle cx="200" cy="175" r="4.5" fill="#1DB5BB" opacity="0.6"/>
+    <circle cx="220" cy="192" r="3.5" fill="#1DB5BB" opacity="0.4"/>
   </g>
   
   <!-- Text: SparkPing -->

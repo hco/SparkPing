@@ -14,25 +14,25 @@
   <circle cx="100" cy="100" r="95" fill="none" stroke="#E8F4F8" stroke-width="2" opacity="0.3"/>
   
   <!-- Signal waves (representing network ping) -->
-  <path d="M 100 100 Q 120 80, 140 80" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
-  <path d="M 100 100 Q 125 70, 155 65" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-  <path d="M 100 100 Q 130 60, 170 50" fill="none" stroke="url(#waveGradient)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 100 100 Q 120 80, 145 80" fill="none" stroke="url(#waveGradient)" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 100 100 Q 130 65, 165 60" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 100 100 Q 140 50, 180 45" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
   
-  <path d="M 100 100 Q 120 120, 140 120" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
-  <path d="M 100 100 Q 125 130, 155 135" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-  <path d="M 100 100 Q 130 140, 170 150" fill="none" stroke="url(#waveGradient)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 100 100 Q 120 120, 145 120" fill="none" stroke="url(#waveGradient)" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 100 100 Q 130 135, 165 140" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 100 100 Q 140 150, 180 155" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
   
   <!-- Lightning bolt / Spark -->
-  <path d="M 105 40 L 85 90 L 100 90 L 80 145 L 120 85 L 105 85 Z" 
+  <path d="M 110 30 L 80 95 L 105 95 L 70 160 L 130 85 L 105 85 Z" 
         fill="url(#sparkGradient)" 
         stroke="none"/>
   
   <!-- Activity indicator dots -->
-  <circle cx="145" cy="80" r="4" fill="#128589" opacity="0.9"/>
-  <circle cx="160" cy="65" r="3" fill="#128589" opacity="0.6"/>
-  <circle cx="175" cy="50" r="2.5" fill="#128589" opacity="0.3"/>
+  <circle cx="150" cy="80" r="5" fill="#128589" opacity="1"/>
+  <circle cx="170" cy="60" r="4" fill="#128589" opacity="0.7"/>
+  <circle cx="185" cy="45" r="3" fill="#128589" opacity="0.4"/>
   
-  <circle cx="145" cy="120" r="4" fill="#128589" opacity="0.9"/>
-  <circle cx="160" cy="135" r="3" fill="#128589" opacity="0.6"/>
-  <circle cx="175" cy="150" r="2.5" fill="#128589" opacity="0.3"/>
+  <circle cx="150" cy="120" r="5" fill="#128589" opacity="1"/>
+  <circle cx="170" cy="140" r="4" fill="#128589" opacity="0.7"/>
+  <circle cx="185" cy="155" r="3" fill="#128589" opacity="0.4"/>
 </svg>
