@@ -5,8 +5,9 @@ env:
   MONITORED_FILES: "build.yaml config.yaml Dockerfile rootfs"
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   init:
@@ -105,7 +106,7 @@ jobs:
         id: version
         run: |
           # Remove 'v' prefix if present
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -126,7 +127,7 @@ jobs:
   bump-addon-version:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && !contains(needs.build.result, 'failure')
+    if: !contains(needs.build.result, 'failure')
     name: Bump add-on version
     permissions:
       contents: write
