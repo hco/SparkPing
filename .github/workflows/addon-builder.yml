@@ -127,7 +127,6 @@ jobs:
   bump-addon-version:
     needs: build
     runs-on: ubuntu-latest
-    if: !contains(needs.build.result, 'failure')
     name: Bump add-on version
     permissions:
       contents: write
