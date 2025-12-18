@@ -3,7 +3,6 @@ rust = { version = "1.91.1", components = "clippy,cargo,rustc,rust-std,rust-anal
 node = "24"
 "cargo:cargo-watch" = { version = "latest" }
 
-
 [settings]
 # Enable hooks (required for postinstall hook to work)
 experimental = true
@@ -30,9 +29,15 @@ dir = "frontend"
 sources = ["frontend/package.json", "frontend/pnpm-lock.yaml"]
 outputs = ["frontend/node_modules/"]
 
+[tasks."root:install"]
+description = "Install root dependencies (release-it)"
+run = "pnpm install"
+sources = ["package.json", "pnpm-lock.yaml"]
+outputs = ["node_modules/"]
+
 [tasks.install]
-description = "Install all dependencies (server and frontend)"
-depends = ["server:install", "frontend:install"]
+description = "Install all dependencies (server, frontend, and root)"
+depends = ["server:install", "frontend:install", "root:install"]
 
 # Server tasks
 [tasks."server:build"]
@@ -167,3 +172,29 @@ depends = ["develop"]
 [tasks.ci]
 description = "Run all CI checks (linting, type checking, and tests)"
 depends = ["server:lint", "frontend:verify", "server:check", "server:clippy", "server:fmt-check"]
+
+# Release tasks
+[tasks.release]
+description = "Create a new release (interactive)"
+depends = ["install"]
+run = "npx release-it"
+
+[tasks."release:patch"]
+description = "Release a patch version"
+depends = ["install"]
+run = "npx release-it patch"
+
+[tasks."release:minor"]
+description = "Release a minor version"
+depends = ["install"]
+run = "npx release-it minor"
+
+[tasks."release:major"]
+description = "Release a major version"
+depends = ["install"]
+run = "npx release-it major"
+
+[tasks."release:dry-run"]
+description = "Dry run a release (no changes)"
+depends = ["install"]
+run = "npx release-it --dry-run"
