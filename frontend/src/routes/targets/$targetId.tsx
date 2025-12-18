@@ -156,20 +156,6 @@ function TargetDetails() {
           onRefresh={() => refetch()}
         />
 
-        {/* Chart Options */}
-        <div className="bg-card p-4 rounded-lg border shadow-sm mb-6">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="separate-charts"
-              checked={showLegacyCharts}
-              onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
-            />
-            <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
-              Show Legacy Charts
-            </Label>
-          </div>
-        </div>
-
         {error && <ErrorDisplay error={error instanceof Error ? error.message : 'Failed to fetch data'} />}
 
         {isLoading && !aggregatedData ? (
@@ -276,6 +262,19 @@ function TargetDetails() {
         ) : isEmpty ? (
           <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ timeRange: 'all' })} />
         ) : null}
+        {/* Chart Options */}
+        <div className="bg-card p-4 rounded-lg border shadow-sm mt-6">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="separate-charts"
+              checked={showLegacyCharts}
+              onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
+            />
+            <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
+              Show Legacy Charts
+            </Label>
+          </div>
+        </div>
       </div>
     </div>
   );
