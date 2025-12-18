@@ -63,15 +63,15 @@ export function Sparkline({
     const svg = d3.select(svgRef.current);
     
     // Create gradient if it doesn't exist
-    let defs = svg.select('defs');
+    let defs = svg.select<SVGDefsElement>('defs');
     if (defs.empty()) {
-      defs = svg.append('defs');
+      defs = svg.append<SVGDefsElement>('defs');
     }
     
     const gradientId = `sparkline-gradient-${color.replace('#', '')}`;
-    let gradient = defs.select(`#${gradientId}`);
+    let gradient = defs.select<SVGLinearGradientElement>(`#${gradientId}`);
     if (gradient.empty()) {
-      gradient = defs.append('linearGradient')
+      gradient = defs.append<SVGLinearGradientElement>('linearGradient')
         .attr('id', gradientId)
         .attr('x1', '0%')
         .attr('y1', '0%')
