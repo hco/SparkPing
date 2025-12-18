@@ -8,6 +8,7 @@ import {
   filterValidLatencyData,
   calculateBucketInterval,
   calculateChartStats,
+  calculateP99,
 } from './utils';
 import {
   renderSmokeBars,
@@ -45,6 +46,7 @@ export function D3SmokeChart({
     showAvgLine: preferences.showAvgLine,
     showSmokeBars: preferences.showSmokeBars,
     showPacketLoss: preferences.showPacketLoss,
+    clipToP99: preferences.clipToP99,
   }), [
     preferences.showMedianLine,
     preferences.showMinLine,
@@ -52,6 +54,7 @@ export function D3SmokeChart({
     preferences.showAvgLine,
     preferences.showSmokeBars,
     preferences.showPacketLoss,
+    preferences.clipToP99,
   ]);
 
   // Handle container resizing
@@ -111,7 +114,11 @@ export function D3SmokeChart({
     const timeExtent = d3.extent(chartData, (d) => d.timestamp) as [number, number];
     const xScale = d3.scaleTime().domain(timeExtent).range([0, innerWidth]);
 
-    const latencyMax = d3.max(validLatencyData, (d) => d.max!) || 100;
+    // Calculate the upper bound for the y-scale
+    const absoluteMax = d3.max(validLatencyData, (d) => d.max!) || 100;
+    const p99Value = calculateP99(validLatencyData);
+    const latencyMax = visibility.clipToP99 && p99Value > 0 ? p99Value : absoluteMax;
+    
     const yScale = d3
       .scaleLinear()
       .domain([0, latencyMax * 1.15])

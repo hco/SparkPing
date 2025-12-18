@@ -142,6 +142,23 @@ export function calculateChartStats(
 }
 
 /**
+ * Calculate the P99 (99th percentile) of max values in the data
+ */
+export function calculateP99(validLatencyData: ChartDataPoint[]): number {
+  if (validLatencyData.length === 0) return 0;
+  
+  const maxValues = validLatencyData
+    .map((d) => d.max!)
+    .filter((v) => v !== null)
+    .sort((a, b) => a - b);
+  
+  if (maxValues.length === 0) return 0;
+  
+  const p99Index = Math.ceil(maxValues.length * 0.99) - 1;
+  return maxValues[Math.max(0, p99Index)];
+}
+
+/**
  * Split data into segments based on time gaps (for drawing continuous lines)
  */
 export function splitIntoSegments(

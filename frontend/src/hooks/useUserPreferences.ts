@@ -9,6 +9,7 @@ export interface UserPreferences {
   showAvgLine: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
+  clipToP99: boolean;
 }
 
 // Default values for all preferences
@@ -19,6 +20,7 @@ const defaultPreferences: UserPreferences = {
   showAvgLine: false,
   showSmokeBars: true,
   showPacketLoss: true,
+  clipToP99: false,
 };
 
 const STORAGE_KEY = 'sparkping-user-preferences';
@@ -53,6 +55,9 @@ function loadPreferences(): UserPreferences {
       showPacketLoss: typeof parsed.showPacketLoss === 'boolean'
         ? parsed.showPacketLoss
         : defaultPreferences.showPacketLoss,
+      clipToP99: typeof parsed.clipToP99 === 'boolean'
+        ? parsed.clipToP99
+        : defaultPreferences.clipToP99,
     };
   } catch {
     return defaultPreferences;

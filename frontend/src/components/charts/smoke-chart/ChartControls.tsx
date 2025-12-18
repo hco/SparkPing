@@ -1,4 +1,9 @@
 import type { ChartVisibilityOptions } from './types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ChartControlsProps {
   visibility: ChartVisibilityOptions;
@@ -49,6 +54,23 @@ export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
           <span className={`ml-2 text-sm ${control.colorClass}`}>{control.label}</span>
         </label>
       ))}
+      <div className="flex-1" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visibility.clipToP99}
+              onChange={(e) => onToggle('clipToP99', e.target.checked)}
+              className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary"
+            />
+            <span className="ml-2 text-sm text-muted-foreground">Clip to P99</span>
+          </label>
+        </TooltipTrigger>
+        <TooltipContent>
+          Hide the slowest 1% of pings to focus on typical latency values.
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
