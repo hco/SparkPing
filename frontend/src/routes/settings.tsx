@@ -86,22 +86,22 @@ function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 w-screen">
+    <div className="min-h-screen bg-background w-screen">
       <div className="container mx-auto px-4 py-8">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Settings</h1>
-          <p className="text-gray-600">Manage your ping targets</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
+          <p className="text-muted-foreground">Manage your ping targets</p>
         </header>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4">
+          <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded mb-4">
             Error loading targets: {error instanceof Error ? error.message : 'Unknown error'}
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-card rounded-lg shadow border border-border p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">Targets</h2>
+            <h2 className="text-xl font-semibold text-foreground">Targets</h2>
             {!showAddForm && !editingId && (
               <Button onClick={() => setShowAddForm(true)}>
                 <Plus className="size-4" />
@@ -111,15 +111,15 @@ function Settings() {
           </div>
 
           {isLoading ? (
-            <div className="text-gray-600">Loading targets...</div>
+            <div className="text-muted-foreground">Loading targets...</div>
           ) : targets && targets.length === 0 ? (
-            <div className="text-gray-600 py-8 text-center">
+            <div className="text-muted-foreground py-8 text-center">
               No targets configured. Add your first target to get started.
             </div>
           ) : (
             <div className="space-y-4">
               {targets?.map((target) => (
-                <div key={target.id} className="border rounded-lg p-4">
+                <div key={target.id} className="border border-border rounded-lg p-4">
                   {editingId === target.id ? (
                     <TargetForm
                       formData={formData}
@@ -132,32 +132,32 @@ function Settings() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-gray-900">
+                          <h3 className="font-semibold text-foreground">
                             {target.name || target.address}
                           </h3>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                             ID: {target.id}
                           </span>
                         </div>
-                        <div className="text-sm text-gray-600 space-y-1">
+                        <div className="text-sm text-muted-foreground space-y-1">
                           <div>
-                            <span className="font-medium">Address:</span> {target.address}
+                            <span className="font-medium text-foreground">Address:</span> {target.address}
                           </div>
                           {target.name && (
                             <div>
-                              <span className="font-medium">Name:</span> {target.name}
+                              <span className="font-medium text-foreground">Name:</span> {target.name}
                             </div>
                           )}
                           <div>
-                            <span className="font-medium">Ping Count:</span> {target.ping_count}
+                            <span className="font-medium text-foreground">Ping Count:</span> {target.ping_count}
                             {target.ping_count === 3 && (
-                              <span className="text-gray-400 ml-1">(default)</span>
+                              <span className="opacity-60 ml-1">(default)</span>
                             )}
                           </div>
                           <div>
-                            <span className="font-medium">Ping Interval:</span> {target.ping_interval}s
+                            <span className="font-medium text-foreground">Ping Interval:</span> {target.ping_interval}s
                             {target.ping_interval === 1 && (
-                              <span className="text-gray-400 ml-1">(default)</span>
+                              <span className="opacity-60 ml-1">(default)</span>
                             )}
                           </div>
                         </div>
@@ -187,8 +187,8 @@ function Settings() {
           )}
 
           {showAddForm && (
-            <div className="mt-6 border-t pt-6">
-              <h3 className="text-lg font-semibold mb-4">Add New Target</h3>
+            <div className="mt-6 border-t border-border pt-6">
+              <h3 className="text-lg font-semibold text-foreground mb-4">Add New Target</h3>
               <TargetForm
                 formData={formData}
                 setFormData={setFormData}
@@ -218,7 +218,7 @@ function TargetForm({ formData, setFormData, onSubmit, onCancel, isSubmitting }:
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="address">
-            Address <span className="text-red-500">*</span>
+            Address <span className="text-destructive">*</span>
           </Label>
           <Input
             id="address"
@@ -239,7 +239,7 @@ function TargetForm({ formData, setFormData, onSubmit, onCancel, isSubmitting }:
             onChange={(e) => setFormData({ ...formData, name: e.target.value || undefined })}
             placeholder="My Server"
           />
-          <p className="text-xs text-gray-500">Display name for this target</p>
+          <p className="text-xs text-muted-foreground">Display name for this target</p>
         </div>
 
         <div className="space-y-2">
@@ -259,7 +259,7 @@ function TargetForm({ formData, setFormData, onSubmit, onCancel, isSubmitting }:
             }
             placeholder="3"
           />
-          <p className="text-xs text-gray-500">Number of pings per cycle (default: 3)</p>
+          <p className="text-xs text-muted-foreground">Number of pings per cycle (default: 3)</p>
         </div>
 
         <div className="space-y-2">
@@ -279,7 +279,7 @@ function TargetForm({ formData, setFormData, onSubmit, onCancel, isSubmitting }:
             }
             placeholder="1"
           />
-          <p className="text-xs text-gray-500">Seconds between ping cycles (default: 1)</p>
+          <p className="text-xs text-muted-foreground">Seconds between ping cycles (default: 1)</p>
         </div>
       </div>
 

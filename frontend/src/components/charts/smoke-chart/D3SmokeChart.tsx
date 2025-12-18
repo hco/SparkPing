@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { useUserPreferences } from '../../../hooks/useUserPreferences';
+import { useTheme } from '../../../hooks/useTheme';
 import type { D3SmokeChartProps, ChartVisibilityOptions, ChartMargin } from './types';
 import {
   prepareChartData,
@@ -20,7 +21,7 @@ import {
   setupTooltip,
 } from './layers';
 import { ChartControls } from './ChartControls';
-import { chartColors } from '../../../lib/chartColors';
+import { chartColors, getThemeColors } from '../../../lib/chartColors';
 
 const DEFAULT_MARGIN: ChartMargin = { top: 40, right: 150, bottom: 80, left: 80 };
 
@@ -34,6 +35,8 @@ export function D3SmokeChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: width || 800, height });
   const { preferences, setPreference } = useUserPreferences();
+  const { isDark } = useTheme();
+  const themeColors = useMemo(() => getThemeColors(isDark), [isDark]);
 
   const visibility: ChartVisibilityOptions = useMemo(() => ({
     showMedianLine: preferences.showMedianLine,
@@ -193,14 +196,14 @@ export function D3SmokeChart({
       });
     }
 
-    renderGrid({ g, scales, innerWidth });
-    renderAxes({ g, scales, chartHeight, margin, timeExtent });
+    renderGrid({ g, scales, innerWidth, themeColors });
+    renderAxes({ g, scales, chartHeight, margin, timeExtent, themeColors });
 
     // Calculate and render statistics
     const stats = calculateChartStats(chartData, validLatencyData);
-    renderStatsPanel({ g, stats, innerWidth });
+    renderStatsPanel({ g, stats, innerWidth, themeColors });
 
-    renderLegend({ g, chartHeight, visibility });
+    renderLegend({ g, chartHeight, visibility, themeColors });
 
     // Setup tooltip
     const { cleanup } = setupTooltip({
@@ -209,10 +212,11 @@ export function D3SmokeChart({
       chartData,
       chartHeight,
       innerWidth,
+      themeColors,
     });
 
     return cleanup;
-  }, [data, dimensions.width, dimensions.height, margin, visibility]);
+  }, [data, dimensions.width, dimensions.height, margin, visibility, themeColors]);
 
   const handleToggle = (key: keyof ChartVisibilityOptions, value: boolean) => {
     setPreference(key, value);
@@ -220,8 +224,8 @@ export function D3SmokeChart({
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg">
-        <p className="text-gray-500">No data available</p>
+      <div className="flex items-center justify-center h-full bg-muted/50 rounded-lg">
+        <p className="text-muted-foreground">No data available</p>
       </div>
     );
   }

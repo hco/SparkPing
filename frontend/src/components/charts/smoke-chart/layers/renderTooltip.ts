@@ -2,7 +2,7 @@ import * as d3 from 'd3';
 import { format } from 'date-fns';
 import type { ChartDataPoint, ChartScales } from '../types';
 import { createThrottle } from '../utils';
-import { chartColors, getPacketLossColor } from '../../../../lib/chartColors';
+import { chartColors, getPacketLossColor, type ThemeColors } from '../../../../lib/chartColors';
 
 interface SetupTooltipOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -10,6 +10,7 @@ interface SetupTooltipOptions {
   chartData: ChartDataPoint[];
   chartHeight: number;
   innerWidth: number;
+  themeColors: ThemeColors;
 }
 
 interface TooltipRefs {
@@ -23,6 +24,7 @@ export function setupTooltip({
   chartData,
   chartHeight,
   innerWidth,
+  themeColors,
 }: SetupTooltipOptions): TooltipRefs {
   const { xScale, yScale } = scales;
 
@@ -35,11 +37,12 @@ export function setupTooltip({
     .attr('class', 'd3-smoke-tooltip')
     .style('opacity', 0)
     .style('position', 'absolute')
-    .style('background', 'white')
+    .style('background', themeColors.tooltipBg)
+    .style('color', themeColors.textPrimary)
     .style('padding', '12px')
-    .style('border', '1px solid #d1d5db')
+    .style('border', `1px solid ${themeColors.tooltipBorder}`)
     .style('border-radius', '8px')
-    .style('box-shadow', '0 4px 6px -1px rgba(0, 0, 0, 0.1)')
+    .style('box-shadow', '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)')
     .style('pointer-events', 'none')
     .style('font-size', '12px')
     .style('z-index', '1000')
@@ -52,7 +55,7 @@ export function setupTooltip({
     .attr('class', 'hover-line')
     .attr('y1', 0)
     .attr('y2', chartHeight)
-    .attr('stroke', '#9ca3af')
+    .attr('stroke', themeColors.textMuted)
     .attr('stroke-width', 1)
     .attr('stroke-dasharray', '3,3')
     .style('opacity', 0);
@@ -62,7 +65,7 @@ export function setupTooltip({
     .attr('class', 'hover-point')
     .attr('r', 6)
     .attr('fill', chartColors.median)
-    .attr('stroke', '#fff')
+    .attr('stroke', themeColors.tooltipBg)
     .attr('stroke-width', 2)
     .style('opacity', 0);
 
@@ -108,7 +111,7 @@ export function setupTooltip({
         .style('opacity', 1)
         .style('left', `${event.pageX + 15}px`)
         .style('top', `${event.pageY - 15}px`).html(`
-          <div style="font-weight: 600; margin-bottom: 8px; color: ${chartColors.text.primary}; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: ${themeColors.textPrimary}; border-bottom: 1px solid ${themeColors.divider}; padding-bottom: 6px;">
             ${format(new Date(d.timestamp), 'MMM dd, yyyy HH:mm:ss')}
           </div>
           <div style="margin-bottom: 8px;">
@@ -121,11 +124,11 @@ export function setupTooltip({
               ${d.max !== null ? `<span style="color: ${chartColors.max}; font-size: 11px;">Max:</span><span style="color: ${chartColors.max}; font-size: 11px;">${d.max.toFixed(2)} ms</span>` : ''}
             </div>
           </div>
-          <div style="border-top: 1px solid #e5e7eb; padding-top: 6px;">
+          <div style="border-top: 1px solid ${themeColors.divider}; padding-top: 6px;">
             <div style="color: ${d.packetLossPercent > 0 ? getPacketLossColor(d.packetLossPercent) : chartColors.success}; font-weight: 500;">
               Packet Loss: ${d.packetLossPercent.toFixed(2)}%
             </div>
-            <div style="color: ${chartColors.text.muted}; font-size: 11px; margin-top: 2px;">
+            <div style="color: ${themeColors.textMuted}; font-size: 11px; margin-top: 2px;">
               ${d.failedCount} failed / ${d.count} total
             </div>
           </div>
@@ -150,4 +153,3 @@ export function setupTooltip({
     },
   };
 }
-

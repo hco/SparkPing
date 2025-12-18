@@ -12,15 +12,15 @@ interface ControlItem {
 }
 
 const controls: ControlItem[] = [
-  { key: 'showSmokeBars', label: 'Smoke Bars', colorClass: 'text-gray-600' },
-  { key: 'showPacketLoss', label: 'Packet Loss', colorClass: 'text-blue-600' },
+  { key: 'showSmokeBars', label: 'Smoke Bars', colorClass: 'text-foreground' },
+  { key: 'showPacketLoss', label: 'Packet Loss', colorClass: 'text-blue-500' },
 ];
 
 const lineControls: ControlItem[] = [
-  { key: 'showMedianLine', label: 'Median', colorClass: 'text-green-600' },
-  { key: 'showMinLine', label: 'Min', colorClass: 'text-blue-600' },
-  { key: 'showMaxLine', label: 'Max', colorClass: 'text-red-600' },
-  { key: 'showAvgLine', label: 'Avg', colorClass: 'text-amber-600' },
+  { key: 'showMedianLine', label: 'Median', colorClass: 'text-green-500' },
+  { key: 'showMinLine', label: 'Min', colorClass: 'text-blue-500' },
+  { key: 'showMaxLine', label: 'Max', colorClass: 'text-red-500' },
+  { key: 'showAvgLine', label: 'Avg', colorClass: 'text-amber-500' },
 ];
 
 export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
@@ -32,24 +32,23 @@ export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
             type="checkbox"
             checked={visibility[control.key]}
             onChange={(e) => onToggle(control.key, e.target.checked)}
-            className={`w-4 h-4 ${control.colorClass} border-gray-300 rounded focus:ring-${control.colorClass.split('-')[1]}-500`}
+            className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary"
           />
-          <span className="ml-2 text-sm text-gray-700">{control.label}</span>
+          <span className="ml-2 text-sm text-foreground">{control.label}</span>
         </label>
       ))}
-      <span className="text-gray-300">|</span>
+      <span className="text-muted-foreground">|</span>
       {lineControls.map((control) => (
         <label key={control.key} className="inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={visibility[control.key]}
             onChange={(e) => onToggle(control.key, e.target.checked)}
-            className={`w-4 h-4 ${control.colorClass} border-gray-300 rounded focus:ring-${control.colorClass.split('-')[1]}-500`}
+            className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary"
           />
-          <span className="ml-2 text-sm text-gray-700">{control.label}</span>
+          <span className={`ml-2 text-sm ${control.colorClass}`}>{control.label}</span>
         </label>
       ))}
     </div>
   );
 }
-

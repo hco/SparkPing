@@ -1,17 +1,20 @@
 import * as d3 from 'd3';
 import type { ChartScales, ChartMargin } from '../types';
+import type { ThemeColors } from '../../../../lib/chartColors';
 import { getTimeFormat } from '../utils';
 
 interface RenderGridOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
   scales: ChartScales;
   innerWidth: number;
+  themeColors: ThemeColors;
 }
 
 export function renderGrid({
   g,
   scales,
   innerWidth,
+  themeColors,
 }: RenderGridOptions): void {
   const { yScale } = scales;
   const yTicks = yScale.ticks(6);
@@ -19,7 +22,7 @@ export function renderGrid({
   const gridLines = g
     .append('g')
     .attr('class', 'grid')
-    .attr('stroke', '#e5e7eb')
+    .attr('stroke', themeColors.gridLine)
     .attr('stroke-width', 1)
     .attr('stroke-dasharray', '2,2');
 
@@ -41,6 +44,7 @@ interface RenderAxesOptions {
   chartHeight: number;
   margin: ChartMargin;
   timeExtent: [number, number];
+  themeColors: ThemeColors;
 }
 
 export function renderAxes({
@@ -49,6 +53,7 @@ export function renderAxes({
   chartHeight,
   margin,
   timeExtent,
+  themeColors,
 }: RenderAxesOptions): void {
   const { xScale, yScale } = scales;
   const timeFormat = getTimeFormat(timeExtent[0], timeExtent[1]);
@@ -67,18 +72,28 @@ export function renderAxes({
     .attr('dx', '-0.5em')
     .attr('dy', '0.5em')
     .style('font-size', '11px')
-    .style('fill', '#6b7280');
+    .style('fill', themeColors.axisText);
+
+  // Style x-axis domain line
+  g.select('.x-axis .domain')
+    .attr('stroke', themeColors.axisDomain);
+
+  g.selectAll('.x-axis .tick line')
+    .attr('stroke', themeColors.axisDomain);
 
   // Y axis
   g.append('g')
     .attr('class', 'y-axis')
     .call(yAxis)
     .select('.domain')
-    .attr('stroke', '#d1d5db');
+    .attr('stroke', themeColors.axisDomain);
 
   g.selectAll('.y-axis .tick text')
     .style('font-size', '11px')
-    .style('fill', '#6b7280');
+    .style('fill', themeColors.axisText);
+
+  g.selectAll('.y-axis .tick line')
+    .attr('stroke', themeColors.axisDomain);
 
   // Y axis label
   g.append('text')
@@ -88,7 +103,6 @@ export function renderAxes({
     .style('text-anchor', 'middle')
     .style('font-size', '12px')
     .style('font-weight', '500')
-    .style('fill', '#374151')
+    .style('fill', themeColors.axisLabel)
     .text('RTT (ms)');
 }
-

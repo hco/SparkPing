@@ -29,13 +29,78 @@ export const chartColors = {
     high: '#ef4444', // red-500 (>20%)
   },
 
-  // Text colors
+  // Text colors (light mode)
   text: {
     primary: '#111827', // gray-900
     secondary: '#374151', // gray-700
     muted: '#6b7280', // gray-500
   },
 } as const;
+
+// Theme-aware colors for charts
+export interface ThemeColors {
+  // Text colors
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  // Background colors
+  panelBg: string;
+  panelBorder: string;
+  tooltipBg: string;
+  tooltipBorder: string;
+  // Grid and axis
+  gridLine: string;
+  axisDomain: string;
+  axisText: string;
+  axisLabel: string;
+  // Divider
+  divider: string;
+}
+
+export const lightThemeColors: ThemeColors = {
+  textPrimary: '#111827',   // gray-900
+  textSecondary: '#374151', // gray-700
+  textMuted: '#6b7280',     // gray-500
+  panelBg: '#f9fafb',       // gray-50
+  panelBorder: '#e5e7eb',   // gray-200
+  tooltipBg: '#ffffff',
+  tooltipBorder: '#d1d5db', // gray-300
+  gridLine: '#e5e7eb',      // gray-200
+  axisDomain: '#d1d5db',    // gray-300
+  axisText: '#6b7280',      // gray-500
+  axisLabel: '#374151',     // gray-700
+  divider: '#e5e7eb',       // gray-200
+};
+
+export const darkThemeColors: ThemeColors = {
+  textPrimary: '#f9fafb',   // gray-50
+  textSecondary: '#d1d5db', // gray-300
+  textMuted: '#9ca3af',     // gray-400
+  panelBg: '#1f2937',       // gray-800
+  panelBorder: '#374151',   // gray-700
+  tooltipBg: '#1f2937',     // gray-800
+  tooltipBorder: '#4b5563', // gray-600
+  gridLine: '#374151',      // gray-700
+  axisDomain: '#4b5563',    // gray-600
+  axisText: '#9ca3af',      // gray-400
+  axisLabel: '#d1d5db',     // gray-300
+  divider: '#374151',       // gray-700
+};
+
+/**
+ * Get theme colors based on current theme
+ */
+export function getThemeColors(isDark: boolean): ThemeColors {
+  return isDark ? darkThemeColors : lightThemeColors;
+}
+
+/**
+ * Detect if dark mode is active by checking for .dark class on document
+ */
+export function isDarkMode(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.classList.contains('dark');
+}
 
 // Tailwind class equivalents for React components
 export const chartColorClasses = {

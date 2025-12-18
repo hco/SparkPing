@@ -2,6 +2,9 @@ import { createRootRoute, Link, Outlet, useRouterState } from '@tanstack/react-r
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 import { NavigationMenu, NavigationMenuItem, NavigationMenuList } from '@/components/ui/navigation-menu'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/hooks/useTheme'
+import { Sun, Moon, Monitor } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -9,7 +12,7 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-background text-foreground">
       <Navigation />
       <main>
         <Outlet />
@@ -22,10 +25,19 @@ function RootComponent() {
 function Navigation() {
   const router = useRouterState()
   const currentPath = router.location.pathname
+  const { theme, setTheme } = useTheme()
+
+  const themeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor
+  const ThemeIcon = themeIcon
+
+  const cycleTheme = () => {
+    const nextTheme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+    setTheme(nextTheme);
+  };
 
   return (
-    <nav className="border-b bg-white">
-      <div className="container mx-auto px-4">
+    <nav className="border-b border-border bg-card">
+      <div className="container mx-auto px-4 flex items-center justify-between">
         <NavigationMenu>
           <NavigationMenuList className="gap-6">
             <NavigationMenuItem>
@@ -52,6 +64,15 @@ function Navigation() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={cycleTheme}
+          className="text-muted-foreground hover:text-foreground"
+          title={`Theme: ${theme}`}
+        >
+          <ThemeIcon className="size-5" />
+        </Button>
       </div>
     </nav>
   )

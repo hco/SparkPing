@@ -1,11 +1,12 @@
 import type * as d3 from 'd3';
 import type { ChartVisibilityOptions } from '../types';
-import { chartColors } from '../../../../lib/chartColors';
+import { chartColors, type ThemeColors } from '../../../../lib/chartColors';
 
 interface RenderLegendOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
   chartHeight: number;
   visibility: ChartVisibilityOptions;
+  themeColors: ThemeColors;
 }
 
 interface LegendItem {
@@ -18,6 +19,7 @@ export function renderLegend({
   g,
   chartHeight,
   visibility,
+  themeColors,
 }: RenderLegendOptions): void {
   const legendGroup = g
     .append('g')
@@ -61,6 +63,7 @@ export function renderLegend({
         .attr('stroke', item.color)
         .attr('stroke-width', 2.5);
     } else {
+      // Solid fill for packet loss legend - much more visible
       legendGroup
         .append('rect')
         .attr('x', x)
@@ -68,18 +71,14 @@ export function renderLegend({
         .attr('width', 12)
         .attr('height', 12)
         .attr('fill', item.color)
-        .attr('opacity', item.label === 'Range' ? 0.5 : 0.15)
-        .attr('rx', 2)
-        .attr('stroke', item.color)
-        .attr('stroke-width', 1);
+        .attr('rx', 2);
     }
     legendGroup
       .append('text')
       .attr('x', x + 18)
       .attr('y', 4)
       .style('font-size', '10px')
-      .style('fill', '#6b7280')
+      .style('fill', themeColors.textMuted)
       .text(item.label);
   });
 }
-

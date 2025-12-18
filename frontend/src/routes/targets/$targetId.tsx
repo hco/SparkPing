@@ -128,18 +128,18 @@ function TargetDetails() {
   const isEmpty = aggregatedData && targetData.length === 0;
 
   return (
-    <div className="min-h-screen bg-gray-100 w-screen">
+    <div className="min-h-screen bg-background w-screen">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">{targetName}</h1>
-          <p className="text-gray-600">Target: {targetId}</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">{targetName}</h1>
+          <p className="text-muted-foreground">Target: {targetId}</p>
         </div>
 
         {/* Time Controls */}
@@ -177,32 +177,32 @@ function TargetDetails() {
         ) : hasData ? (
           <div className="space-y-6">
             {/* Smoke Chart */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Latency Distribution (Smoke View)</h2>
-              <p className="text-sm text-gray-600 mb-4">
+            <div className="bg-card p-6 rounded-lg shadow border border-border">
+              <h2 className="text-xl font-semibold text-foreground mb-4">Latency Distribution (Smoke View)</h2>
+              <p className="text-sm text-muted-foreground mb-4">
                 Visualizes individual ping results as smoke-like density, median RTT line, and packet loss severity bars
               </p>
-              <div className="w-full" style={{ height: '500px' }}>
-                <D3SmokeChart data={targetData} height={500} />
+              <div className="w-full" style={{ height: '580px' }}>
+                <D3SmokeChart data={targetData} height={580} />
               </div>
             </div>
             {showLegacyCharts && (
               <>
-               <div className="bg-white p-6 rounded-lg shadow">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Latency Overview</h2>
+               <div className="bg-card p-6 rounded-lg shadow border border-border">
+                <h2 className="text-xl font-semibold text-foreground mb-4">Latency Overview</h2>
                 <div className="w-full" style={{ height: '500px' }}>
                   <D3LatencyChart data={targetData} height={500} />
                 </div>
              
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Packet Loss</h2>
+                <h2 className="text-xl font-semibold text-foreground mb-4">Packet Loss</h2>
                 <div className="w-full" style={{ height: '300px' }}>
                   <D3PacketLossChart data={targetData} height={300} />
                 </div>
                 </div>
               {/* Combined Chart - All Metrics */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Combined View - All Metrics</h2>
-                  <p className="text-sm text-gray-600 mb-4">
+                <div className="bg-card p-6 rounded-lg shadow border border-border">
+                  <h2 className="text-xl font-semibold text-foreground mb-4">Combined View - All Metrics</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
                     Latency ranges shown as color-coded bars (avg markers) with packet loss intensity bars below
                   </p>
                   <div className="w-full" style={{ height: '500px' }}>
@@ -211,9 +211,9 @@ function TargetDetails() {
                 </div>
 
                 {/* RRD-Style Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Performance Overview (RRD-Style)</h2>
-                  <p className="text-sm text-gray-600 mb-4">
+                <div className="bg-card p-6 rounded-lg shadow border border-border">
+                  <h2 className="text-xl font-semibold text-foreground mb-4">Performance Overview (RRD-Style)</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
                     Classic network monitoring visualization with latency range shading, average line, and color-coded packet loss indicators
                   </p>
                   <div className="w-full" style={{ height: '500px' }}>
@@ -226,45 +226,45 @@ function TargetDetails() {
 
             {/* Statistics */}
             {aggregatedData && stats && (
-              <div className="bg-white px-4 py-3 rounded-lg shadow">
+              <div className="bg-card px-4 py-3 rounded-lg shadow border border-border">
                 <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
-                  <span className="font-semibold text-gray-700">Latency:</span>
-                  <span><span className="text-gray-500">Avg</span> <span className={`font-medium ${chartColorClasses.avg}`}>{stats.mean.toFixed(1)}ms</span></span>
-                  <span><span className="text-gray-500">Min</span> <span className={`font-medium ${chartColorClasses.min}`}>{stats.min !== null ? `${stats.min.toFixed(1)}ms` : '—'}</span></span>
-                  <span><span className="text-gray-500">Max</span> <span className={`font-medium ${chartColorClasses.max}`}>{stats.max !== null ? `${stats.max.toFixed(1)}ms` : '—'}</span></span>
-                  <span className="text-gray-300">|</span>
+                  <span className="font-semibold text-foreground">Latency:</span>
+                  <span><span className="text-muted-foreground">Avg</span> <span className={`font-medium ${chartColorClasses.avg}`}>{stats.mean.toFixed(1)}ms</span></span>
+                  <span><span className="text-muted-foreground">Min</span> <span className={`font-medium ${chartColorClasses.min}`}>{stats.min !== null ? `${stats.min.toFixed(1)}ms` : '—'}</span></span>
+                  <span><span className="text-muted-foreground">Max</span> <span className={`font-medium ${chartColorClasses.max}`}>{stats.max !== null ? `${stats.max.toFixed(1)}ms` : '—'}</span></span>
+                  <span className="text-border">|</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-gray-500 border-b border-dotted border-gray-400">P50</span> <span className={`font-light`}>{stats.p50.toFixed(1)}ms</span></span>
+                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P50</span> <span className={`font-light`}>{stats.p50.toFixed(1)}ms</span></span>
                     </TooltipTrigger>
                     <TooltipContent>50th percentile (median): Half of all pings were faster than this</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-gray-500 border-b border-dotted border-gray-400">P75</span> <span className={`font-light`}>{stats.p75.toFixed(1)}ms</span></span>
+                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P75</span> <span className={`font-light`}>{stats.p75.toFixed(1)}ms</span></span>
                     </TooltipTrigger>
                     <TooltipContent>75th percentile: 75% of pings were faster than this</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-gray-500 border-b border-dotted border-gray-400">P95</span> <span className={`font-light`}>{stats.p95.toFixed(1)}ms</span></span>
+                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P95</span> <span className={`font-light`}>{stats.p95.toFixed(1)}ms</span></span>
                     </TooltipTrigger>
                     <TooltipContent>95th percentile: 95% of pings were faster than this</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-gray-500 border-b border-dotted border-gray-400">P99</span> <span className={`font-light`}>{stats.p99.toFixed(1)}ms</span></span>
+                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P99</span> <span className={`font-light`}>{stats.p99.toFixed(1)}ms</span></span>
                     </TooltipTrigger>
                     <TooltipContent>99th percentile: 99% of pings were faster than this (worst-case latency)</TooltipContent>
                   </Tooltip>
-                  <span className="text-gray-300">|</span>
-                  <span className="font-semibold text-gray-700">Packets:</span>
-                  <span><span className="text-gray-500">Total</span> <span className="font-medium">{stats.totalPings.toLocaleString()}</span></span>
-                  <span><span className="text-gray-500">Loss</span> <span className={`font-medium ${getPacketLossClass(stats.packetLoss)}`}>{stats.packetLoss.toFixed(2)}%</span></span>
+                  <span className="text-border">|</span>
+                  <span className="font-semibold text-foreground">Packets:</span>
+                  <span><span className="text-muted-foreground">Total</span> <span className="font-medium">{stats.totalPings.toLocaleString()}</span></span>
+                  <span><span className="text-muted-foreground">Loss</span> <span className={`font-medium ${getPacketLossClass(stats.packetLoss)}`}>{stats.packetLoss.toFixed(2)}%</span></span>
                   {aggregatedData.query.data_time_range && (
                     <>
-                      <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">
+                      <span className="text-border">|</span>
+                      <span className="text-muted-foreground">
                         {new Date(aggregatedData.query.data_time_range.earliest * 1000).toLocaleString()} — {new Date(aggregatedData.query.data_time_range.latest * 1000).toLocaleString()}
                       </span>
                     </>

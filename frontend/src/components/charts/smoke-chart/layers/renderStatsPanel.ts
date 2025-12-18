@@ -1,18 +1,20 @@
 import { format } from 'date-fns';
 import type * as d3 from 'd3';
 import type { ChartStats } from '../types';
-import { chartColors, getPacketLossColor } from '../../../../lib/chartColors';
+import { chartColors, getPacketLossColor, type ThemeColors } from '../../../../lib/chartColors';
 
 interface RenderStatsPanelOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
   stats: ChartStats;
   innerWidth: number;
+  themeColors: ThemeColors;
 }
 
 export function renderStatsPanel({
   g,
   stats,
   innerWidth,
+  themeColors,
 }: RenderStatsPanelOptions): void {
   const statsGroup = g
     .append('g')
@@ -28,9 +30,9 @@ export function renderStatsPanel({
     .attr('y', -5)
     .attr('width', panelWidth + 10)
     .attr('height', 255)
-    .attr('fill', '#f9fafb')
+    .attr('fill', themeColors.panelBg)
     .attr('rx', 6)
-    .attr('stroke', '#e5e7eb');
+    .attr('stroke', themeColors.panelBorder);
 
   statsGroup
     .append('text')
@@ -38,7 +40,7 @@ export function renderStatsPanel({
     .attr('x', 5)
     .style('font-size', '11px')
     .style('font-weight', '600')
-    .style('fill', chartColors.text.primary)
+    .style('fill', themeColors.textPrimary)
     .text('Median RTT');
 
   let yPos = 32;
@@ -53,7 +55,7 @@ export function renderStatsPanel({
     { label: 'max', value: formatMs(stats.maxRTT), color: chartColors.max },
     { label: 'min', value: formatMs(stats.minRTT), color: chartColors.min },
     { label: 'now', value: formatMs(stats.currentRTT), color: chartColors.median },
-    { label: 'sd', value: formatMs(stats.stdDev), color: chartColors.text.muted },
+    { label: 'sd', value: formatMs(stats.stdDev), color: themeColors.textMuted },
   ];
 
   rttStats.forEach((row) => {
@@ -62,7 +64,7 @@ export function renderStatsPanel({
       .attr('y', yPos)
       .attr('x', 5)
       .style('font-size', '10px')
-      .style('fill', chartColors.text.muted)
+      .style('fill', themeColors.textMuted)
       .text(row.label);
     statsGroup
       .append('text')
@@ -84,7 +86,7 @@ export function renderStatsPanel({
     .attr('x', 5)
     .style('font-size', '11px')
     .style('font-weight', '600')
-    .style('fill', chartColors.text.primary)
+    .style('fill', themeColors.textPrimary)
     .text('Packet Loss');
 
   yPos += 18;
@@ -92,9 +94,9 @@ export function renderStatsPanel({
   const currentLossColor = getPacketLossColor(stats.currentPacketLoss);
 
   const lossStats = [
-    { label: 'avg', value: formatPercent(stats.avgPacketLoss), color: chartColors.text.secondary },
-    { label: 'max', value: formatPercent(stats.maxPacketLoss), color: chartColors.text.secondary },
-    { label: 'min', value: formatPercent(stats.minPacketLoss), color: chartColors.text.secondary },
+    { label: 'avg', value: formatPercent(stats.avgPacketLoss), color: themeColors.textSecondary },
+    { label: 'max', value: formatPercent(stats.maxPacketLoss), color: themeColors.textSecondary },
+    { label: 'min', value: formatPercent(stats.minPacketLoss), color: themeColors.textSecondary },
     { label: 'now', value: formatPercent(stats.currentPacketLoss), color: currentLossColor },
   ];
 
@@ -104,7 +106,7 @@ export function renderStatsPanel({
       .attr('y', yPos)
       .attr('x', 5)
       .style('font-size', '10px')
-      .style('fill', chartColors.text.muted)
+      .style('fill', themeColors.textMuted)
       .text(row.label);
     statsGroup
       .append('text')
@@ -126,7 +128,7 @@ export function renderStatsPanel({
     .attr('x2', panelWidth)
     .attr('y1', yPos - 3)
     .attr('y2', yPos - 3)
-    .attr('stroke', '#e5e7eb')
+    .attr('stroke', themeColors.divider)
     .attr('stroke-width', 1);
 
   yPos += 8;
@@ -135,7 +137,7 @@ export function renderStatsPanel({
     .attr('y', yPos)
     .attr('x', 5)
     .style('font-size', '9px')
-    .style('fill', chartColors.text.muted)
+    .style('fill', themeColors.textMuted)
     .text(`${stats.totalPings} pings · ${stats.totalBuckets} buckets`);
 
   yPos += 12;
@@ -144,7 +146,6 @@ export function renderStatsPanel({
     .attr('y', yPos)
     .attr('x', 5)
     .style('font-size', '9px')
-    .style('fill', chartColors.text.muted)
+    .style('fill', themeColors.textMuted)
     .text(`Last: ${format(new Date(stats.lastSampleTime), 'HH:mm:ss')}`);
 }
-

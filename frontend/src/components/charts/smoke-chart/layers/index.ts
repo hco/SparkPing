@@ -6,3 +6,4 @@ export { renderStatsPanel } from './renderStatsPanel';
 export { renderLegend } from './renderLegend';
 export { setupTooltip } from './renderTooltip';
 
+
