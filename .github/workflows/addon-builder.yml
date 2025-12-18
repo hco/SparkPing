@@ -142,7 +142,7 @@ jobs:
         id: version
         run: |
           # Remove 'v' prefix if present
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
