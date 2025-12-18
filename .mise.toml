@@ -186,28 +186,33 @@ depends = ["develop"]
 description = "Run all CI checks (linting, type checking, and tests)"
 depends = ["server:lint", "frontend:verify", "server:check", "server:clippy", "server:fmt-check"]
 
+
+[tasks.git-pull-rebase]
+description = "Pull and rebase the current branch"
+depends = ["install"]
+run = "git pull --rebase"
 # Release tasks
 [tasks.release]
 description = "Create a new release (interactive)"
-depends = ["install"]
-run = "npx release-it"
+depends = ["install", "git-pull-rebase"]
+run = "release-it"
 
 [tasks."release:patch"]
 description = "Release a patch version"
-depends = ["install"]
-run = "npx release-it patch"
+depends = ["install", "git-pull-rebase"]
+run = "release-it patch --ci"
 
 [tasks."release:minor"]
 description = "Release a minor version"
-depends = ["install"]
-run = "npx release-it minor"
+depends = ["install", "git-pull-rebase"]
+run = "release-it minor --ci"
 
 [tasks."release:major"]
 description = "Release a major version"
-depends = ["install"]
-run = "npx release-it major"
+depends = ["install", "git-pull-rebase"]
+run = "release-it major --ci"
 
 [tasks."release:dry-run"]
 description = "Dry run a release (no changes)"
 depends = ["install"]
-run = "npx release-it --dry-run"
+run = "release-it --dry-run"
