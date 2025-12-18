@@ -46,7 +46,6 @@ jobs:
       #     fi
 
   build:
-    continue-on-error: true
     needs: init
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     # if: needs.init.outputs.changed == 'true'
