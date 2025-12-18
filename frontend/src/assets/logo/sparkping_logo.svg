@@ -1,0 +1,38 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sparkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F2455C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF6B7A;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#128589;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A9CA0;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle (optional) -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#E8F4F8" stroke-width="2" opacity="0.3"/>
+  
+  <!-- Signal waves (representing network ping) -->
+  <path d="M 100 100 Q 120 80, 140 80" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 100 100 Q 125 70, 155 65" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 100 100 Q 130 60, 170 50" fill="none" stroke="url(#waveGradient)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+  
+  <path d="M 100 100 Q 120 120, 140 120" fill="none" stroke="url(#waveGradient)" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 100 100 Q 125 130, 155 135" fill="none" stroke="url(#waveGradient)" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 100 100 Q 130 140, 170 150" fill="none" stroke="url(#waveGradient)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+  
+  <!-- Lightning bolt / Spark -->
+  <path d="M 105 40 L 85 90 L 100 90 L 80 145 L 120 85 L 105 85 Z" 
+        fill="url(#sparkGradient)" 
+        stroke="none"/>
+  
+  <!-- Activity indicator dots -->
+  <circle cx="145" cy="80" r="4" fill="#128589" opacity="0.9"/>
+  <circle cx="160" cy="65" r="3" fill="#128589" opacity="0.6"/>
+  <circle cx="175" cy="50" r="2.5" fill="#128589" opacity="0.3"/>
+  
+  <circle cx="145" cy="120" r="4" fill="#128589" opacity="0.9"/>
+  <circle cx="160" cy="135" r="3" fill="#128589" opacity="0.6"/>
+  <circle cx="175" cy="150" r="2.5" fill="#128589" opacity="0.3"/>
+</svg>
