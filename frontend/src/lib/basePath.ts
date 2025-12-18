@@ -2,7 +2,7 @@
  * Detects the base path at runtime for Home Assistant ingress support.
  *
  * When running under ingress, the app is served at a subpath like:
- *   /hassio/ingress/c215bba4_sparkping/...
+ *   /api/hassio_ingress/<token>/...
  *
  * In standalone mode, it's served at the root: /
  *
@@ -20,15 +20,15 @@ export function getBasePath(): string {
   return '/'
 }
 
-const INGRESS_PREFIX = '/hassio/ingress/'
+const INGRESS_PREFIX = '/api/hassio_ingress/'
 
 /**
- * Extracts `/hassio/ingress/<id>/` from a Home Assistant ingress URL.
+ * Extracts `/api/hassio_ingress/<token>/` from a Home Assistant ingress URL.
  *
  * Examples:
- *   /hassio/ingress/abc123/            -> /hassio/ingress/abc123/
- *   /hassio/ingress/abc123/settings   -> /hassio/ingress/abc123/
- *   /hassio/ingress/abc123/targets/42 -> /hassio/ingress/abc123/
+ *   /api/hassio_ingress/abc123/            -> /api/hassio_ingress/abc123/
+ *   /api/hassio_ingress/abc123/settings   -> /api/hassio_ingress/abc123/
+ *   /api/hassio_ingress/abc123/targets/42 -> /api/hassio_ingress/abc123/
  */
 function getIngressBasePath(pathname: string): string | null {
   if (!pathname.startsWith(INGRESS_PREFIX)) {
@@ -37,16 +37,16 @@ function getIngressBasePath(pathname: string): string | null {
 
   // Split and drop empty segments caused by leading/trailing slashes
   const segments = pathname.split('/').filter(Boolean)
-  // Expected: ["hassio", "ingress", "<id>", ...]
+  // Expected: ["api", "hassio_ingress", "<token>", ...]
   if (segments.length < 3) {
     return null
   }
 
-  const [hassio, ingress, id] = segments
-  if (hassio !== 'hassio' || ingress !== 'ingress' || !id) {
+  const [api, hassioIngress, token] = segments
+  if (api !== 'api' || hassioIngress !== 'hassio_ingress' || !token) {
     return null
   }
 
-  return `/${hassio}/${ingress}/${id}/`
+  return `/${api}/${hassioIngress}/${token}/`
 }
 
