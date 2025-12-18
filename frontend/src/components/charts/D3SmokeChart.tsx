@@ -817,10 +817,10 @@ export function D3SmokeChart({
       );
     }
 
-    // Add smoke range indicator if enabled
-    if (showSmokeBars) {
-      legendColors.push({ label: 'Range', color: '#d1d5db' });
-    }
+    // // Add smoke range indicator if enabled
+    // if (showSmokeBars) {
+    //   legendColors.push({ label: 'Range', color: '#d1d5db' });
+    // }
 
     // Add stat lines to legend if shown
     if (showMedianLine) {
