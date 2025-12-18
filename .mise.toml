@@ -151,6 +151,18 @@ run = "pnpm exec tsc --noEmit"
 description = "Verify frontend code (type check + lint)"
 depends = ["frontend:type-check", "frontend:lint"]
 
+[tasks."frontend:test"]
+description = "Run frontend tests"
+depends = ["install"]
+dir = "frontend"
+run = "pnpm test:run"
+
+[tasks."frontend:test-watch"]
+description = "Run frontend tests in watch mode"
+depends = ["install"]
+dir = "frontend"
+run = "pnpm test"
+
 # Combined tasks
 [tasks.build]
 description = "Build both server and frontend"
