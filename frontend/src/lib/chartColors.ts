@@ -140,3 +140,15 @@ export function getPacketLossClass(percent: number): string {
   return 'text-red-500';
 }
 
+/**
+ * Get latency status color based on latency value and failure status
+ * Returns a hex color for the status indicator
+ */
+export function getLatencyStatusColor(latencyMs: number | null, hadFailures: boolean): string {
+  if (latencyMs === null) return chartColors.error;
+  if (hadFailures) return chartColors.warning;
+  if (latencyMs < 50) return chartColors.success;
+  if (latencyMs < 200) return chartColors.warning;
+  return chartColors.error;
+}
+

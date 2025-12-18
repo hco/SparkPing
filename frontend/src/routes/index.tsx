@@ -3,8 +3,8 @@ import { useDashboardData } from '@/hooks/useDashboardData'
 import { Sparkline, PacketLossSparkline } from '@/components/Sparkline'
 import { LoadingState } from '@/components/LoadingState'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
-import { chartColors, getPacketLossClass } from '@/lib/chartColors'
-import { RefreshCw, Settings } from 'lucide-react'
+import { chartColors, getPacketLossClass, getLatencyStatusColor } from '@/lib/chartColors'
+import { RefreshCw, Settings, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import '../App.css'
 
@@ -77,7 +77,8 @@ function Dashboard() {
         ) : (
           <div className="space-y-3">
             {/* Table header */}
-            <div className="grid grid-cols-[1fr_80px_80px_80px_70px_130px_130px] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="grid grid-cols-[80px_1fr_80px_80px_80px_70px_130px_130px] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <div></div>
               <div>Target</div>
               <div className="text-right">Min</div>
               <div className="text-right">Median</div>
@@ -93,6 +94,14 @@ function Dashboard() {
               const packetLossData = stat.recentData.map((d) => 
                 d.count > 0 ? (d.failed_count / d.count) * 100 : 0
               )
+              
+              // Get the latest data point
+              const latestData = stat.recentData.length > 0 
+                ? stat.recentData[stat.recentData.length - 1] 
+                : null
+              const latestLatency = latestData?.avg ?? null
+              const latestHadFailures = latestData ? latestData.failed_count > 0 : false
+              const statusColor = getLatencyStatusColor(latestLatency, latestHadFailures)
 
               return (
                 <Link
@@ -101,7 +110,26 @@ function Dashboard() {
                   params={{ targetId: stat.target.address }}
                   className="block"
                 >
-                  <div className="grid grid-cols-[1fr_80px_80px_80px_70px_130px_130px] gap-3 items-center px-4 py-4 bg-card border border-border rounded-lg hover:bg-accent hover:border-accent transition-colors group">
+                  <div className="grid grid-cols-[80px_1fr_80px_80px_80px_70px_130px_130px] gap-3 items-center px-4 py-4 bg-card border border-border rounded-lg hover:bg-accent hover:border-accent transition-colors group">
+                    {/* Latest ping - prominent display */}
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-center gap-1">
+                        <Activity 
+                          className="size-3 animate-pulse" 
+                          style={{ color: statusColor }}
+                        />
+                        <span 
+                          className="font-mono text-sm font-semibold"
+                          style={{ color: statusColor }}
+                        >
+                          {formatLatency(latestLatency)}
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-muted-foreground">
+                        live
+                      </span>
+                    </div>
+
                     {/* Target name */}
                     <div>
                       <div className="font-medium text-foreground group-hover:text-emerald-500 transition-colors">
