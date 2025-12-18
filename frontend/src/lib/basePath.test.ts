@@ -35,6 +35,16 @@ describe('getBasePath', () => {
     expect(getBasePath()).toBe('/api/hassio_ingress/crmYVg9cOH54X26ulJomu-i5S2cuvhhyYzdQOxpjQF8/')
   })
 
+  it('returns the ingress base path for Home Assistant ingress URLs with a different id', () => {
+    vi.stubGlobal('window', {
+      location: {
+        pathname: '/api/hassio_ingress/secondThingy-i5S2cuvhhyYzdQOxpjQF8',
+      },
+    })
+
+    expect(getBasePath()).toBe('/api/hassio_ingress/secondThingy-i5S2cuvhhyYzdQOxpjQF8/')
+  })
+
   it('returns the ingress base path when pathname has trailing slash', () => {
     vi.stubGlobal('window', {
       location: {
