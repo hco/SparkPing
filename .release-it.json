@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "before:bump": "mise exec -- cargo set-version ${version}",
+    "after:bump": "git add Cargo.toml Cargo.lock"
+  }
+}
+

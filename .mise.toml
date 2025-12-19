@@ -2,6 +2,7 @@
 rust = { version = "1.91.1", components = "clippy,cargo,rustc,rust-std,rust-analyzer,rustfmt" }
 node = "24"
 "cargo:cargo-watch" = { version = "latest" }
+"cargo:cargo-edit" = { version = "latest" }
 "npm:release-it" = { version = "latest" }
 
 [settings]
