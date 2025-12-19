@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
+import { DeviceDiscoveryPanel } from '@/components/DeviceDiscoveryPanel'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -66,6 +67,15 @@ function Settings() {
     })
     return map
   }, [storageStats])
+
+  // Create a set of existing target addresses for discovery duplicate checking
+  const existingAddresses = useMemo(() => {
+    const set = new Set<string>()
+    targets?.forEach((target) => {
+      set.add(target.address)
+    })
+    return set
+  }, [targets])
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -259,6 +269,9 @@ function Settings() {
             </div>
           )}
         </div>
+
+        {/* Device Discovery Section */}
+        <DeviceDiscoveryPanel existingAddresses={existingAddresses} />
       </div>
     </div>
   )

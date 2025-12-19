@@ -107,3 +107,22 @@ export interface StorageStatsResponse {
   targets: TargetStorageStats[];
 }
 
+// Device discovery types
+
+export interface DiscoveredDevice {
+  /** Human-readable name of the device */
+  name: string;
+  /** IP address of the device */
+  address: string;
+  /** The service type that was discovered (e.g., "_http._tcp.local.") */
+  service_type: string;
+  /** The method used to discover this device */
+  discovery_method: string;
+}
+
+export type DiscoveryEvent =
+  | { event_type: 'device_found'; device: DiscoveredDevice }
+  | { event_type: 'started'; message: string }
+  | { event_type: 'completed'; message: string; device_count: number }
+  | { event_type: 'error'; message: string };
+

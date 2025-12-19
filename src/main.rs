@@ -1,6 +1,7 @@
 mod api;
 mod config;
 mod config_file;
+mod discovery;
 mod logging;
 mod ping;
 mod storage;

@@ -1,22 +1,31 @@
 use crate::config::{AppConfig, Target};
 use crate::config_file;
+use crate::discovery::{run_mdns_discovery, DiscoveryEvent};
 use crate::ping::perform_ping;
 use crate::storage::write_ping_result;
+use async_stream::stream;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::Json,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
     routing::{get, put},
     Router,
 };
 use chrono::{DateTime, Utc};
+use futures::Stream;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Duration;
+use tokio::sync::mpsc;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info, warn};
 use tsink::Storage;
@@ -1308,6 +1317,55 @@ pub async fn delete_target(
 }
 
 
+/// Query parameters for the discovery endpoint
+#[derive(Debug, Deserialize)]
+pub struct DiscoveryQuery {
+    /// Duration to run discovery in seconds (default: 10)
+    #[serde(default = "default_discovery_duration")]
+    pub duration: u64,
+}
+
+fn default_discovery_duration() -> u64 {
+    10
+}
+
+/// HTTP handler for GET /api/discovery/start (SSE endpoint)
+pub async fn start_discovery(
+    Query(query): Query<DiscoveryQuery>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    info!("Starting device discovery for {} seconds", query.duration);
+
+    let duration = Duration::from_secs(query.duration.min(60).max(1)); // Clamp between 1-60 seconds
+
+    let stream = stream! {
+        let (tx, mut rx) = mpsc::channel::<DiscoveryEvent>(100);
+
+        // Spawn the discovery task
+        tokio::spawn(async move {
+            run_mdns_discovery(tx, duration).await;
+        });
+
+        // Stream events as they arrive
+        while let Some(event) = rx.recv().await {
+            match serde_json::to_string(&event) {
+                Ok(json) => {
+                    yield Ok(Event::default().data(json));
+                }
+                Err(e) => {
+                    error!("Failed to serialize discovery event: {}", e);
+                }
+            }
+
+            // If this was a completion or error event, we're done
+            if matches!(event, DiscoveryEvent::Completed { .. } | DiscoveryEvent::Error { .. }) {
+                break;
+            }
+        }
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 /// Create the API router
 pub fn create_router(
     storage: Arc<dyn Storage>,
@@ -1339,6 +1397,7 @@ pub fn create_router(
         .route("/api/targets", get(get_targets).post(create_target))
         .route("/api/targets/:id", put(update_target).delete(delete_target))
         .route("/api/storage/stats", get(get_storage_stats))
+        .route("/api/discovery/start", get(start_discovery))
         .with_state(state);
 
     // Add static file serving if static directory is provided
