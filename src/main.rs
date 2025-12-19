@@ -331,18 +331,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
             .filter_map(|e| e.ok())
             .collect();
-        info!("WAL-Verzeichnis gefunden mit {} Dateien", wal_files.len());
+        info!("WAL directory found with {} files", wal_files.len());
         for entry in wal_files.iter().take(5) {
             if let Ok(metadata) = entry.metadata() {
                 info!(
-                    "  WAL-Datei: {} ({} Bytes)",
+                    "  WAL file: {} ({} bytes)",
                     entry.file_name().to_string_lossy(),
                     metadata.len()
                 );
             }
         }
     } else {
-        info!("WAL-Verzeichnis nicht gefunden: {:?}", wal_path);
+        info!("WAL directory not found: {:?}", wal_path);
     }
 
     // Query and display data time range
@@ -351,17 +351,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let earliest_dt = DateTime::from_timestamp(earliest, 0).unwrap_or_else(|| Utc::now());
             let latest_dt = DateTime::from_timestamp(latest, 0).unwrap_or_else(|| Utc::now());
             info!(
-                "Daten in tsink vorhanden von {} bis {} ({} Datenpunkte)",
+                "Data in tsink available from {} to {} ({} data points)",
                 earliest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
                 latest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
                 count_data_points(&**storage).unwrap_or(0)
             );
         }
         Ok(None) => {
-            info!("Keine Daten in tsink vorhanden");
+            info!("No data in tsink storage");
         }
         Err(e) => {
-            error!("Fehler beim Abfragen der Daten-Zeitspanne: {}", e);
+            error!("Error querying data time range: {}", e);
         }
     }
     info!("Starting ping loop (each target runs independently in parallel)...");
