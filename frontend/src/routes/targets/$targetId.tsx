@@ -1,63 +1,144 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { D3LatencyChart } from '@/components/charts/D3LatencyChart';
 import { D3PacketLossChart } from '@/components/charts/D3PacketLossChart';
 import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
 import { D3RRDStyleChart } from '@/components/charts/D3RRDStyleChart';
 import { D3SmokeChart } from '@/components/charts/D3SmokeChart';
-import { TimeControls } from '@/components/TimeControls';
+import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { useTargetPingData } from '@/hooks/useTargetPingData';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorDisplay } from '@/components/ErrorDisplay';
 import { EmptyState } from '@/components/EmptyState';
-import { calculateTimeRangeQuery, type TimeRangeOption } from '@/utils/timeRangeUtils';
+import {
+  type TimeRange,
+  type PresetValue,
+  resolveTimeRange,
+  PRESET_RANGES,
+  BUCKET_DURATION_OPTIONS,
+} from '@/utils/timeRangeUtils';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { chartColorClasses, getPacketLossClass } from '@/lib/chartColors';
 
-const TIME_RANGE_VALUES = ['1h', '6h', '12h', '24h', '7d', '30d', 'all'] as const;
-const BUCKET_DURATION_VALUES = ['1s', '5s', '10s', '30s', '1m', '5m', '15m', '1h'] as const;
+const PRESET_VALUES = PRESET_RANGES.map((r) => r.value);
+const BUCKET_DURATION_VALUES = BUCKET_DURATION_OPTIONS.map((b) => b.value);
 
 type SearchParams = {
-  timeRange?: TimeRangeOption;
+  // Preset range like '1h', '6h', etc.
+  preset?: PresetValue;
+  // Custom range timestamps (epoch seconds)
+  from?: number;
+  to?: number;
+  // Bucket duration for aggregation
   bucket?: string;
+  // Auto-refresh settings
   refresh?: boolean;
   interval?: number;
 };
 
 export const Route = createFileRoute('/targets/$targetId')({
   validateSearch: (search: Record<string, unknown>): SearchParams => {
-    const timeRange = TIME_RANGE_VALUES.includes(search.timeRange as TimeRangeOption)
-      ? (search.timeRange as TimeRangeOption)
-      : '1h';
+    const preset = PRESET_VALUES.includes(search.preset as PresetValue)
+      ? (search.preset as PresetValue)
+      : undefined;
+    const from = typeof search.from === 'number' ? search.from : undefined;
+    const to = typeof search.to === 'number' ? search.to : undefined;
     const bucket = BUCKET_DURATION_VALUES.includes(search.bucket as (typeof BUCKET_DURATION_VALUES)[number])
       ? (search.bucket as string)
       : '10s';
     const refresh = typeof search.refresh === 'boolean' ? search.refresh : true;
     const interval = typeof search.interval === 'number' && search.interval >= 1 ? search.interval : 5;
 
-    return { timeRange, bucket, refresh, interval };
+    // Default to 1h preset if no time params specified
+    return {
+      preset: !preset && !from ? '1h' : preset,
+      from,
+      to,
+      bucket,
+      refresh,
+      interval,
+    };
   },
   component: TargetDetails,
 });
 
 function TargetDetails() {
   const { targetId } = Route.useParams();
-  const { timeRange, bucket, refresh, interval } = Route.useSearch();
+  const { preset, from, to, bucket, refresh, interval } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const [showLegacyCharts, setShowLegacyCharts] = useState(false);
 
-  const updateSearch = (updates: Partial<SearchParams>) => {
-    navigate({
-      search: (prev) => ({ ...prev, ...updates }),
-      replace: true,
-    });
-  };
+  const updateSearch = useCallback(
+    (updates: Partial<SearchParams>) => {
+      navigate({
+        search: (prev) => ({ ...prev, ...updates }),
+        replace: true,
+      });
+    },
+    [navigate]
+  );
 
-  const timeQuery = useMemo(() => calculateTimeRangeQuery(timeRange!), [timeRange]);
+  // Convert URL params to TimeRange object
+  const timeRange: TimeRange = useMemo(() => {
+    if (from) {
+      return {
+        type: 'custom',
+        from: new Date(from * 1000),
+        to: to ? new Date(to * 1000) : undefined,
+      };
+    }
+    return {
+      type: 'preset',
+      preset: preset || '1h',
+    };
+  }, [preset, from, to]);
+
+  // Handle time range changes from picker
+  const handleTimeRangeChange = useCallback(
+    (range: TimeRange) => {
+      if (range.type === 'preset') {
+        updateSearch({
+          preset: range.preset,
+          from: undefined,
+          to: undefined,
+        });
+      } else {
+        const resolved = resolveTimeRange(range);
+        updateSearch({
+          preset: undefined,
+          from: Math.floor(resolved.from.getTime() / 1000),
+          to: range.to ? Math.floor(resolved.to.getTime() / 1000) : undefined,
+        });
+      }
+    },
+    [updateSearch]
+  );
+
+  // Calculate time query for API
+  const timeQuery = useMemo(() => {
+    if (timeRange.type === 'preset') {
+      return {
+        from: timeRange.preset,
+        to: undefined,
+      };
+    }
+    const resolved = resolveTimeRange(timeRange);
+    return {
+      from: Math.floor(resolved.from.getTime() / 1000).toString(),
+      to: Math.floor(resolved.to.getTime() / 1000),
+    };
+  }, [timeRange]);
 
   const {
     data: aggregatedData,
@@ -142,19 +223,39 @@ function TargetDetails() {
           <p className="text-muted-foreground">Target: {targetId}</p>
         </div>
 
-        {/* Time Controls */}
-        <TimeControls
-          timeRange={timeRange!}
-          onTimeRangeChange={(value) => updateSearch({ timeRange: value })}
-          bucketDuration={bucket!}
-          onBucketDurationChange={(value) => updateSearch({ bucket: value })}
-          autoRefresh={refresh!}
-          onAutoRefreshChange={(value) => updateSearch({ refresh: value })}
-          refreshInterval={interval!}
-          onRefreshIntervalChange={(value) => updateSearch({ interval: value })}
-          loading={isLoading}
-          onRefresh={() => refetch()}
-        />
+        {/* Time Range & Controls */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <TimeRangePicker
+            value={timeRange}
+            onChange={handleTimeRangeChange}
+            autoRefresh={refresh}
+            onAutoRefreshChange={(value) => updateSearch({ refresh: value })}
+            refreshInterval={interval}
+            onRefreshIntervalChange={(value) => updateSearch({ interval: value })}
+            loading={isLoading}
+            onRefresh={() => refetch()}
+            className="flex-1"
+          />
+          
+          {/* Bucket Duration Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card/50 backdrop-blur-sm shadow-sm">
+            <Label htmlFor="bucket-duration" className="text-sm text-muted-foreground whitespace-nowrap">
+              Resolution
+            </Label>
+            <Select value={bucket} onValueChange={(value) => updateSearch({ bucket: value })}>
+              <SelectTrigger id="bucket-duration" className="w-24 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BUCKET_DURATION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         {error && <ErrorDisplay error={error instanceof Error ? error.message : 'Failed to fetch data'} />}
 
@@ -260,7 +361,7 @@ function TargetDetails() {
             )}
           </div>
         ) : isEmpty ? (
-          <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ timeRange: 'all' })} />
+          <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ preset: '30d', from: undefined, to: undefined })} />
         ) : null}
         {/* Chart Options */}
         <div className="bg-card p-4 rounded-lg border shadow-sm mt-6">
