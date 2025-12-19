@@ -197,6 +197,7 @@ run = "git pull --rebase"
 description = "Create a new release (interactive)"
 depends = ["install", "git-pull-rebase"]
 run = "release-it"
+raw = true
 
 [tasks."release:patch"]
 description = "Release a patch version"
