@@ -109,6 +109,17 @@ export interface StorageStatsResponse {
 
 // Device discovery types
 
+export interface DeviceInfo {
+  /** Device type (e.g., "HomeKit", "AirPlay", "Chromecast", "Printer") */
+  deviceType: string | null;
+  /** Manufacturer name */
+  manufacturer: string | null;
+  /** Device model */
+  model: string | null;
+  /** Additional parsed information */
+  metadata: Record<string, string>;
+}
+
 export interface DiscoveredService {
   /** Service type (e.g., "_http._tcp.local.") */
   service_type: string;

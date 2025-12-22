@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, createElement } from 'react';
 import { useDeviceDiscovery } from '@/hooks/useDeviceDiscovery';
 import { createTarget } from '@/api';
 import type { TargetRequest, DiscoveredDevice } from '@/types';
@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Document } from 'flexsearch';
+import { parseDeviceInfoFromServices, type DeviceInfo } from '@/lib/deviceParser';
+import { getBrandIcon } from '@/lib/brandIcons';
 import {
   Search,
   Loader2,
@@ -34,6 +36,68 @@ function getServiceIcon(serviceType: string) {
     return <Server className="size-4" />;
   }
   return <Wifi className="size-4" />;
+}
+
+function DeviceIcon({
+  deviceInfo,
+  firstServiceType,
+}: {
+  deviceInfo: DeviceInfo;
+  firstServiceType: string | null;
+}) {
+  const BrandIconComponent = getBrandIcon(deviceInfo.manufacturer);
+
+  if (BrandIconComponent) {
+    return createElement(BrandIconComponent, {
+      className: 'size-3.5 shrink-0',
+    });
+  }
+
+  if (firstServiceType) {
+    return getServiceIcon(firstServiceType);
+  }
+
+  return <Wifi className="size-4" />;
+}
+
+/**
+ * Parse device information from a discovered device
+ * Prioritizes device-level TXT records over service-level ones
+ */
+function getDeviceInfo(device: DiscoveredDevice): DeviceInfo {
+  // First, parse device-level TXT properties if they exist
+  const deviceLevelInfo: DeviceInfo = {
+    deviceType: null,
+    manufacturer: device.txt_properties['manufacturer'] || 
+                  device.txt_properties['mfr'] || 
+                  device.txt_properties['ty']?.split(' ')[0] || 
+                  null,
+    model: device.txt_properties['model'] || 
+           device.txt_properties['md'] || 
+           device.txt_properties['product'] || 
+           null,
+    metadata: { ...device.txt_properties },
+  };
+
+  // Then parse service-level information
+  const serviceLevelInfo = parseDeviceInfoFromServices(
+    device.services.map((service) => ({
+      serviceType: service.service_type,
+      txtProperties: service.txt_properties,
+      instanceName: service.instance_name,
+    }))
+  );
+
+  // Merge: prioritize device-level manufacturer/model, but use service-level deviceType if device-level doesn't have one
+  return {
+    deviceType: deviceLevelInfo.deviceType || serviceLevelInfo.deviceType,
+    manufacturer: deviceLevelInfo.manufacturer || serviceLevelInfo.manufacturer,
+    model: deviceLevelInfo.model || serviceLevelInfo.model,
+    metadata: {
+      ...serviceLevelInfo.metadata,
+      ...deviceLevelInfo.metadata, // Device-level metadata takes precedence
+    },
+  };
 }
 
 /**
@@ -376,6 +440,7 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
             const isSelected = selectedDevices.has(device.address);
             const isDisabled = isExisting || isAdded;
             const isExpanded = expandedDevices.has(device.address);
+            const deviceInfo = getDeviceInfo(device);
 
             return (
               <div
@@ -400,12 +465,23 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
                     className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2 flex-wrap">
-                      {device.services.length > 0 && (
-                        <span className="text-muted-foreground">
-                          {getServiceIcon(device.services[0].service_type)}
+                      <span className="text-muted-foreground">
+                        <DeviceIcon
+                          deviceInfo={deviceInfo}
+                          firstServiceType={
+                            device.services.length > 0
+                              ? device.services[0].service_type
+                              : null
+                          }
+                        />
+                      </span>
+                      <span className="font-medium text-foreground">{device.name}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
+                      {deviceInfo.deviceType && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                          {deviceInfo.deviceType}
                         </span>
                       )}
-                      <span className="font-medium text-foreground">{device.name}</span>
                       {device.services.length > 1 && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
                           {device.services.length} services
@@ -416,15 +492,22 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
                           {isExisting ? 'Already added' : 'Just added'}
                         </span>
                       )}
-                    </div>
-                    <div className="text-sm text-muted-foreground mt-0.5">
-                      {device.address}
-                      {device.hostname && device.hostname !== device.name && (
-                        <span className="ml-1">({device.hostname})</span>
-                      )}
-                      {device.services.length > 0 && (
-                        <span className="ml-1">
-                          • {device.services.map((s) => getServiceTypeName(s.service_type)).join(', ')}
+                      {(deviceInfo.manufacturer || deviceInfo.model) && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          {deviceInfo.manufacturer && (() => {
+                            const BrandIcon = getBrandIcon(deviceInfo.manufacturer);
+                            return (
+                              <>
+                                {BrandIcon && (
+                                  <BrandIcon className="size-3 shrink-0" />
+                                )}
+                                <span>{deviceInfo.manufacturer}</span>
+                              </>
+                            );
+                          })()}
+                          {deviceInfo.model && (
+                            <span>{deviceInfo.model}</span>
+                          )}
                         </span>
                       )}
                     </div>
