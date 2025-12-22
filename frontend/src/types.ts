@@ -109,19 +109,41 @@ export interface StorageStatsResponse {
 
 // Device discovery types
 
-export interface DiscoveredDevice {
-  /** Human-readable name of the device */
-  name: string;
-  /** IP address of the device */
-  address: string;
-  /** The service type that was discovered (e.g., "_http._tcp.local.") */
+export interface DiscoveredService {
+  /** Service type (e.g., "_http._tcp.local.") */
   service_type: string;
+  /** Full DNS name of the service (e.g., "MyDevice._http._tcp.local.") */
+  fullname: string;
+  /** Service instance name (e.g., "MyDevice") */
+  instance_name: string;
+  /** Port number the service is running on */
+  port: number;
+  /** TXT record properties as key-value pairs */
+  txt_properties: Record<string, string>;
+}
+
+export interface DiscoveredDevice {
+  /** Human-readable name of the device (primary name) */
+  name: string;
+  /** Primary IP address of the device (first IPv4, or first IPv6 if no IPv4) */
+  address: string;
+  /** All IP addresses (IPv4 and IPv6) */
+  addresses: string[];
+  /** Hostname of the device (e.g., "device.local.") */
+  hostname: string;
+  /** All services discovered on this device */
+  services: DiscoveredService[];
+  /** Combined TXT properties from all services (merged) */
+  txt_properties: Record<string, string>;
+  /** TTL (Time To Live) if available */
+  ttl: number | null;
   /** The method used to discover this device */
   discovery_method: string;
 }
 
 export type DiscoveryEvent =
   | { event_type: 'device_found'; device: DiscoveredDevice }
+  | { event_type: 'device_updated'; device: DiscoveredDevice }
   | { event_type: 'started'; message: string }
   | { event_type: 'completed'; message: string; device_count: number }
   | { event_type: 'error'; message: string };

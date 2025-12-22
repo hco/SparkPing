@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useDeviceDiscovery } from '@/hooks/useDeviceDiscovery';
 import { createTarget } from '@/api';
-import type { TargetRequest } from '@/types';
+import type { TargetRequest, DiscoveredDevice } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Document } from 'flexsearch';
 import {
   Search,
   Loader2,
@@ -15,6 +17,8 @@ import {
   CheckCircle2,
   XCircle,
   Trash2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 interface DeviceDiscoveryPanelProps {
@@ -71,6 +75,88 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
 
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [addedDevices, setAddedDevices] = useState<Set<string>>(new Set());
+  const [expandedDevices, setExpandedDevices] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Create and update FlexSearch document index when devices change
+  const searchIndex = useMemo(() => {
+    const index = new Document<DiscoveredDevice>({
+      document: {
+        id: 'address',
+        index: [
+          {
+            field: 'hostname',
+            tokenize: 'forward',
+          },
+          {
+            field: 'name',
+            tokenize: 'forward',
+          },
+          {
+            field: 'address',
+            tokenize: 'forward',
+          },
+          {
+            field: 'addresses',
+            tokenize: 'forward',
+          },
+          {
+            field: 'services',
+            tokenize: 'forward',
+          },
+          {
+            field: 'serviceNames',
+            tokenize: 'forward',
+          },
+        ],
+        store: true,
+      },
+      tokenize: 'forward',
+      context: {
+        resolution: 3,
+        depth: 2,
+        bidirectional: true,
+      },
+    });
+
+    // Index all current devices
+    devices.forEach((device) => {
+      // Create searchable document with all relevant fields
+      const searchableDoc = {
+        address: device.address,
+        hostname: device.hostname,
+        name: device.name,
+        addresses: device.addresses.join(' '),
+        services: device.services.map((s) => s.service_type).join(' '),
+        serviceNames: device.services.map((s) => getServiceTypeName(s.service_type)).join(' '),
+      };
+      index.add(device.address, searchableDoc);
+    });
+
+    return index;
+  }, [devices]);
+
+  // Filter devices based on search query
+  const filteredDevices = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return devices;
+    }
+
+    const results = searchIndex.search(searchQuery, {
+      limit: 1000,
+      enrich: true,
+    });
+
+    // Extract device addresses from search results
+    const matchedAddresses = new Set<string>();
+    results.forEach((result) => {
+      result.result.forEach((item) => {
+        matchedAddresses.add(item.id as string);
+      });
+    });
+
+    return devices.filter((device) => matchedAddresses.has(device.address));
+  }, [devices, searchQuery, searchIndex]);
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -81,6 +167,18 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
 
   const handleToggleDevice = (address: string) => {
     setSelectedDevices((prev) => {
+      const next = new Set(prev);
+      if (next.has(address)) {
+        next.delete(address);
+      } else {
+        next.add(address);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleDetails = (address: string) => {
+    setExpandedDevices((prev) => {
       const next = new Set(prev);
       if (next.has(address)) {
         next.delete(address);
@@ -121,15 +219,47 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
     clearDevices();
     setSelectedDevices(new Set());
     setAddedDevices(new Set());
+    setExpandedDevices(new Set());
+    setSearchQuery('');
   };
 
-  const selectableDevices = devices.filter(
+  const selectableDevices = filteredDevices.filter(
     (d) => !existingAddresses.has(d.address) && !addedDevices.has(d.address)
   );
 
   const selectedCount = [...selectedDevices].filter(
     (addr) => !existingAddresses.has(addr) && !addedDevices.has(addr)
   ).length;
+
+  // Check if all selectable devices are selected
+  const allSelectableSelected =
+    selectableDevices.length > 0 &&
+    selectableDevices.every((d) => selectedDevices.has(d.address));
+
+  // Check if some (but not all) selectable devices are selected
+  const someSelectableSelected =
+    selectableDevices.length > 0 &&
+    selectableDevices.some((d) => selectedDevices.has(d.address)) &&
+    !allSelectableSelected;
+
+  const handleSelectAll = () => {
+    if (allSelectableSelected) {
+      // Deselect all selectable devices
+      setSelectedDevices((prev) => {
+        const next = new Set(prev);
+        selectableDevices.forEach((d) => next.delete(d.address));
+        return next;
+      });
+    } else {
+      // Select all selectable devices
+      setSelectedDevices((prev) => {
+        const next = new Set(prev);
+        selectableDevices.forEach((d) => next.add(d.address));
+        return next;
+      });
+    }
+  };
+
 
   return (
     <div className="bg-card rounded-lg shadow border border-border p-6">
@@ -153,7 +283,7 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
               Stop
             </Button>
           ) : (
-            <Button onClick={() => startDiscovery(15)}>
+            <Button onClick={startDiscovery}>
               <Search className="size-4" />
               {devices.length > 0 ? 'Scan Again' : 'Start Discovery'}
             </Button>
@@ -167,15 +297,35 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
           className={`mb-4 px-4 py-2 rounded text-sm flex items-center gap-2 ${
             status === 'error'
               ? 'bg-destructive/10 border border-destructive/30 text-destructive'
-              : status === 'completed'
-                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                : 'bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400'
+              : 'bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400'
           }`}
         >
           {status === 'running' && <Loader2 className="size-4 animate-spin" />}
-          {status === 'completed' && <CheckCircle2 className="size-4" />}
+          {status === 'idle' && <CheckCircle2 className="size-4" />}
           {status === 'error' && <XCircle className="size-4" />}
           {message}
+        </div>
+      )}
+
+      {/* Search input */}
+      {devices.length > 0 && (
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by hostname, IP address, or service..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {searchQuery && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Showing {filteredDevices.length} of {devices.length} device
+              {devices.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       )}
 
@@ -187,24 +337,50 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
               <Loader2 className="size-8 animate-spin" />
               <span>Scanning for devices...</span>
             </div>
-          ) : status === 'completed' ? (
-            'No devices found. Try scanning again.'
           ) : (
             'Click "Start Discovery" to find devices on your network.'
           )}
         </div>
+      ) : filteredDevices.length === 0 ? (
+        <div className="text-muted-foreground text-center py-8">
+          No devices match your search query.
+        </div>
       ) : (
-        <div className="space-y-2">
-          {devices.map((device) => {
+        <>
+          {/* Select all checkbox */}
+          {selectableDevices.length > 0 && (
+            <div className="mb-3 flex items-center gap-2 px-1">
+              <Checkbox
+                id="select-all"
+                checked={allSelectableSelected || someSelectableSelected}
+                onCheckedChange={handleSelectAll}
+              />
+              <Label
+                htmlFor="select-all"
+                className="text-sm font-medium cursor-pointer"
+              >
+                Select all visible ({selectableDevices.length} device
+                {selectableDevices.length !== 1 ? 's' : ''})
+                {someSelectableSelected && (
+                  <span className="ml-1 text-muted-foreground">
+                    ({selectedCount} selected)
+                  </span>
+                )}
+              </Label>
+            </div>
+          )}
+          <div className="space-y-2">
+            {filteredDevices.map((device) => {
             const isExisting = existingAddresses.has(device.address);
             const isAdded = addedDevices.has(device.address);
             const isSelected = selectedDevices.has(device.address);
             const isDisabled = isExisting || isAdded;
+            const isExpanded = expandedDevices.has(device.address);
 
             return (
               <div
                 key={device.address}
-                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                className={`rounded-lg border transition-colors ${
                   isDisabled
                     ? 'bg-muted/50 border-border/50 opacity-60'
                     : isSelected
@@ -212,35 +388,74 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
                       : 'bg-background border-border hover:border-primary/30'
                 }`}
               >
-                <Checkbox
-                  id={`device-${device.address}`}
-                  checked={isSelected}
-                  disabled={isDisabled}
-                  onCheckedChange={() => handleToggleDevice(device.address)}
-                />
-                <Label
-                  htmlFor={`device-${device.address}`}
-                  className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">
-                      {getServiceIcon(device.service_type)}
-                    </span>
-                    <span className="font-medium text-foreground">{device.name}</span>
-                    {(isExisting || isAdded) && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        {isExisting ? 'Already added' : 'Just added'}
-                      </span>
+                <div className="flex items-center gap-3 p-3">
+                  <Checkbox
+                    id={`device-${device.address}`}
+                    checked={isSelected}
+                    disabled={isDisabled}
+                    onCheckedChange={() => handleToggleDevice(device.address)}
+                  />
+                  <Label
+                    htmlFor={`device-${device.address}`}
+                    className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {device.services.length > 0 && (
+                        <span className="text-muted-foreground">
+                          {getServiceIcon(device.services[0].service_type)}
+                        </span>
+                      )}
+                      <span className="font-medium text-foreground">{device.name}</span>
+                      {device.services.length > 1 && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                          {device.services.length} services
+                        </span>
+                      )}
+                      {(isExisting || isAdded) && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          {isExisting ? 'Already added' : 'Just added'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-0.5">
+                      {device.address}
+                      {device.hostname && device.hostname !== device.name && (
+                        <span className="ml-1">({device.hostname})</span>
+                      )}
+                      {device.services.length > 0 && (
+                        <span className="ml-1">
+                          • {device.services.map((s) => getServiceTypeName(s.service_type)).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleDetails(device.address)}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                    aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="size-4" />
+                    ) : (
+                      <ChevronRight className="size-4" />
                     )}
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
+                    <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
+                      <pre className="whitespace-pre-wrap break-words">
+                        {JSON.stringify(device, null, 2)}
+                      </pre>
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground mt-0.5">
-                    {device.address} • {getServiceTypeName(device.service_type)}
-                  </div>
-                </Label>
+                )}
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Add selected button */}
