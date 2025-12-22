@@ -257,7 +257,7 @@ function parseSonos(
  * Service type: _esphomelib._tcp.local.
  */
 function parseESPHome(
-  serviceType: string,
+  _serviceType: string,
   txtProperties: Record<string, string>,
   instanceName: string
 ): DeviceInfo {
@@ -286,7 +286,7 @@ function parseESPHome(
  * Service types: _http._tcp.local., _https._tcp.local.
  */
 function parseHTTPService(
-  serviceType: string,
+  _serviceType: string,
   txtProperties: Record<string, string>,
   instanceName: string
 ): DeviceInfo {
@@ -327,7 +327,7 @@ function parseHTTPService(
  * Service type: _spotify-connect._tcp.local.
  */
 function parseSpotifyConnect(
-  serviceType: string,
+  _serviceType: string,
   txtProperties: Record<string, string>,
   instanceName: string
 ): DeviceInfo {

@@ -144,7 +144,17 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
 
   // Create and update FlexSearch document index when devices change
   const searchIndex = useMemo(() => {
-    const index = new Document<DiscoveredDevice>({
+    // Define a searchable document type that satisfies DocumentData constraint
+    type SearchableDeviceDoc = Record<string, any> & {
+      address: string;
+      hostname: string;
+      name: string;
+      addresses: string;
+      services: string;
+      serviceNames: string;
+    };
+
+    const index = new Document<SearchableDeviceDoc>({
       document: {
         id: 'address',
         index: [
@@ -186,7 +196,7 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
     // Index all current devices
     devices.forEach((device) => {
       // Create searchable document with all relevant fields
-      const searchableDoc = {
+      const searchableDoc: SearchableDeviceDoc = {
         address: device.address,
         hostname: device.hostname,
         name: device.name,
