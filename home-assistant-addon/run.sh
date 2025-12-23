@@ -22,6 +22,7 @@ fi
 
 # Read user options
 LOG_LEVEL=$(bashio::config 'log_level')
+INGRESS_ONLY=$(bashio::config 'ingress_only')
 
 # Port is fixed for ingress - must match ingress_port in config.yaml
 PORT=8080
@@ -39,14 +40,16 @@ sed -i "s/^level = .*/level = \"$LOG_LEVEL\"/" "$CONFIG_PATH"
 # Ensure host is 0.0.0.0 for Ingress
 sed -i 's/^host = .*/host = "0.0.0.0"/' "$CONFIG_PATH"
 
-# Ensure home_assistant_ingress_only is enabled for security
+# Set home_assistant_ingress_only based on user config
 if ! grep -q '^home_assistant_ingress_only' "$CONFIG_PATH"; then
     # Add it after the port line
-    sed -i '/^port = /a home_assistant_ingress_only = true' "$CONFIG_PATH"
+    sed -i "/^port = /a home_assistant_ingress_only = $INGRESS_ONLY" "$CONFIG_PATH"
 else
-    # Update it if it exists
-    sed -i 's/^home_assistant_ingress_only = .*/home_assistant_ingress_only = true/' "$CONFIG_PATH"
+    # Update it based on user setting
+    sed -i "s/^home_assistant_ingress_only = .*/home_assistant_ingress_only = $INGRESS_ONLY/" "$CONFIG_PATH"
 fi
+
+bashio::log.info "Ingress only: $INGRESS_ONLY"
 
 # Ensure required directories exist
 mkdir -p /data/tsink-data

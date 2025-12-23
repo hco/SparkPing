@@ -16,5 +16,7 @@ ingress_stream: true
 panel_icon: mdi:chart-line
 options:
   log_level: "info"
+  ingress_only: true
 schema:
   log_level: list(trace|debug|info|warn|error)
+  ingress_only: bool

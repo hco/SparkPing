@@ -1407,6 +1407,8 @@ pub fn create_router(
                   next: axum::middleware::Next| {
                 let ingress_enabled = ingress_only_enabled;
                 async move {
+                    let start = std::time::Instant::now();
+                    
                     if ingress_enabled {
                         // Determine the remote peer IP from the connection info.
                         // In Home Assistant ingress mode, the TCP peer should be the
@@ -1441,6 +1443,14 @@ pub fn create_router(
                             }
                         };
 
+                        tracing::debug!(
+                            "Ingress check took {:?} - peer: {:?}, xff: {:?}, allowed: {}",
+                            start.elapsed(),
+                            peer_ip.map(|ip| ip.to_string()),
+                            forwarded_for,
+                            is_allowed
+                        );
+
                         if !is_allowed {
                             warn!(
                                 "Rejected request - peer IP: {:?}, X-Forwarded-For: {:?}",
@@ -1450,7 +1460,19 @@ pub fn create_router(
                             return Err(StatusCode::FORBIDDEN);
                         }
                     }
-                    Ok(next.run(req).await)
+                    
+                    let check_elapsed = start.elapsed();
+                    let result = next.run(req).await;
+                    let total_elapsed = start.elapsed();
+                    
+                    tracing::debug!(
+                        "Request timing - middleware check: {:?}, handler: {:?}, total: {:?}",
+                        check_elapsed,
+                        total_elapsed - check_elapsed,
+                        total_elapsed
+                    );
+                    
+                    Ok(result)
                 }
             },
         ));
