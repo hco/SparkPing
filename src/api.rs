@@ -1354,8 +1354,9 @@ pub async fn start_discovery() -> Sse<impl Stream<Item = Result<Event, Infallibl
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-/// Home Assistant ingress IP address
-const HA_INGRESS_IP: &str = "172.30.32.2";
+/// Home Assistant ingress IP addresses
+/// The ingress gateway can be at either 172.30.32.1 or 172.30.32.2 depending on the setup
+const HA_INGRESS_IPS: &[&str] = &["172.30.32.1", "172.30.32.2"];
 
 /// Create the API router
 pub fn create_router(
@@ -1399,7 +1400,7 @@ pub fn create_router(
 
     // Apply IP filtering middleware if home_assistant_ingress_only is enabled
     if ingress_only_enabled {
-        info!("Home Assistant ingress-only mode enabled - restricting access to {}", HA_INGRESS_IP);
+        info!("Home Assistant ingress-only mode enabled - restricting access to {:?}", HA_INGRESS_IPS);
         // Create a middleware that captures the ingress_only_enabled value
         router = router.layer(axum::middleware::from_fn(
             move |req: axum::http::Request<axum::body::Body>,
@@ -1409,8 +1410,8 @@ pub fn create_router(
                     if ingress_enabled {
                         // Determine the remote peer IP from the connection info.
                         // In Home Assistant ingress mode, the TCP peer should be the
-                        // supervisor's ingress proxy (typically 172.30.32.2). The
-                        // original client (browser) IP is usually forwarded via
+                        // supervisor's ingress proxy (typically 172.30.32.1 or 172.30.32.2).
+                        // The original client (browser) IP is usually forwarded via
                         // X-Forwarded-For; we log it for diagnostics but do not use
                         // it for access control.
                         let peer_ip = req
@@ -1424,18 +1425,26 @@ pub fn create_router(
                             .and_then(|h| h.to_str().ok())
                             .map(|s| s.to_string());
 
-                        if let Some(ip) = peer_ip {
-                            if ip.to_string() != HA_INGRESS_IP {
-                                warn!(
-                                    "Rejected request from non-ingress peer {} (X-Forwarded-For: {:?})",
-                                    ip, forwarded_for
-                                );
-                                return Err(StatusCode::FORBIDDEN);
-                            }
+                        // Check if peer IP matches any of the allowed ingress IPs
+                        let is_allowed = if let Some(ip) = peer_ip {
+                            let ip_str = ip.to_string();
+                            HA_INGRESS_IPS.contains(&ip_str.as_str())
                         } else {
-                            // If we cannot determine the peer IP at all, be safe and deny.
+                            // Fallback: if ConnectInfo is not available, check X-Forwarded-For
+                            // The last IP in the chain should be the ingress gateway
+                            if let Some(ref xff) = forwarded_for {
+                                let ips: Vec<&str> = xff.split(',').map(|s| s.trim()).collect();
+                                // Check if any IP in the chain matches an ingress IP
+                                ips.iter().any(|ip| HA_INGRESS_IPS.contains(ip))
+                            } else {
+                                false
+                            }
+                        };
+
+                        if !is_allowed {
                             warn!(
-                                "No peer IP (ConnectInfo missing); X-Forwarded-For: {:?}. Rejecting request in ingress-only mode.",
+                                "Rejected request - peer IP: {:?}, X-Forwarded-For: {:?}",
+                                peer_ip.map(|ip| ip.to_string()),
                                 forwarded_for
                             );
                             return Err(StatusCode::FORBIDDEN);

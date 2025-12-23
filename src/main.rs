@@ -496,11 +496,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("ERROR: {}", msg);
                 panic!("{}", msg);
             });
-        axum::serve(listener, app).await.unwrap_or_else(|e| {
-            let msg = format!("HTTP server error: {}", e);
-            eprintln!("ERROR: {}", msg);
-            panic!("{}", msg);
-        });
+        // Use IntoMakeServiceWithConnectInfo to enable connection info tracking
+        // This allows middleware to access the peer IP address via ConnectInfo
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap_or_else(|e| {
+                let msg = format!("HTTP server error: {}", e);
+                eprintln!("ERROR: {}", msg);
+                panic!("{}", msg);
+            });
     });
 
     // Set up file watcher for config reloading
