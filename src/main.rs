@@ -284,10 +284,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
     info!("Configuration loaded successfully from: {:?}", args.config);
+    
+    // Log version information
+    info!("Version: {}", env!("CARGO_PKG_VERSION"));
+    
+    // Log hostname
+    let hostname = hostname::get()
+        .ok()
+        .and_then(|h| h.to_str().map(|s| s.to_string()))
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .unwrap_or_else(|| "unknown".to_string());
+    info!("Hostname: {}", hostname);
+    
+    // Log local IP addresses
+    match if_addrs::get_if_addrs() {
+        Ok(interfaces) => {
+            let mut ipv4_addrs = Vec::new();
+            let mut ipv6_addrs = Vec::new();
+            
+            for iface in interfaces {
+                if iface.is_loopback() {
+                    continue;
+                }
+                match iface.ip() {
+                    std::net::IpAddr::V4(ip) => ipv4_addrs.push((iface.name.clone(), ip.to_string())),
+                    std::net::IpAddr::V6(ip) => ipv6_addrs.push((iface.name.clone(), ip.to_string())),
+                }
+            }
+            
+            if !ipv4_addrs.is_empty() {
+                info!("Local IPv4 addresses:");
+                for (name, addr) in &ipv4_addrs {
+                    info!("  {}: {}", name, addr);
+                }
+            }
+            if !ipv6_addrs.is_empty() {
+                info!("Local IPv6 addresses:");
+                for (name, addr) in &ipv6_addrs {
+                    info!("  {}: {}", name, addr);
+                }
+            }
+            if ipv4_addrs.is_empty() && ipv6_addrs.is_empty() {
+                info!("No non-loopback network interfaces found");
+            }
+        }
+        Err(e) => {
+            warn!("Failed to enumerate network interfaces: {}", e);
+        }
+    }
+    
     info!(
         "Server: {}:{}",
         app_config.server.host, app_config.server.port
     );
+    if app_config.server.home_assistant_ingress_only {
+        info!("Home Assistant ingress-only mode: enabled (restricting access to 172.30.32.2)");
+    }
     debug!(
         "Logging: level={}, file={}",
         app_config.logging.level, app_config.logging.file

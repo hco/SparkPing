@@ -1,6 +1,8 @@
 [server]
 host = "0.0.0.0"
 port = 8080
+# Restrict access to only Home Assistant ingress IP (172.30.32.2) for security
+home_assistant_ingress_only = true
 
 [logging]
 level = "info"

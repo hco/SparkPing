@@ -41,6 +41,9 @@ pub enum SocketType {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    /// When true, restrict access to only Home Assistant ingress IP (172.30.32.2)
+    #[serde(default)]
+    pub home_assistant_ingress_only: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

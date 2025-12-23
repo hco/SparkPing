@@ -5,7 +5,7 @@ use crate::ping::perform_ping;
 use crate::storage::write_ping_result;
 use async_stream::stream;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, ConnectInfo},
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -14,6 +14,7 @@ use axum::{
     routing::{get, put},
     Router,
 };
+use std::net::SocketAddr;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -1353,6 +1354,9 @@ pub async fn start_discovery() -> Sse<impl Stream<Item = Result<Event, Infallibl
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+/// Home Assistant ingress IP address
+const HA_INGRESS_IP: &str = "172.30.32.2";
+
 /// Create the API router
 pub fn create_router(
     storage: Arc<dyn Storage>,
@@ -1378,6 +1382,12 @@ pub fn create_router(
         config_path: config_file_path,
     };
 
+    // Check if ingress-only filtering is enabled
+    let ingress_only_enabled = {
+        let config = state.config.read().ok();
+        config.map(|c| c.server.home_assistant_ingress_only).unwrap_or(false)
+    };
+
     let mut router = Router::new()
         .route("/api/ping/data", get(get_ping_data))
         .route("/api/ping/aggregated", get(get_ping_aggregated))
@@ -1386,6 +1396,47 @@ pub fn create_router(
         .route("/api/storage/stats", get(get_storage_stats))
         .route("/api/discovery/start", get(start_discovery))
         .with_state(state);
+
+    // Apply IP filtering middleware if enabled
+    if ingress_only_enabled {
+        info!("Home Assistant ingress-only mode enabled - restricting access to {}", HA_INGRESS_IP);
+        // Create a middleware that captures the ingress_only_enabled value
+        router = router.layer(axum::middleware::from_fn(
+            move |req: axum::http::Request<axum::body::Body>,
+                  next: axum::middleware::Next| {
+                let ingress_enabled = ingress_only_enabled;
+                async move {
+                    if ingress_enabled {
+                        // Extract client IP from RemoteAddr extension or X-Forwarded-For header
+                        let client_ip = req
+                            .extensions()
+                            .get::<ConnectInfo<SocketAddr>>()
+                            .map(|ci| ci.ip())
+                            .or_else(|| {
+                                // Fallback: try to get from X-Forwarded-For header
+                                req.headers()
+                                    .get("x-forwarded-for")
+                                    .and_then(|h| h.to_str().ok())
+                                    .and_then(|s| s.split(',').next())
+                                    .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+                            });
+
+                        if let Some(ip) = client_ip {
+                            // Check if IP matches Home Assistant ingress IP
+                            if ip.to_string() != HA_INGRESS_IP {
+                                warn!("Rejected request from non-ingress IP: {}", ip);
+                                return Err(StatusCode::FORBIDDEN);
+                            }
+                        } else {
+                            warn!("Could not determine client IP, rejecting request");
+                            return Err(StatusCode::FORBIDDEN);
+                        }
+                    }
+                    Ok(next.run(req).await)
+                }
+            },
+        ));
+    }
 
     // Add static file serving if static directory is provided
     if let Some(static_path) = static_dir {

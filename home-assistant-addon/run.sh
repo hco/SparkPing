@@ -39,6 +39,15 @@ sed -i "s/^level = .*/level = \"$LOG_LEVEL\"/" "$CONFIG_PATH"
 # Ensure host is 0.0.0.0 for Ingress
 sed -i 's/^host = .*/host = "0.0.0.0"/' "$CONFIG_PATH"
 
+# Ensure home_assistant_ingress_only is enabled for security
+if ! grep -q '^home_assistant_ingress_only' "$CONFIG_PATH"; then
+    # Add it after the port line
+    sed -i '/^port = /a home_assistant_ingress_only = true' "$CONFIG_PATH"
+else
+    # Update it if it exists
+    sed -i 's/^home_assistant_ingress_only = .*/home_assistant_ingress_only = true/' "$CONFIG_PATH"
+fi
+
 # Ensure required directories exist
 mkdir -p /data/tsink-data
 mkdir -p "$(dirname "$(grep '^file = ' "$CONFIG_PATH" | cut -d'"' -f2)")" 2>/dev/null || true
