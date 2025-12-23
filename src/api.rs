@@ -1397,7 +1397,7 @@ pub fn create_router(
         .route("/api/discovery/start", get(start_discovery))
         .with_state(state);
 
-    // Apply IP filtering middleware if enabled
+    // Apply IP filtering middleware if home_assistant_ingress_only is enabled
     if ingress_only_enabled {
         info!("Home Assistant ingress-only mode enabled - restricting access to {}", HA_INGRESS_IP);
         // Create a middleware that captures the ingress_only_enabled value
@@ -1407,28 +1407,37 @@ pub fn create_router(
                 let ingress_enabled = ingress_only_enabled;
                 async move {
                     if ingress_enabled {
-                        // Extract client IP from RemoteAddr extension or X-Forwarded-For header
-                        let client_ip = req
+                        // Determine the remote peer IP from the connection info.
+                        // In Home Assistant ingress mode, the TCP peer should be the
+                        // supervisor's ingress proxy (typically 172.30.32.2). The
+                        // original client (browser) IP is usually forwarded via
+                        // X-Forwarded-For; we log it for diagnostics but do not use
+                        // it for access control.
+                        let peer_ip = req
                             .extensions()
                             .get::<ConnectInfo<SocketAddr>>()
-                            .map(|ci| ci.ip())
-                            .or_else(|| {
-                                // Fallback: try to get from X-Forwarded-For header
-                                req.headers()
-                                    .get("x-forwarded-for")
-                                    .and_then(|h| h.to_str().ok())
-                                    .and_then(|s| s.split(',').next())
-                                    .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
-                            });
+                            .map(|ci| ci.ip());
 
-                        if let Some(ip) = client_ip {
-                            // Check if IP matches Home Assistant ingress IP
+                        let forwarded_for = req
+                            .headers()
+                            .get("x-forwarded-for")
+                            .and_then(|h| h.to_str().ok())
+                            .map(|s| s.to_string());
+
+                        if let Some(ip) = peer_ip {
                             if ip.to_string() != HA_INGRESS_IP {
-                                warn!("Rejected request from non-ingress IP: {}", ip);
+                                warn!(
+                                    "Rejected request from non-ingress peer {} (X-Forwarded-For: {:?})",
+                                    ip, forwarded_for
+                                );
                                 return Err(StatusCode::FORBIDDEN);
                             }
                         } else {
-                            warn!("Could not determine client IP, rejecting request");
+                            // If we cannot determine the peer IP at all, be safe and deny.
+                            warn!(
+                                "No peer IP (ConnectInfo missing); X-Forwarded-For: {:?}. Rejecting request in ingress-only mode.",
+                                forwarded_for
+                            );
                             return Err(StatusCode::FORBIDDEN);
                         }
                     }
