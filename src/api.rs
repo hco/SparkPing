@@ -1358,6 +1358,20 @@ pub async fn start_discovery() -> Sse<impl Stream<Item = Result<Event, Infallibl
 /// The ingress gateway can be at either 172.30.32.1 or 172.30.32.2 depending on the setup
 const HA_INGRESS_IPS: &[&str] = &["172.30.32.1", "172.30.32.2"];
 
+/// Check if an IP address string is an allowed Home Assistant ingress IP
+fn is_allowed_ingress_ip(ip: &str) -> bool {
+    HA_INGRESS_IPS.contains(&ip)
+}
+
+/// Check if any IP in an X-Forwarded-For header matches an allowed ingress IP
+/// The header format is: "client_ip, proxy1_ip, proxy2_ip, ..."
+fn check_xff_contains_ingress_ip(xff_header: &str) -> bool {
+    xff_header
+        .split(',')
+        .map(|s| s.trim())
+        .any(|ip| is_allowed_ingress_ip(ip))
+}
+
 /// Create the API router
 pub fn create_router(
     storage: Arc<dyn Storage>,
@@ -1429,15 +1443,11 @@ pub fn create_router(
 
                         // Check if peer IP matches any of the allowed ingress IPs
                         let is_allowed = if let Some(ip) = peer_ip {
-                            let ip_str = ip.to_string();
-                            HA_INGRESS_IPS.contains(&ip_str.as_str())
+                            is_allowed_ingress_ip(&ip.to_string())
                         } else {
                             // Fallback: if ConnectInfo is not available, check X-Forwarded-For
-                            // The last IP in the chain should be the ingress gateway
                             if let Some(ref xff) = forwarded_for {
-                                let ips: Vec<&str> = xff.split(',').map(|s| s.trim()).collect();
-                                // Check if any IP in the chain matches an ingress IP
-                                ips.iter().any(|ip| HA_INGRESS_IPS.contains(ip))
+                                check_xff_contains_ingress_ip(xff)
                             } else {
                                 false
                             }
@@ -1490,4 +1500,79 @@ pub fn create_router(
     }
 
     router
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_allowed_ingress_ip_valid_ips() {
+        // Both known Home Assistant ingress IPs should be allowed
+        assert!(is_allowed_ingress_ip("172.30.32.1"));
+        assert!(is_allowed_ingress_ip("172.30.32.2"));
+    }
+
+    #[test]
+    fn test_is_allowed_ingress_ip_invalid_ips() {
+        // Other IPs should be rejected
+        assert!(!is_allowed_ingress_ip("192.168.1.1"));
+        assert!(!is_allowed_ingress_ip("10.0.0.1"));
+        assert!(!is_allowed_ingress_ip("172.30.32.3"));
+        assert!(!is_allowed_ingress_ip("127.0.0.1"));
+        assert!(!is_allowed_ingress_ip("0.0.0.0"));
+    }
+
+    #[test]
+    fn test_is_allowed_ingress_ip_edge_cases() {
+        // Empty string should be rejected
+        assert!(!is_allowed_ingress_ip(""));
+        // Partial matches should be rejected
+        assert!(!is_allowed_ingress_ip("172.30.32"));
+        assert!(!is_allowed_ingress_ip("172.30.32.10"));
+        // Whitespace should not be trimmed (caller's responsibility)
+        assert!(!is_allowed_ingress_ip(" 172.30.32.1"));
+        assert!(!is_allowed_ingress_ip("172.30.32.1 "));
+    }
+
+    #[test]
+    fn test_check_xff_contains_ingress_ip_single_ip() {
+        // Single ingress IP in header
+        assert!(check_xff_contains_ingress_ip("172.30.32.1"));
+        assert!(check_xff_contains_ingress_ip("172.30.32.2"));
+        // Single non-ingress IP
+        assert!(!check_xff_contains_ingress_ip("192.168.1.1"));
+    }
+
+    #[test]
+    fn test_check_xff_contains_ingress_ip_chain() {
+        // Typical chain: client -> ingress proxy
+        assert!(check_xff_contains_ingress_ip("192.168.83.217, 172.30.32.1"));
+        assert!(check_xff_contains_ingress_ip("192.168.83.217, 172.30.32.2"));
+        // Chain without ingress IP
+        assert!(!check_xff_contains_ingress_ip("192.168.83.217, 10.0.0.1"));
+    }
+
+    #[test]
+    fn test_check_xff_contains_ingress_ip_multiple_proxies() {
+        // Multiple proxies, ingress in the middle
+        assert!(check_xff_contains_ingress_ip("192.168.1.1, 172.30.32.1, 10.0.0.1"));
+        // Multiple proxies, ingress at the end
+        assert!(check_xff_contains_ingress_ip("192.168.1.1, 10.0.0.1, 172.30.32.2"));
+        // Multiple proxies, no ingress
+        assert!(!check_xff_contains_ingress_ip("192.168.1.1, 10.0.0.1, 10.0.0.2"));
+    }
+
+    #[test]
+    fn test_check_xff_contains_ingress_ip_whitespace_handling() {
+        // Extra whitespace should be handled
+        assert!(check_xff_contains_ingress_ip("  172.30.32.1  "));
+        assert!(check_xff_contains_ingress_ip("192.168.1.1,   172.30.32.1"));
+        assert!(check_xff_contains_ingress_ip("192.168.1.1 , 172.30.32.1 , 10.0.0.1"));
+    }
+
+    #[test]
+    fn test_check_xff_contains_ingress_ip_empty() {
+        assert!(!check_xff_contains_ingress_ip(""));
+    }
 }
