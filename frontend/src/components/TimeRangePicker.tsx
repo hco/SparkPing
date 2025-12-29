@@ -20,6 +20,15 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -35,11 +44,25 @@ import {
   isLiveRange,
   createDefaultTimeRange,
 } from '@/utils/timeRangeUtils';
+import { useIsSmScreen, useIsMdScreen, useIsLgScreen } from '@/hooks/useMediaQuery';
 import type { DateRange } from 'react-day-picker';
 
 // Preset groups for visual organization
 const QUICK_PRESETS: PresetValue[] = ['5m', '15m', '30m', '1h', '3h', '6h'];
 const EXTENDED_PRESETS: PresetValue[] = ['12h', '24h', '7d', '30d'];
+// Preset labels for the dropdown
+const PRESET_LABELS: Record<PresetValue, string> = {
+  '5m': '5 minutes',
+  '15m': '15 minutes',
+  '30m': '30 minutes',
+  '1h': '1 hour',
+  '3h': '3 hours',
+  '6h': '6 hours',
+  '12h': '12 hours',
+  '24h': '24 hours',
+  '7d': '7 days',
+  '30d': '30 days',
+};
 
 interface TimeRangePickerProps {
   value: TimeRange;
@@ -71,6 +94,11 @@ export function TimeRangePicker({
   const [customDateRange, setCustomDateRange] = React.useState<DateRange | undefined>();
   const [customTimeFrom, setCustomTimeFrom] = React.useState('00:00');
   const [customTimeTo, setCustomTimeTo] = React.useState('23:59');
+
+  // Responsive breakpoints
+  const isSmScreen = useIsSmScreen();
+  const isMdScreen = useIsMdScreen();
+  const isLgScreen = useIsLgScreen();
 
   const isLive = isLiveRange(value);
   const resolvedRange = resolveTimeRange(value);
@@ -167,12 +195,17 @@ export function TimeRangePicker({
 
   const currentPreset = value.type === 'preset' ? value.preset : null;
 
+  // Responsive button sizes for better touch targets
+  const buttonSize = isSmScreen ? 'h-8 w-8' : 'h-10 w-10';
+  const iconSize = isSmScreen ? 'h-4 w-4' : 'h-5 w-5';
+
   return (
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          'flex items-center gap-2 p-2 rounded-lg border bg-card/50 backdrop-blur-sm',
+          'flex flex-wrap items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg border bg-card/50 backdrop-blur-sm',
           'shadow-sm transition-all duration-200',
+          'overflow-x-auto',
           className
         )}
       >
@@ -182,10 +215,10 @@ export function TimeRangePicker({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className={cn(buttonSize, 'shrink-0')}
               onClick={() => onChange(shiftTimeRange(value, 'backward'))}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className={iconSize} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -193,55 +226,84 @@ export function TimeRangePicker({
           </TooltipContent>
         </Tooltip>
 
-        {/* Quick presets */}
-        <ToggleGroup
-          type="single"
-          value={currentPreset || ''}
-          onValueChange={handlePresetChange}
-          className="hidden sm:flex"
-        >
-          {QUICK_PRESETS.map((preset) => (
-            <ToggleGroupItem
-              key={preset}
-              value={preset}
-              size="sm"
-              className={cn(
-                'px-2.5 h-8 text-xs font-medium transition-colors',
-                'data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
-                'hover:bg-muted'
-              )}
-            >
-              {preset}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        {/* Mobile: Dropdown selector for all presets */}
+        {!isSmScreen && (
+          <Select value={currentPreset || ''} onValueChange={handlePresetChange}>
+            <SelectTrigger size="sm" className="h-10 min-w-[70px]">
+              <SelectValue placeholder="Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Quick</SelectLabel>
+                {QUICK_PRESETS.map((preset) => (
+                  <SelectItem key={preset} value={preset}>
+                    {PRESET_LABELS[preset]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Extended</SelectLabel>
+                {EXTENDED_PRESETS.map((preset) => (
+                  <SelectItem key={preset} value={preset}>
+                    {PRESET_LABELS[preset]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Desktop sm+: Quick presets as toggle group */}
+        {isSmScreen && (
+          <ToggleGroup
+            type="single"
+            value={currentPreset || ''}
+            onValueChange={handlePresetChange}
+          >
+            {QUICK_PRESETS.map((preset) => (
+              <ToggleGroupItem
+                key={preset}
+                value={preset}
+                size="sm"
+                className={cn(
+                  'px-2.5 h-8 text-xs font-medium transition-colors',
+                  'data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
+                  'hover:bg-muted'
+                )}
+              >
+                {preset}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
 
         {!compact && (
           <>
-            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+            {isSmScreen && <Separator orientation="vertical" className="h-6" />}
 
-            {/* Extended presets dropdown */}
-            <ToggleGroup
-              type="single"
-              value={currentPreset || ''}
-              onValueChange={handlePresetChange}
-              className="hidden md:flex"
-            >
-              {EXTENDED_PRESETS.map((preset) => (
-                <ToggleGroupItem
-                  key={preset}
-                  value={preset}
-                  size="sm"
-                  className={cn(
-                    'px-2.5 h-8 text-xs font-medium transition-colors',
-                    'data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
-                    'hover:bg-muted'
-                  )}
-                >
-                  {preset}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            {/* Extended presets - md+ only */}
+            {isMdScreen && (
+              <ToggleGroup
+                type="single"
+                value={currentPreset || ''}
+                onValueChange={handlePresetChange}
+              >
+                {EXTENDED_PRESETS.map((preset) => (
+                  <ToggleGroupItem
+                    key={preset}
+                    value={preset}
+                    size="sm"
+                    className={cn(
+                      'px-2.5 h-8 text-xs font-medium transition-colors',
+                      'data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
+                      'hover:bg-muted'
+                    )}
+                  >
+                    {preset}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            )}
           </>
         )}
 
@@ -254,17 +316,23 @@ export function TimeRangePicker({
               variant={value.type === 'custom' ? 'secondary' : 'ghost'}
               size="sm"
               className={cn(
-                'h-8 gap-2 px-3 font-medium',
+                isSmScreen ? 'h-8' : 'h-10',
+                'gap-2 px-3 font-medium',
                 value.type === 'custom' && 'bg-secondary'
               )}
             >
-              <CalendarIcon className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">
+              <CalendarIcon className={cn(isSmScreen ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+              <span className={cn(isLgScreen ? 'inline' : 'hidden')}>
                 {value.type === 'custom' ? getTimeRangeLabel(value) : 'Custom'}
               </span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
+          <PopoverContent
+            className="w-auto p-0 max-w-[95vw]"
+            align="end"
+            sideOffset={8}
+            collisionPadding={16}
+          >
             <div className="p-4 space-y-4">
               <div className="space-y-2">
                 <h4 className="font-medium text-sm">Select Date Range</h4>
@@ -272,7 +340,7 @@ export function TimeRangePicker({
                   mode="range"
                   selected={customDateRange}
                   onSelect={setCustomDateRange}
-                  numberOfMonths={2}
+                  numberOfMonths={isMdScreen ? 2 : 1}
                   disabled={(date) => date > new Date()}
                   className="rounded-md border"
                 />
@@ -337,11 +405,11 @@ export function TimeRangePicker({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className={cn(buttonSize, 'shrink-0')}
               onClick={() => onChange(shiftTimeRange(value, 'forward'))}
               disabled={isLive}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className={iconSize} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -351,41 +419,43 @@ export function TimeRangePicker({
 
         {!compact && (
           <>
-            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+            {isSmScreen && <Separator orientation="vertical" className="h-6" />}
 
-            {/* Zoom controls */}
-            <div className="hidden sm:flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => onChange(zoomTimeRange(value, 'out'))}
-                  >
-                    <ZoomOut className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Zoom out (-)</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => onChange(zoomTimeRange(value, 'in'))}
-                  >
-                    <ZoomIn className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Zoom in (+)</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
+            {/* Zoom controls - sm+ */}
+            {isSmScreen && (
+              <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onChange(zoomTimeRange(value, 'out'))}
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Zoom out (-)</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onChange(zoomTimeRange(value, 'in'))}
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Zoom in (+)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
 
             <Separator orientation="vertical" className="h-6" />
 
@@ -397,7 +467,8 @@ export function TimeRangePicker({
                     variant={autoRefresh ? 'default' : 'ghost'}
                     size="sm"
                     className={cn(
-                      'h-8 gap-2 px-3 font-medium transition-all',
+                      isSmScreen ? 'h-8' : 'h-10',
+                      'gap-2 px-3 font-medium transition-all',
                       autoRefresh && 'bg-emerald-600 hover:bg-emerald-700 text-white'
                     )}
                     onClick={() => onAutoRefreshChange(!autoRefresh)}
@@ -408,12 +479,12 @@ export function TimeRangePicker({
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
                         </span>
-                        <span className="hidden sm:inline">Live</span>
+                        <span className={cn(isSmScreen ? 'inline' : 'hidden')}>Live</span>
                       </>
                     ) : (
                       <>
-                        <Play className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Live</span>
+                        <Play className={cn(isSmScreen ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+                        <span className={cn(isSmScreen ? 'inline' : 'hidden')}>Live</span>
                       </>
                     )}
                   </Button>
@@ -424,9 +495,9 @@ export function TimeRangePicker({
               </Tooltip>
             )}
 
-            {/* Refresh interval selector (only when live) */}
-            {autoRefresh && onRefreshIntervalChange && (
-              <div className="hidden lg:flex items-center gap-1.5">
+            {/* Refresh interval selector (only when live) - lg+ */}
+            {autoRefresh && onRefreshIntervalChange && isLgScreen && (
+              <div className="flex items-center gap-1.5">
                 <Input
                   type="number"
                   min={1}
@@ -448,11 +519,11 @@ export function TimeRangePicker({
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn('h-8 w-8 shrink-0', loading && 'animate-spin')}
+                className={cn(buttonSize, 'shrink-0', loading && 'animate-spin')}
                 onClick={onRefresh}
                 disabled={loading}
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className={iconSize} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
