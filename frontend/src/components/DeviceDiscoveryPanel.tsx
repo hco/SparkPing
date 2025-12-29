@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Document } from 'flexsearch';
 import { parseDeviceInfoFromServices, type DeviceInfo } from '@/lib/deviceParser';
 import { getBrandIcon } from '@/lib/brandIcons';
@@ -336,13 +343,13 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
 
 
   return (
-    <div className="bg-card rounded-lg shadow border border-border p-6">
-      <div className="flex justify-between items-center mb-4">
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Discover Devices</h2>
-          <p className="text-sm text-muted-foreground">
+          <CardTitle className="text-xl">Discover Devices</CardTitle>
+          <CardDescription>
             Find devices on your local network via mDNS
-          </p>
+          </CardDescription>
         </div>
         <div className="flex gap-2">
           {devices.length > 0 && !isRunning && (
@@ -363,7 +370,8 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
             </Button>
           )}
         </div>
-      </div>
+      </CardHeader>
+      <CardContent>
 
       {/* Status message */}
       {message && (
@@ -571,7 +579,8 @@ export function DeviceDiscoveryPanel({ existingAddresses }: DeviceDiscoveryPanel
           </Button>
         </div>
       )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 

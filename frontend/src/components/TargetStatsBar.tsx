@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Card, CardContent } from '@/components/ui/card';
 import { chartColorClasses, getPacketLossClass } from '@/lib/chartColors';
 import type { TargetStats } from '@/hooks/useTargetStats';
 
@@ -19,8 +20,8 @@ interface TargetStatsBarProps {
  */
 export function TargetStatsBar({ stats, dataTimeRange }: TargetStatsBarProps) {
   return (
-    <div className="bg-card px-4 py-3 rounded-lg shadow border border-border">
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
+    <Card className="py-3">
+      <CardContent className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
         <span className="font-semibold text-foreground">Latency:</span>
         <span>
           <span className="text-muted-foreground">Avg</span>{' '}
@@ -95,8 +96,8 @@ export function TargetStatsBar({ stats, dataTimeRange }: TargetStatsBarProps) {
             </span>
           </>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 

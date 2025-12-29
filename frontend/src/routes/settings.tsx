@@ -6,6 +6,7 @@ import type { Target, TargetRequest, TargetStorageStats } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
 import { DeviceDiscoveryPanel } from '@/components/DeviceDiscoveryPanel'
 
@@ -148,17 +149,17 @@ function Settings() {
           </div>
         )}
 
-        <div className="bg-card rounded-lg shadow border border-border p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-foreground">Targets</h2>
+        <Card className="mb-6">
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-xl">Targets</CardTitle>
             {!showAddForm && !editingId && (
               <Button onClick={() => setShowAddForm(true)}>
                 <Plus className="size-4" />
                 Add Target
               </Button>
             )}
-          </div>
-
+          </CardHeader>
+          <CardContent>
           {isLoading ? (
             <div className="text-muted-foreground">Loading targets...</div>
           ) : targets && targets.length === 0 ? (
@@ -268,7 +269,8 @@ function Settings() {
               />
             </div>
           )}
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Device Discovery Section */}
         <DeviceDiscoveryPanel existingAddresses={existingAddresses} />
