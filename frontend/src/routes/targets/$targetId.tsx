@@ -32,6 +32,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 export const Route = createFileRoute('/targets/$targetId')({
   validateSearch: (search: Record<string, unknown>): TimeRangeSearchParams => {
@@ -159,49 +166,65 @@ function TargetDetails() {
         ) : hasData ? (
           <div className="space-y-6">
             {/* Smoke Chart */}
-            <div className="bg-card p-6 rounded-lg shadow border border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Latency Distribution (Smoke View)</h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                Visualizes individual ping results as smoke-like density, median RTT line, and packet loss severity bars
-              </p>
-              <div className="w-full" style={{ height: '580px' }}>
-                <D3SmokeChart data={targetData} height={580} />
-              </div>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl">Latency Distribution (Smoke View)</CardTitle>
+                <CardDescription>
+                  Visualizes individual ping results as smoke-like density, median RTT line, and packet loss severity bars
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="w-full" style={{ height: '580px' }}>
+                  <D3SmokeChart data={targetData} height={580} />
+                </div>
+              </CardContent>
+            </Card>
             {showLegacyCharts && (
               <>
-               <div className="bg-card p-6 rounded-lg shadow border border-border">
-                <h2 className="text-xl font-semibold text-foreground mb-4">Latency Overview</h2>
-                <div className="w-full" style={{ height: '500px' }}>
-                  <D3LatencyChart data={targetData} height={500} />
-                </div>
-             
-                <h2 className="text-xl font-semibold text-foreground mb-4">Packet Loss</h2>
-                <div className="w-full" style={{ height: '300px' }}>
-                  <D3PacketLossChart data={targetData} height={300} />
-                </div>
-                </div>
-              {/* Combined Chart - All Metrics */}
-                <div className="bg-card p-6 rounded-lg shadow border border-border">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Combined View - All Metrics</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Latency ranges shown as color-coded bars (avg markers) with packet loss intensity bars below
-                  </p>
-                  <div className="w-full" style={{ height: '500px' }}>
-                    <D3CombinedChart data={targetData} height={500} />
-                  </div>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Latency Overview</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="w-full" style={{ height: '500px' }}>
+                      <D3LatencyChart data={targetData} height={500} />
+                    </div>
+                    <h3 className="text-xl font-semibold text-foreground">Packet Loss</h3>
+                    <div className="w-full" style={{ height: '300px' }}>
+                      <D3PacketLossChart data={targetData} height={300} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Combined Chart - All Metrics */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Combined View - All Metrics</CardTitle>
+                    <CardDescription>
+                      Latency ranges shown as color-coded bars (avg markers) with packet loss intensity bars below
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="w-full" style={{ height: '500px' }}>
+                      <D3CombinedChart data={targetData} height={500} />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* RRD-Style Chart */}
-                <div className="bg-card p-6 rounded-lg shadow border border-border">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Performance Overview (RRD-Style)</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Classic network monitoring visualization with latency range shading, average line, and color-coded packet loss indicators
-                  </p>
-                  <div className="w-full" style={{ height: '500px' }}>
-                    <D3RRDStyleChart data={targetData} height={500} />
-                  </div>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Performance Overview (RRD-Style)</CardTitle>
+                    <CardDescription>
+                      Classic network monitoring visualization with latency range shading, average line, and color-coded packet loss indicators
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="w-full" style={{ height: '500px' }}>
+                      <D3RRDStyleChart data={targetData} height={500} />
+                    </div>
+                  </CardContent>
+                </Card>
               </>
             )}
 
@@ -218,18 +241,20 @@ function TargetDetails() {
           <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ preset: '30d', from: undefined, to: undefined })} />
         ) : null}
         {/* Chart Options */}
-        <div className="bg-card p-4 rounded-lg border shadow-sm mt-6">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="separate-charts"
-              checked={showLegacyCharts}
-              onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
-            />
-            <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
-              Show Legacy Charts
-            </Label>
-          </div>
-        </div>
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="separate-charts"
+                checked={showLegacyCharts}
+                onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
+              />
+              <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
+                Show Legacy Charts
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
