@@ -71,6 +71,22 @@ export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
           Hide the slowest 1% of pings to focus on typical latency values.
         </TooltipContent>
       </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visibility.showStatsPanel}
+              onChange={(e) => onToggle('showStatsPanel', e.target.checked)}
+              className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary"
+            />
+            <span className="ml-2 text-sm text-muted-foreground">Stats</span>
+          </label>
+        </TooltipTrigger>
+        <TooltipContent>
+          Show or hide the statistics panel on the right side of the chart.
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }

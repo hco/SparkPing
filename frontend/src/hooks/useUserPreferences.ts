@@ -9,6 +9,7 @@ export interface UserPreferences {
   showAvgLine: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
+  showStatsPanel: boolean;
   clipToP99: boolean;
 }
 
@@ -20,6 +21,7 @@ const defaultPreferences: UserPreferences = {
   showAvgLine: false,
   showSmokeBars: true,
   showPacketLoss: true,
+  showStatsPanel: false,
   clipToP99: false,
 };
 
@@ -55,6 +57,9 @@ function loadPreferences(): UserPreferences {
       showPacketLoss: typeof parsed.showPacketLoss === 'boolean'
         ? parsed.showPacketLoss
         : defaultPreferences.showPacketLoss,
+      showStatsPanel: typeof parsed.showStatsPanel === 'boolean'
+        ? parsed.showStatsPanel
+        : defaultPreferences.showStatsPanel,
       clipToP99: typeof parsed.clipToP99 === 'boolean'
         ? parsed.clipToP99
         : defaultPreferences.clipToP99,

@@ -49,6 +49,7 @@ export interface ChartVisibilityOptions {
   showAvgLine: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
+  showStatsPanel: boolean;
   clipToP99: boolean;
 }
 

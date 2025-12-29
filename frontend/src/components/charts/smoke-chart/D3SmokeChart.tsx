@@ -24,13 +24,14 @@ import {
 import { ChartControls } from './ChartControls';
 import { chartColors, getThemeColors } from '../../../lib/chartColors';
 
-const DEFAULT_MARGIN: ChartMargin = { top: 40, right: 150, bottom: 80, left: 80 };
+const STATS_PANEL_WIDTH = 150;
+const DEFAULT_MARGIN: ChartMargin = { top: 40, right: STATS_PANEL_WIDTH, bottom: 80, left: 80 };
+const COLLAPSED_MARGIN: ChartMargin = { top: 40, right: 20, bottom: 80, left: 80 };
 
 export function D3SmokeChart({
   data,
   width,
   height = 500,
-  margin = DEFAULT_MARGIN,
 }: D3SmokeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -46,6 +47,7 @@ export function D3SmokeChart({
     showAvgLine: preferences.showAvgLine,
     showSmokeBars: preferences.showSmokeBars,
     showPacketLoss: preferences.showPacketLoss,
+    showStatsPanel: preferences.showStatsPanel,
     clipToP99: preferences.clipToP99,
   }), [
     preferences.showMedianLine,
@@ -54,8 +56,15 @@ export function D3SmokeChart({
     preferences.showAvgLine,
     preferences.showSmokeBars,
     preferences.showPacketLoss,
+    preferences.showStatsPanel,
     preferences.clipToP99,
   ]);
+
+  // Use dynamic margin based on stats panel visibility
+  const effectiveMargin = useMemo(() => 
+    visibility.showStatsPanel ? DEFAULT_MARGIN : COLLAPSED_MARGIN,
+    [visibility.showStatsPanel]
+  );
 
   // Handle container resizing
   useEffect(() => {
@@ -94,8 +103,8 @@ export function D3SmokeChart({
     const bucketInterval = calculateBucketInterval(chartData);
 
     // Calculate dimensions
-    const innerWidth = dimensions.width - margin.left - margin.right;
-    const innerHeight = dimensions.height - margin.top - margin.bottom;
+    const innerWidth = dimensions.width - effectiveMargin.left - effectiveMargin.right;
+    const innerHeight = dimensions.height - effectiveMargin.top - effectiveMargin.bottom;
     const chartHeight = innerHeight - 40; // Reserve space for packet loss bars
 
     // Create SVG
@@ -106,7 +115,7 @@ export function D3SmokeChart({
 
     const g = svg
       .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`);
+      .attr('transform', `translate(${effectiveMargin.left},${effectiveMargin.top})`);
 
     const defs = svg.append('defs');
 
@@ -204,11 +213,13 @@ export function D3SmokeChart({
     }
 
     renderGrid({ g, scales, innerWidth, themeColors });
-    renderAxes({ g, scales, chartHeight, margin, timeExtent, themeColors });
+    renderAxes({ g, scales, chartHeight, margin: effectiveMargin, timeExtent, themeColors });
 
-    // Calculate and render statistics
+    // Calculate and render statistics (conditionally)
     const stats = calculateChartStats(chartData, validLatencyData);
-    renderStatsPanel({ g, stats, innerWidth, themeColors });
+    if (visibility.showStatsPanel) {
+      renderStatsPanel({ g, stats, innerWidth, themeColors });
+    }
 
     renderLegend({ g, chartHeight, visibility, themeColors });
 
@@ -223,7 +234,7 @@ export function D3SmokeChart({
     });
 
     return cleanup;
-  }, [data, dimensions.width, dimensions.height, margin, visibility, themeColors]);
+  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors]);
 
   const handleToggle = (key: keyof ChartVisibilityOptions, value: boolean) => {
     setPreference(key, value);
