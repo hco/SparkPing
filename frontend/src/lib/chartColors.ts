@@ -94,14 +94,6 @@ export function getThemeColors(isDark: boolean): ThemeColors {
   return isDark ? darkThemeColors : lightThemeColors;
 }
 
-/**
- * Detect if dark mode is active by checking for .dark class on document
- */
-function isDarkMode(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.documentElement.classList.contains('dark');
-}
-
 // Tailwind class equivalents for React components
 export const chartColorClasses = {
   // Latency metrics

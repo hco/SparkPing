@@ -143,22 +143,3 @@ export function useUserPreferences() {
     resetPreferences,
   };
 }
-
-/**
- * Hook for a single preference value (lighter weight for components that only need one)
- */
-function usePreference<K extends keyof UserPreferences>(key: K): [
-  UserPreferences[K],
-  (value: UserPreferences[K]) => void
-] {
-  const { preferences, setPreference } = useUserPreferences();
-  
-  const setValue = useCallback((value: UserPreferences[K]) => {
-    setPreference(key, value);
-  }, [key, setPreference]);
-
-  return [preferences[key], setValue];
-}
-
-
-

@@ -1,4 +1,4 @@
-import { format, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 
 // Preset time range options (relative)
 const PRESET_RANGES = [
@@ -24,19 +24,6 @@ export interface TimeRange {
   to?: Date; // undefined means "now" (live)
 }
 
-// Legacy type for backwards compatibility
-type TimeRangeOption = '1h' | '6h' | '12h' | '24h' | '7d' | '30d' | 'all';
-
-const TIME_RANGE_OPTIONS: { value: TimeRangeOption; label: string }[] = [
-  { value: '1h', label: 'Last 1 Hour' },
-  { value: '6h', label: 'Last 6 Hours' },
-  { value: '12h', label: 'Last 12 Hours' },
-  { value: '24h', label: 'Last 24 Hours' },
-  { value: '7d', label: 'Last 7 Days' },
-  { value: '30d', label: 'Last 30 Days' },
-  { value: 'all', label: 'All Time' },
-];
-
 export const BUCKET_DURATION_OPTIONS = [
   { value: '1s', label: '1 second' },
   { value: '5s', label: '5 seconds' },
@@ -48,7 +35,7 @@ export const BUCKET_DURATION_OPTIONS = [
   { value: '1h', label: '1 hour' },
 ] as const;
 
-type BucketDuration = (typeof BUCKET_DURATION_OPTIONS)[number]['value'];
+export type BucketDuration = (typeof BUCKET_DURATION_OPTIONS)[number]['value'];
 
 // Get the duration in milliseconds for a preset
 function getPresetDurationMs(preset: PresetValue): number {
@@ -100,24 +87,6 @@ export function getTimeRangeLabel(range: TimeRange): string {
   }
   
   return 'Select range';
-}
-
-// Get a short label for display in compact mode
-function getTimeRangeShortLabel(range: TimeRange): string {
-  if (range.type === 'preset') {
-    return range.preset || '1h';
-  }
-  
-  const { from, to } = resolveTimeRange(range);
-  const diffMinutes = differenceInMinutes(to, from);
-  
-  if (diffMinutes < 60) return `${diffMinutes}m`;
-  
-  const diffHours = differenceInHours(to, from);
-  if (diffHours < 24) return `${diffHours}h`;
-  
-  const diffDays = differenceInDays(to, from);
-  return `${diffDays}d`;
 }
 
 // Shift time range forward or backward
@@ -203,92 +172,6 @@ function findClosestPreset(durationMs: number): PresetValue | undefined {
   return closest;
 }
 
-// Convert new TimeRange to legacy format for API compatibility
-function timeRangeToLegacy(range: TimeRange): TimeRangeOption {
-  if (range.type === 'preset') {
-    const preset = range.preset || '1h';
-    // Map to closest legacy option
-    if (['5m', '15m', '30m', '1h'].includes(preset)) return '1h';
-    if (['3h', '6h'].includes(preset)) return '6h';
-    if (preset === '12h') return '12h';
-    if (preset === '24h') return '24h';
-    if (preset === '7d') return '7d';
-    if (preset === '30d') return '30d';
-    return '24h';
-  }
-  
-  // For custom ranges, find closest legacy option
-  const { from, to } = resolveTimeRange(range);
-  const diffHours = differenceInHours(to, from);
-  
-  if (diffHours <= 1) return '1h';
-  if (diffHours <= 6) return '6h';
-  if (diffHours <= 12) return '12h';
-  if (diffHours <= 24) return '24h';
-  if (diffHours <= 168) return '7d'; // 7 days
-  return '30d';
-}
-
-// Convert legacy option to new TimeRange format
-function legacyToTimeRange(legacy: TimeRangeOption): TimeRange {
-  const mapping: Record<TimeRangeOption, PresetValue | null> = {
-    '1h': '1h',
-    '6h': '6h',
-    '12h': '12h',
-    '24h': '24h',
-    '7d': '7d',
-    '30d': '30d',
-    'all': null,
-  };
-  
-  const preset = mapping[legacy];
-  if (!preset) {
-    return { type: 'preset', preset: '30d' };
-  }
-  return { type: 'preset', preset };
-}
-
-// Legacy functions for backwards compatibility
-function getTimeRangeSeconds(range: TimeRangeOption): number | null {
-  switch (range) {
-    case '1h': return 60 * 60;
-    case '6h': return 6 * 60 * 60;
-    case '12h': return 12 * 60 * 60;
-    case '24h': return 24 * 60 * 60;
-    case '7d': return 7 * 24 * 60 * 60;
-    case '30d': return 30 * 24 * 60 * 60;
-    case 'all': return null;
-    default: return 24 * 60 * 60;
-  }
-}
-
-function calculateTimeRangeQuery(range: TimeRangeOption): { from?: string; to?: number } {
-  if (range === 'all') {
-    return {};
-  }
-  return {
-    from: range,
-    to: undefined,
-  };
-}
-
-// Calculate time range query from new TimeRange format
-function calculateTimeRangeQueryNew(range: TimeRange): { from?: string; to?: number } {
-  if (range.type === 'preset') {
-    return {
-      from: range.preset,
-      to: undefined,
-    };
-  }
-  
-  // For custom ranges, return timestamps
-  const { from, to } = resolveTimeRange(range);
-  return {
-    from: Math.floor(from.getTime() / 1000).toString(),
-    to: Math.floor(to.getTime() / 1000),
-  };
-}
-
 // Check if range is "live" (tracking current time)
 export function isLiveRange(range: TimeRange): boolean {
   return range.type === 'preset' || !range.to;
@@ -342,8 +225,8 @@ export function validateTimeRangeSearch(
     : undefined;
   const from = typeof search.from === 'number' ? search.from : undefined;
   const to = typeof search.to === 'number' ? search.to : undefined;
-  const bucket = BUCKET_DURATION_VALUES.includes(search.bucket as string)
-    ? (search.bucket as string)
+  const bucket = BUCKET_DURATION_VALUES.includes(search.bucket as BucketDuration)
+    ? (search.bucket as BucketDuration)
     : defaults?.bucket ?? '10s';
   const refresh = typeof search.refresh === 'boolean' ? search.refresh : defaults?.refresh ?? true;
   const interval = typeof search.interval === 'number' && search.interval >= 1
@@ -414,7 +297,7 @@ export function timeRangeToSearchParams(range: TimeRange): Partial<TimeRangeSear
  */
 export function timeRangeToApiQuery(range: TimeRange): { from: string; to?: number } {
   if (range.type === 'preset') {
-    return { from: range.preset, to: undefined };
+    return { from: range.preset || '1h', to: undefined };
   }
   const resolved = resolveTimeRange(range);
   return {

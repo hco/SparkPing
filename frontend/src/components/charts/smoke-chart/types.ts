@@ -26,11 +26,6 @@ export interface ChartDataPoint {
   packetLossPercent: number;
 }
 
-interface ChartDimensions {
-  width: number;
-  height: number;
-}
-
 export interface ChartStats {
   medianRTT: number;
   avgRTT: number;
@@ -61,19 +56,3 @@ export interface ChartScales {
   xScale: d3.ScaleTime<number, number>;
   yScale: d3.ScaleLinear<number, number>;
 }
-
-interface ChartContext {
-  g: d3.Selection<SVGGElement, unknown, null, undefined>;
-  defs: d3.Selection<SVGDefsElement, unknown, null, undefined>;
-  scales: ChartScales;
-  dimensions: {
-    innerWidth: number;
-    innerHeight: number;
-    chartHeight: number;
-  };
-  chartData: ChartDataPoint[];
-  validLatencyData: ChartDataPoint[];
-  bucketInterval: number;
-}
-
-

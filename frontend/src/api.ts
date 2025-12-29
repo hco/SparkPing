@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { PingDataResponse, PingDataQuery, PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest, StorageStatsResponse } from './types';
+import type { PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest, StorageStatsResponse } from './types';
 import { getBasePath } from './lib/basePath';
 
 // Use dynamic base path for Home Assistant ingress support
@@ -11,29 +11,6 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-async function fetchPingData(query: PingDataQuery = {}): Promise<PingDataResponse> {
-  const params = new URLSearchParams();
-  
-  if (query.target) {
-    params.append('target', query.target);
-  }
-  if (query.from !== undefined) {
-    params.append('from', query.from.toString());
-  }
-  if (query.to !== undefined) {
-    params.append('to', query.to.toString());
-  }
-  if (query.metric && query.metric !== 'all') {
-    params.append('metric', query.metric);
-  }
-  if (query.limit !== undefined) {
-    params.append('limit', query.limit.toString());
-  }
-
-  const response = await apiClient.get<PingDataResponse>(`/api/ping/data?${params.toString()}`);
-  return response.data;
-}
 
 export async function fetchPingAggregated(query: PingAggregatedQuery = {}): Promise<PingAggregatedResponse> {
   const params = new URLSearchParams();

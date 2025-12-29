@@ -87,17 +87,3 @@ export function getBrandIcon(
   
   return null;
 }
-
-/**
- * Register a custom brand icon
- * 
- * @param manufacturer - Manufacturer name (normalized, lowercase)
- * @param icon - Icon component
- */
-function registerBrandIcon(
-  manufacturer: string,
-  icon: ComponentType<{ className?: string }>
-): void {
-  brandIconMap.set(manufacturer.toLowerCase().trim(), icon);
-}
-
