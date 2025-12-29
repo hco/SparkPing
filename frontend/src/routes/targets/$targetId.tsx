@@ -39,6 +39,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PageLayout } from '@/components/PageLayout';
 
 export const Route = createFileRoute('/targets/$targetId')({
   validateSearch: (search: Record<string, unknown>): TimeRangeSearchParams => {
@@ -111,9 +112,8 @@ function TargetDetails() {
   const isEmpty = aggregatedData && targetData.length === 0;
 
   return (
-    <div className="min-h-screen bg-background w-screen">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
+    <PageLayout>
+      <div className="mb-6">
           <Link
             to="/"
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
@@ -240,22 +240,21 @@ function TargetDetails() {
         ) : isEmpty ? (
           <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ preset: '30d', from: undefined, to: undefined })} />
         ) : null}
-        {/* Chart Options */}
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="separate-charts"
-                checked={showLegacyCharts}
-                onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
-              />
-              <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
-                Show Legacy Charts
-              </Label>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      {/* Chart Options */}
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="separate-charts"
+              checked={showLegacyCharts}
+              onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
+            />
+            <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
+              Show Legacy Charts
+            </Label>
+          </div>
+        </CardContent>
+      </Card>
+    </PageLayout>
   );
 }

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
 import { DeviceDiscoveryPanel } from '@/components/DeviceDiscoveryPanel'
+import { PageLayout } from '@/components/PageLayout'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -136,9 +137,8 @@ function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-background w-screen">
-      <div className="container mx-auto px-4 py-8">
-        <header className="mb-8">
+    <PageLayout>
+      <header className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your ping targets</p>
         </header>
@@ -272,10 +272,9 @@ function Settings() {
           </CardContent>
         </Card>
 
-        {/* Device Discovery Section */}
-        <DeviceDiscoveryPanel existingAddresses={existingAddresses} />
-      </div>
-    </div>
+      {/* Device Discovery Section */}
+      <DeviceDiscoveryPanel existingAddresses={existingAddresses} />
+    </PageLayout>
   )
 }
 

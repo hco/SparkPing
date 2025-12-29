@@ -3,6 +3,7 @@ import { useDashboardData } from '@/hooks/useDashboardData'
 import { Sparkline, PacketLossSparkline } from '@/components/Sparkline'
 import { LoadingState } from '@/components/LoadingState'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
+import { PageLayout } from '@/components/PageLayout'
 import { chartColors, getPacketLossClass, getLatencyStatusColor } from '@/lib/chartColors'
 import { RefreshCw, Settings, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -25,10 +26,9 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background w-screen">
-      <div className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <header className="mb-8 flex items-center justify-between">
+    <PageLayout>
+      {/* Header */}
+      <header className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground tracking-tight">SparkPing</h1>
             <p className="text-muted-foreground text-sm mt-1">Network monitoring dashboard</p>
@@ -185,11 +185,10 @@ function Dashboard() {
           </div>
         )}
 
-        {/* Footer with auto-refresh indicator */}
-        <div className="mt-8 text-center text-xs text-muted-foreground">
-          Auto-refreshing every 5 seconds • Last hour data • 1-minute resolution
-        </div>
+      {/* Footer with auto-refresh indicator */}
+      <div className="mt-8 text-center text-xs text-muted-foreground">
+        Auto-refreshing every 5 seconds • Last hour data • 1-minute resolution
       </div>
-    </div>
+    </PageLayout>
   )
 }
