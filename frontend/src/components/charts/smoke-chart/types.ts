@@ -26,7 +26,7 @@ export interface ChartDataPoint {
   packetLossPercent: number;
 }
 
-export interface ChartDimensions {
+interface ChartDimensions {
   width: number;
   height: number;
 }
@@ -62,7 +62,7 @@ export interface ChartScales {
   yScale: d3.ScaleLinear<number, number>;
 }
 
-export interface ChartContext {
+interface ChartContext {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
   defs: d3.Selection<SVGDefsElement, unknown, null, undefined>;
   scales: ChartScales;

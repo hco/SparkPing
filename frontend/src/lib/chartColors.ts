@@ -57,7 +57,7 @@ export interface ThemeColors {
   divider: string;
 }
 
-export const lightThemeColors: ThemeColors = {
+const lightThemeColors: ThemeColors = {
   textPrimary: '#111827',   // gray-900
   textSecondary: '#374151', // gray-700
   textMuted: '#6b7280',     // gray-500
@@ -72,7 +72,7 @@ export const lightThemeColors: ThemeColors = {
   divider: '#e5e7eb',       // gray-200
 };
 
-export const darkThemeColors: ThemeColors = {
+const darkThemeColors: ThemeColors = {
   textPrimary: '#f9fafb',   // gray-50
   textSecondary: '#d1d5db', // gray-300
   textMuted: '#9ca3af',     // gray-400
@@ -97,7 +97,7 @@ export function getThemeColors(isDark: boolean): ThemeColors {
 /**
  * Detect if dark mode is active by checking for .dark class on document
  */
-export function isDarkMode(): boolean {
+function isDarkMode(): boolean {
   if (typeof document === 'undefined') return false;
   return document.documentElement.classList.contains('dark');
 }

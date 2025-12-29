@@ -94,7 +94,7 @@ export function getBrandIcon(
  * @param manufacturer - Manufacturer name (normalized, lowercase)
  * @param icon - Icon component
  */
-export function registerBrandIcon(
+function registerBrandIcon(
   manufacturer: string,
   icon: ComponentType<{ className?: string }>
 ): void {

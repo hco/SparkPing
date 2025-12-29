@@ -25,9 +25,9 @@ export interface TimeRange {
 }
 
 // Legacy type for backwards compatibility
-export type TimeRangeOption = '1h' | '6h' | '12h' | '24h' | '7d' | '30d' | 'all';
+type TimeRangeOption = '1h' | '6h' | '12h' | '24h' | '7d' | '30d' | 'all';
 
-export const TIME_RANGE_OPTIONS: { value: TimeRangeOption; label: string }[] = [
+const TIME_RANGE_OPTIONS: { value: TimeRangeOption; label: string }[] = [
   { value: '1h', label: 'Last 1 Hour' },
   { value: '6h', label: 'Last 6 Hours' },
   { value: '12h', label: 'Last 12 Hours' },
@@ -48,10 +48,10 @@ export const BUCKET_DURATION_OPTIONS = [
   { value: '1h', label: '1 hour' },
 ] as const;
 
-export type BucketDuration = (typeof BUCKET_DURATION_OPTIONS)[number]['value'];
+type BucketDuration = (typeof BUCKET_DURATION_OPTIONS)[number]['value'];
 
 // Get the duration in milliseconds for a preset
-export function getPresetDurationMs(preset: PresetValue): number {
+function getPresetDurationMs(preset: PresetValue): number {
   const range = PRESET_RANGES.find(r => r.value === preset);
   if (!range) return 60 * 60 * 1000; // default 1h
   
@@ -103,7 +103,7 @@ export function getTimeRangeLabel(range: TimeRange): string {
 }
 
 // Get a short label for display in compact mode
-export function getTimeRangeShortLabel(range: TimeRange): string {
+function getTimeRangeShortLabel(range: TimeRange): string {
   if (range.type === 'preset') {
     return range.preset || '1h';
   }
@@ -204,7 +204,7 @@ function findClosestPreset(durationMs: number): PresetValue | undefined {
 }
 
 // Convert new TimeRange to legacy format for API compatibility
-export function timeRangeToLegacy(range: TimeRange): TimeRangeOption {
+function timeRangeToLegacy(range: TimeRange): TimeRangeOption {
   if (range.type === 'preset') {
     const preset = range.preset || '1h';
     // Map to closest legacy option
@@ -230,7 +230,7 @@ export function timeRangeToLegacy(range: TimeRange): TimeRangeOption {
 }
 
 // Convert legacy option to new TimeRange format
-export function legacyToTimeRange(legacy: TimeRangeOption): TimeRange {
+function legacyToTimeRange(legacy: TimeRangeOption): TimeRange {
   const mapping: Record<TimeRangeOption, PresetValue | null> = {
     '1h': '1h',
     '6h': '6h',
@@ -249,7 +249,7 @@ export function legacyToTimeRange(legacy: TimeRangeOption): TimeRange {
 }
 
 // Legacy functions for backwards compatibility
-export function getTimeRangeSeconds(range: TimeRangeOption): number | null {
+function getTimeRangeSeconds(range: TimeRangeOption): number | null {
   switch (range) {
     case '1h': return 60 * 60;
     case '6h': return 6 * 60 * 60;
@@ -262,7 +262,7 @@ export function getTimeRangeSeconds(range: TimeRangeOption): number | null {
   }
 }
 
-export function calculateTimeRangeQuery(range: TimeRangeOption): { from?: string; to?: number } {
+function calculateTimeRangeQuery(range: TimeRangeOption): { from?: string; to?: number } {
   if (range === 'all') {
     return {};
   }
@@ -273,7 +273,7 @@ export function calculateTimeRangeQuery(range: TimeRangeOption): { from?: string
 }
 
 // Calculate time range query from new TimeRange format
-export function calculateTimeRangeQueryNew(range: TimeRange): { from?: string; to?: number } {
+function calculateTimeRangeQueryNew(range: TimeRange): { from?: string; to?: number } {
   if (range.type === 'preset') {
     return {
       from: range.preset,

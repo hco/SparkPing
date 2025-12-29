@@ -12,7 +12,7 @@ const apiClient = axios.create({
   },
 });
 
-export async function fetchPingData(query: PingDataQuery = {}): Promise<PingDataResponse> {
+async function fetchPingData(query: PingDataQuery = {}): Promise<PingDataResponse> {
   const params = new URLSearchParams();
   
   if (query.target) {

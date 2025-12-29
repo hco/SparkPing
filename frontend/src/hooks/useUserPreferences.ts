@@ -147,7 +147,7 @@ export function useUserPreferences() {
 /**
  * Hook for a single preference value (lighter weight for components that only need one)
  */
-export function usePreference<K extends keyof UserPreferences>(key: K): [
+function usePreference<K extends keyof UserPreferences>(key: K): [
   UserPreferences[K],
   (value: UserPreferences[K]) => void
 ] {

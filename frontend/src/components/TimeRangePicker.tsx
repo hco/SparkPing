@@ -466,7 +466,7 @@ export function TimeRangePicker({
 }
 
 // Mobile-friendly version with a dropdown for presets
-export function TimeRangePickerMobile({
+function TimeRangePickerMobile({
   value,
   onChange,
   className,
@@ -500,5 +500,4 @@ export function TimeRangePickerMobile({
   );
 }
 
-export default TimeRangePicker;
 
