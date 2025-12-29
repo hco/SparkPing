@@ -1,7 +1,7 @@
 import { format, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
 
 // Preset time range options (relative)
-export const PRESET_RANGES = [
+const PRESET_RANGES = [
   { value: '5m', label: '5m', duration: { minutes: 5 } },
   { value: '15m', label: '15m', duration: { minutes: 15 } },
   { value: '30m', label: '30m', duration: { minutes: 30 } },
@@ -300,8 +300,8 @@ export function createDefaultTimeRange(): TimeRange {
 }
 
 // Export preset and bucket duration values for URL validation
-export const PRESET_VALUES = PRESET_RANGES.map((r) => r.value);
-export const BUCKET_DURATION_VALUES = BUCKET_DURATION_OPTIONS.map((b) => b.value);
+const PRESET_VALUES = PRESET_RANGES.map((r) => r.value);
+const BUCKET_DURATION_VALUES = BUCKET_DURATION_OPTIONS.map((b) => b.value);
 
 /**
  * Shared shape for URL search parameters related to time range selection.
