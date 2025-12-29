@@ -25,8 +25,28 @@ import { ChartControls } from './ChartControls';
 import { chartColors, getThemeColors } from '../../../lib/chartColors';
 
 const STATS_PANEL_WIDTH = 150;
-const DEFAULT_MARGIN: ChartMargin = { top: 40, right: STATS_PANEL_WIDTH, bottom: 80, left: 80 };
-const COLLAPSED_MARGIN: ChartMargin = { top: 40, right: 20, bottom: 80, left: 80 };
+const MOBILE_BREAKPOINT = 480;
+
+// Get responsive margins based on screen width
+function getMargins(width: number, showStatsPanel: boolean): ChartMargin {
+  const isMobile = width < MOBILE_BREAKPOINT;
+  
+  if (showStatsPanel) {
+    return {
+      top: isMobile ? 20 : 40,
+      right: STATS_PANEL_WIDTH,
+      bottom: isMobile ? 60 : 80,
+      left: isMobile ? 45 : 80,
+    };
+  }
+  
+  return {
+    top: isMobile ? 20 : 40,
+    right: isMobile ? 10 : 20,
+    bottom: isMobile ? 60 : 80,
+    left: isMobile ? 45 : 80,
+  };
+}
 
 export function D3SmokeChart({
   data,
@@ -60,11 +80,13 @@ export function D3SmokeChart({
     preferences.clipToP99,
   ]);
 
-  // Use dynamic margin based on stats panel visibility
+  // Use dynamic margin based on stats panel visibility and screen width
   const effectiveMargin = useMemo(() => 
-    visibility.showStatsPanel ? DEFAULT_MARGIN : COLLAPSED_MARGIN,
-    [visibility.showStatsPanel]
+    getMargins(dimensions.width, visibility.showStatsPanel),
+    [dimensions.width, visibility.showStatsPanel]
   );
+  
+  const isMobile = dimensions.width < MOBILE_BREAKPOINT;
 
   // Handle container resizing
   useEffect(() => {
@@ -213,7 +235,7 @@ export function D3SmokeChart({
     }
 
     renderGrid({ g, scales, innerWidth, themeColors });
-    renderAxes({ g, scales, chartHeight, margin: effectiveMargin, timeExtent, themeColors });
+    renderAxes({ g, scales, chartHeight, margin: effectiveMargin, timeExtent, themeColors, isMobile });
 
     // Calculate and render statistics (conditionally)
     const stats = calculateChartStats(chartData, validLatencyData);
@@ -221,7 +243,7 @@ export function D3SmokeChart({
       renderStatsPanel({ g, stats, innerWidth, themeColors });
     }
 
-    renderLegend({ g, chartHeight, visibility, themeColors });
+    renderLegend({ g, chartHeight, innerWidth, visibility, themeColors });
 
     // Setup tooltip
     const { cleanup } = setupTooltip({

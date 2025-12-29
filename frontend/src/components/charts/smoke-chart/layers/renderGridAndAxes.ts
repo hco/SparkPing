@@ -45,6 +45,7 @@ interface RenderAxesOptions {
   margin: ChartMargin;
   timeExtent: [number, number];
   themeColors: ThemeColors;
+  isMobile?: boolean;
 }
 
 export function renderAxes({
@@ -54,12 +55,16 @@ export function renderAxes({
   margin,
   timeExtent,
   themeColors,
+  isMobile = false,
 }: RenderAxesOptions): void {
   const { xScale, yScale } = scales;
   const timeFormat = getTimeFormat(timeExtent[0], timeExtent[1]);
 
   const xAxis = d3.axisBottom(xScale).tickFormat((d) => timeFormat(d as Date));
-  const yAxis = d3.axisLeft(yScale).tickFormat((d) => `${d} ms`);
+  // On mobile, use compact format without "ms" since axis label shows the unit
+  const yAxis = d3.axisLeft(yScale)
+    .tickFormat((d) => isMobile ? `${d}` : `${d} ms`)
+    .ticks(isMobile ? 5 : 6);
 
   // X axis
   g.append('g')
@@ -71,7 +76,7 @@ export function renderAxes({
     .style('text-anchor', 'end')
     .attr('dx', '-0.5em')
     .attr('dy', '0.5em')
-    .style('font-size', '11px')
+    .style('font-size', isMobile ? '9px' : '11px')
     .style('fill', themeColors.axisText);
 
   // Style x-axis domain line
@@ -89,7 +94,7 @@ export function renderAxes({
     .attr('stroke', themeColors.axisDomain);
 
   g.selectAll('.y-axis .tick text')
-    .style('font-size', '11px')
+    .style('font-size', isMobile ? '9px' : '11px')
     .style('fill', themeColors.axisText);
 
   g.selectAll('.y-axis .tick line')
@@ -98,11 +103,11 @@ export function renderAxes({
   // Y axis label
   g.append('text')
     .attr('transform', 'rotate(-90)')
-    .attr('y', -margin.left + 15)
+    .attr('y', -margin.left + (isMobile ? 12 : 15))
     .attr('x', -chartHeight / 2)
     .style('text-anchor', 'middle')
-    .style('font-size', '12px')
+    .style('font-size', isMobile ? '10px' : '12px')
     .style('font-weight', '500')
     .style('fill', themeColors.axisLabel)
-    .text('RTT (ms)');
+    .text(isMobile ? 'ms' : 'RTT (ms)');
 }
