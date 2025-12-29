@@ -109,7 +109,7 @@ export interface StorageStatsResponse {
 
 // Device discovery types
 
-export interface DeviceInfo {
+interface DeviceInfo {
   /** Device type (e.g., "HomeKit", "AirPlay", "Chromecast", "Printer") */
   deviceType: string | null;
   /** Manufacturer name */

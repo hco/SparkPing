@@ -14,7 +14,7 @@ export interface ThemeContextValue {
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export const STORAGE_KEY = 'sparkping-theme';
+const STORAGE_KEY = 'sparkping-theme';
 
 export function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light';

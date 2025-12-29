@@ -9,7 +9,7 @@ import {
   type ThemeContextValue,
 } from './theme';
 
-export type { Theme, ResolvedTheme, ThemeContextValue } from './theme';
+;
 
 interface ThemeProviderProps {
   children: ReactNode;

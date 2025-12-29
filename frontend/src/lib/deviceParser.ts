@@ -15,7 +15,7 @@ export interface DeviceInfo {
 /**
  * Parser function for a specific service type
  */
-export type ServiceTypeParser = (
+type ServiceTypeParser = (
   serviceType: string,
   txtProperties: Record<string, string>,
   instanceName: string
@@ -32,7 +32,7 @@ const serviceTypeParsers: Map<string, ServiceTypeParser> = new Map();
  * @param serviceType - Service type pattern (e.g., "_hap._tcp.local." or "_airplay._tcp.local.")
  * @param parser - Parser function
  */
-export function registerServiceTypeParser(
+function registerServiceTypeParser(
   serviceType: string,
   parser: ServiceTypeParser
 ): void {
@@ -372,7 +372,7 @@ registerServiceTypeParser('_spotify-connect._tcp.local.', parseSpotifyConnect);
  * @param instanceName - Service instance name
  * @returns Parsed device information or null if no parser found
  */
-export function parseDeviceInfo(
+function parseDeviceInfo(
   serviceType: string,
   txtProperties: Record<string, string>,
   instanceName: string
