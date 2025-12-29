@@ -5,12 +5,12 @@ mod discovery;
 mod logging;
 mod ping;
 mod storage;
+mod tasks;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
 use crate::logging::init_logging;
-use crate::ping::perform_ping;
-use crate::storage::write_ping_result;
+use crate::tasks::start_ping_task;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -93,39 +93,6 @@ fn reload_config(path: &PathBuf) -> Result<AppConfig, String> {
     Ok(app_config)
 }
 
-/// Start a ping task for a target and return its abort handle
-pub fn start_ping_task(
-    target: &crate::config::Target,
-    storage: Arc<dyn tsink::Storage>,
-    socket_type: crate::config::SocketType,
-) -> tokio::task::AbortHandle {
-    let target_id = target.id.clone();
-    let target_address = target.address.clone();
-    let target_name = target.name.clone();
-    let ping_count = target.ping_count;
-    let ping_interval = target.ping_interval;
-
-    let handle = tokio::spawn(async move {
-        loop {
-            // Perform ping_count pings back-to-back (no delay between them)
-            for sequence in 1..=ping_count {
-                let result =
-                    perform_ping(&target_id, &target_address, sequence, &target_name, socket_type).await;
-
-                // Write result to tsink
-                if let Err(e) = write_ping_result(&*storage, &result) {
-                    error!("Error writing ping result to tsink: {}", e);
-                }
-            }
-
-            // Wait ping_interval seconds before next batch of pings
-            tokio::time::sleep(Duration::from_secs(ping_interval)).await;
-        }
-    })
-    .abort_handle();
-
-    handle
-}
 
 /// Reload targets by comparing old and new configs
 async fn reload_targets(
