@@ -298,3 +298,127 @@ export function isLiveRange(range: TimeRange): boolean {
 export function createDefaultTimeRange(): TimeRange {
   return { type: 'preset', preset: '1h' };
 }
+
+// Export preset and bucket duration values for URL validation
+export const PRESET_VALUES = PRESET_RANGES.map((r) => r.value);
+export const BUCKET_DURATION_VALUES = BUCKET_DURATION_OPTIONS.map((b) => b.value);
+
+/**
+ * Shared shape for URL search parameters related to time range selection.
+ * 
+ * Enables any route to add URL-persisted time range support while keeping
+ * TimeRangePicker routing-agnostic and routes explicit about their URL contracts.
+ */
+export type TimeRangeSearchParams = {
+  // Preset range like '1h', '6h', etc.
+  preset?: PresetValue;
+  // Custom range timestamps (epoch seconds)
+  from?: number;
+  to?: number;
+  // Bucket duration for aggregation
+  bucket?: string;
+  // Auto-refresh settings
+  refresh?: boolean;
+  interval?: number;
+};
+
+/**
+ * Validates and normalizes time range search parameters from URL.
+ * 
+ * Reusable validateSearch function for TanStack Router routes that need
+ * time range picker support. This enables routes to add URL-persisted time
+ * range selection with consistent validation and defaults.
+ * 
+ * @param search - Raw search parameters from the URL
+ * @param defaults - Optional default values to use when parameters are missing
+ * @returns Validated and normalized search parameters
+ */
+export function validateTimeRangeSearch(
+  search: Record<string, unknown>,
+  defaults?: Partial<TimeRangeSearchParams>
+): TimeRangeSearchParams {
+  const preset = PRESET_VALUES.includes(search.preset as PresetValue)
+    ? (search.preset as PresetValue)
+    : undefined;
+  const from = typeof search.from === 'number' ? search.from : undefined;
+  const to = typeof search.to === 'number' ? search.to : undefined;
+  const bucket = BUCKET_DURATION_VALUES.includes(search.bucket as string)
+    ? (search.bucket as string)
+    : defaults?.bucket ?? '10s';
+  const refresh = typeof search.refresh === 'boolean' ? search.refresh : defaults?.refresh ?? true;
+  const interval = typeof search.interval === 'number' && search.interval >= 1
+    ? search.interval
+    : defaults?.interval ?? 5;
+
+  // Default to 1h preset if no time params specified
+  return {
+    preset: !preset && !from ? (defaults?.preset ?? '1h') : preset,
+    from,
+    to,
+    bucket,
+    refresh,
+    interval,
+  };
+}
+
+/**
+ * Converts URL search parameters to a TimeRange object for use with TimeRangePicker.
+ * 
+ * Enables routes to convert URL-persisted time range parameters into the
+ * TimeRange format expected by TimeRangePicker, keeping the picker component
+ * routing-agnostic.
+ * 
+ * @param params - Validated search parameters from the URL
+ * @returns TimeRange object for the picker component
+ */
+export function searchParamsToTimeRange(params: TimeRangeSearchParams): TimeRange {
+  if (params.from) {
+    return {
+      type: 'custom',
+      from: new Date(params.from * 1000),
+      to: params.to ? new Date(params.to * 1000) : undefined,
+    };
+  }
+  return { type: 'preset', preset: params.preset || '1h' };
+}
+
+/**
+ * Converts a TimeRange object to URL search parameters for navigation updates.
+ * 
+ * Enables routes to update URL parameters when the time range picker changes,
+ * maintaining URL-persisted state while keeping TimeRangePicker routing-agnostic.
+ * 
+ * @param range - TimeRange from the picker component
+ * @returns Partial search parameters to update in the URL
+ */
+export function timeRangeToSearchParams(range: TimeRange): Partial<TimeRangeSearchParams> {
+  if (range.type === 'preset') {
+    return { preset: range.preset, from: undefined, to: undefined };
+  }
+  const resolved = resolveTimeRange(range);
+  return {
+    preset: undefined,
+    from: Math.floor(resolved.from.getTime() / 1000),
+    to: range.to ? Math.floor(resolved.to.getTime() / 1000) : undefined,
+  };
+}
+
+/**
+ * Converts a TimeRange object to API query parameters for data fetching.
+ * 
+ * Transforms the TimeRange format used by the picker into the format expected
+ * by the API, handling both preset strings and absolute timestamps.
+ * 
+ * @param range - TimeRange from the picker component
+ * @returns API query parameters with from/to values
+ */
+export function timeRangeToApiQuery(range: TimeRange): { from: string; to?: number } {
+  if (range.type === 'preset') {
+    return { from: range.preset, to: undefined };
+  }
+  const resolved = resolveTimeRange(range);
+  return {
+    from: Math.floor(resolved.from.getTime() / 1000).toString(),
+    to: Math.floor(resolved.to.getTime() / 1000),
+  };
+}

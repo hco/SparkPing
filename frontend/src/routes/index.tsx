@@ -6,7 +6,6 @@ import { ErrorDisplay } from '@/components/ErrorDisplay'
 import { chartColors, getPacketLossClass, getLatencyStatusColor } from '@/lib/chartColors'
 import { RefreshCw, Settings, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import '../App.css'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,

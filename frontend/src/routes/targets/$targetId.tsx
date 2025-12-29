@@ -6,22 +6,25 @@ import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
 import { D3RRDStyleChart } from '@/components/charts/D3RRDStyleChart';
 import { D3SmokeChart } from '@/components/charts/D3SmokeChart';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
+import { TargetStatsBar } from '@/components/TargetStatsBar';
 import { useTargetPingData } from '@/hooks/useTargetPingData';
+import { useTargetStats } from '@/hooks/useTargetStats';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorDisplay } from '@/components/ErrorDisplay';
 import { EmptyState } from '@/components/EmptyState';
 import {
   type TimeRange,
-  type PresetValue,
-  resolveTimeRange,
-  PRESET_RANGES,
+  type TimeRangeSearchParams,
+  validateTimeRangeSearch,
+  searchParamsToTimeRange,
+  timeRangeToSearchParams,
+  timeRangeToApiQuery,
   BUCKET_DURATION_OPTIONS,
 } from '@/utils/timeRangeUtils';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -29,46 +32,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { chartColorClasses, getPacketLossClass } from '@/lib/chartColors';
-
-const PRESET_VALUES = PRESET_RANGES.map((r) => r.value);
-const BUCKET_DURATION_VALUES = BUCKET_DURATION_OPTIONS.map((b) => b.value);
-
-type SearchParams = {
-  // Preset range like '1h', '6h', etc.
-  preset?: PresetValue;
-  // Custom range timestamps (epoch seconds)
-  from?: number;
-  to?: number;
-  // Bucket duration for aggregation
-  bucket?: string;
-  // Auto-refresh settings
-  refresh?: boolean;
-  interval?: number;
-};
 
 export const Route = createFileRoute('/targets/$targetId')({
-  validateSearch: (search: Record<string, unknown>): SearchParams => {
-    const preset = PRESET_VALUES.includes(search.preset as PresetValue)
-      ? (search.preset as PresetValue)
-      : undefined;
-    const from = typeof search.from === 'number' ? search.from : undefined;
-    const to = typeof search.to === 'number' ? search.to : undefined;
-    const bucket = BUCKET_DURATION_VALUES.includes(search.bucket as (typeof BUCKET_DURATION_VALUES)[number])
-      ? (search.bucket as string)
-      : '10s';
-    const refresh = typeof search.refresh === 'boolean' ? search.refresh : true;
-    const interval = typeof search.interval === 'number' && search.interval >= 1 ? search.interval : 5;
-
-    // Default to 1h preset if no time params specified
-    return {
-      preset: !preset && !from ? '1h' : preset,
-      from,
-      to,
-      bucket,
-      refresh,
-      interval,
-    };
+  validateSearch: (search: Record<string, unknown>): TimeRangeSearchParams => {
+    return validateTimeRangeSearch(search);
   },
   component: TargetDetails,
 });
@@ -80,7 +47,7 @@ function TargetDetails() {
   const [showLegacyCharts, setShowLegacyCharts] = useState(false);
 
   const updateSearch = useCallback(
-    (updates: Partial<SearchParams>) => {
+    (updates: Partial<TimeRangeSearchParams>) => {
       navigate({
         search: (prev) => ({ ...prev, ...updates }),
         replace: true,
@@ -91,53 +58,20 @@ function TargetDetails() {
 
   // Convert URL params to TimeRange object
   const timeRange: TimeRange = useMemo(() => {
-    if (from) {
-      return {
-        type: 'custom',
-        from: new Date(from * 1000),
-        to: to ? new Date(to * 1000) : undefined,
-      };
-    }
-    return {
-      type: 'preset',
-      preset: preset || '1h',
-    };
+    return searchParamsToTimeRange({ preset, from, to });
   }, [preset, from, to]);
 
   // Handle time range changes from picker
   const handleTimeRangeChange = useCallback(
     (range: TimeRange) => {
-      if (range.type === 'preset') {
-        updateSearch({
-          preset: range.preset,
-          from: undefined,
-          to: undefined,
-        });
-      } else {
-        const resolved = resolveTimeRange(range);
-        updateSearch({
-          preset: undefined,
-          from: Math.floor(resolved.from.getTime() / 1000),
-          to: range.to ? Math.floor(resolved.to.getTime() / 1000) : undefined,
-        });
-      }
+      updateSearch(timeRangeToSearchParams(range));
     },
     [updateSearch]
   );
 
   // Calculate time query for API
   const timeQuery = useMemo(() => {
-    if (timeRange.type === 'preset') {
-      return {
-        from: timeRange.preset,
-        to: undefined,
-      };
-    }
-    const resolved = resolveTimeRange(timeRange);
-    return {
-      from: Math.floor(resolved.from.getTime() / 1000).toString(),
-      to: Math.floor(resolved.to.getTime() / 1000),
-    };
+    return timeRangeToApiQuery(timeRange);
   }, [timeRange]);
 
   const {
@@ -164,46 +98,7 @@ function TargetDetails() {
   }, [targetData, targetId]);
 
   // Calculate statistics including percentiles
-  const stats = useMemo(() => {
-    if (!targetData.length) return null;
-
-    // Collect all average latencies (non-null)
-    const latencies = targetData
-      .map((d) => d.avg)
-      .filter((v): v is number => v !== null)
-      .sort((a, b) => a - b);
-
-    if (latencies.length === 0) return null;
-
-    const percentile = (arr: number[], p: number) => {
-      const idx = Math.ceil((p / 100) * arr.length) - 1;
-      return arr[Math.max(0, idx)];
-    };
-
-    const sum = latencies.reduce((a, b) => a + b, 0);
-    const totalPings = targetData.reduce((a, d) => a + d.count, 0);
-    const totalSuccess = targetData.reduce((a, d) => a + d.successful_count, 0);
-    const totalFailed = targetData.reduce((a, d) => a + d.failed_count, 0);
-
-    // Get actual min/max from the buckets
-    const minValues = targetData.map((d) => d.min).filter((v): v is number => v !== null);
-    const maxValues = targetData.map((d) => d.max).filter((v): v is number => v !== null);
-
-    return {
-      mean: sum / latencies.length,
-      min: minValues.length ? Math.min(...minValues) : null,
-      max: maxValues.length ? Math.max(...maxValues) : null,
-      p50: percentile(latencies, 50),
-      p75: percentile(latencies, 75),
-      p90: percentile(latencies, 90),
-      p95: percentile(latencies, 95),
-      p99: percentile(latencies, 99),
-      totalPings,
-      totalSuccess,
-      totalFailed,
-      packetLoss: totalPings > 0 ? (totalFailed / totalPings) * 100 : 0,
-    };
-  }, [targetData]);
+  const stats = useTargetStats(targetData);
 
   const hasData = targetData.length > 0;
   const isEmpty = aggregatedData && targetData.length === 0;
@@ -313,51 +208,10 @@ function TargetDetails() {
 
             {/* Statistics */}
             {aggregatedData && stats && (
-              <div className="bg-card px-4 py-3 rounded-lg shadow border border-border">
-                <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
-                  <span className="font-semibold text-foreground">Latency:</span>
-                  <span><span className="text-muted-foreground">Avg</span> <span className={`font-medium ${chartColorClasses.avg}`}>{stats.mean.toFixed(1)}ms</span></span>
-                  <span><span className="text-muted-foreground">Min</span> <span className={`font-medium ${chartColorClasses.min}`}>{stats.min !== null ? `${stats.min.toFixed(1)}ms` : '—'}</span></span>
-                  <span><span className="text-muted-foreground">Max</span> <span className={`font-medium ${chartColorClasses.max}`}>{stats.max !== null ? `${stats.max.toFixed(1)}ms` : '—'}</span></span>
-                  <span className="text-border">|</span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P50</span> <span className={`font-light`}>{stats.p50.toFixed(1)}ms</span></span>
-                    </TooltipTrigger>
-                    <TooltipContent>50th percentile (median): Half of all pings were faster than this</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P75</span> <span className={`font-light`}>{stats.p75.toFixed(1)}ms</span></span>
-                    </TooltipTrigger>
-                    <TooltipContent>75th percentile: 75% of pings were faster than this</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P95</span> <span className={`font-light`}>{stats.p95.toFixed(1)}ms</span></span>
-                    </TooltipTrigger>
-                    <TooltipContent>95th percentile: 95% of pings were faster than this</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help"><span className="text-muted-foreground border-b border-dotted border-muted-foreground">P99</span> <span className={`font-light`}>{stats.p99.toFixed(1)}ms</span></span>
-                    </TooltipTrigger>
-                    <TooltipContent>99th percentile: 99% of pings were faster than this (worst-case latency)</TooltipContent>
-                  </Tooltip>
-                  <span className="text-border">|</span>
-                  <span className="font-semibold text-foreground">Packets:</span>
-                  <span><span className="text-muted-foreground">Total</span> <span className="font-medium">{stats.totalPings.toLocaleString()}</span></span>
-                  <span><span className="text-muted-foreground">Loss</span> <span className={`font-medium ${getPacketLossClass(stats.packetLoss)}`}>{stats.packetLoss.toFixed(2)}%</span></span>
-                  {aggregatedData.query.data_time_range && (
-                    <>
-                      <span className="text-border">|</span>
-                      <span className="text-muted-foreground">
-                        {new Date(aggregatedData.query.data_time_range.earliest * 1000).toLocaleString()} — {new Date(aggregatedData.query.data_time_range.latest * 1000).toLocaleString()}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
+              <TargetStatsBar
+                stats={stats}
+                dataTimeRange={aggregatedData.query.data_time_range || undefined}
+              />
             )}
           </div>
         ) : isEmpty ? (
