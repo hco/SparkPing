@@ -6,7 +6,7 @@ import type { Target, TargetRequest, TargetStorageStats } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
 import { DeviceDiscoveryPanel } from '@/components/DeviceDiscoveryPanel'
 import { PageLayout } from '@/components/PageLayout'
@@ -150,16 +150,18 @@ function Settings() {
         )}
 
         <Card className="mb-6">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardHeader>
             <CardTitle className="text-xl">Targets</CardTitle>
             {!showAddForm && !editingId && (
-              <Button onClick={() => setShowAddForm(true)}>
-                <Plus className="size-4" />
-                Add Target
-              </Button>
+              <CardAction>
+                <Button onClick={() => setShowAddForm(true)}>
+                  <Plus className="size-4" />
+                  Add Target
+                </Button>
+              </CardAction>
             )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-0 md:px-6">
           {isLoading ? (
             <div className="text-muted-foreground">Loading targets...</div>
           ) : targets && targets.length === 0 ? (
@@ -169,26 +171,47 @@ function Settings() {
           ) : (
             <div className="space-y-4">
               {targets?.map((target) => (
-                <div key={target.id} className="border border-border rounded-lg p-4">
+                <Card key={target.id} className="py-4">
                   {editingId === target.id ? (
-                    <TargetForm
-                      formData={formData}
-                      setFormData={setFormData}
-                      onSubmit={handleSubmit}
-                      onCancel={handleCancel}
-                      isSubmitting={updateMutation.isPending}
-                    />
+                    <CardContent>
+                      <TargetForm
+                        formData={formData}
+                        setFormData={setFormData}
+                        onSubmit={handleSubmit}
+                        onCancel={handleCancel}
+                        isSubmitting={updateMutation.isPending}
+                      />
+                    </CardContent>
                   ) : (
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-foreground">
-                            {target.name || target.address}
-                          </h3>
-                          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                    <>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-3">
+                          {target.name || target.address}
+                          <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-1 rounded">
                             ID: {target.id}
                           </span>
-                        </div>
+                        </CardTitle>
+                        <CardAction>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(target)}
+                            >
+                              <Edit2 className="size-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDelete(target.id)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </CardAction>
+                      </CardHeader>
+                      <CardContent>
                         <div className="text-sm text-muted-foreground space-y-1">
                           <div>
                             <span className="font-medium text-foreground">Address:</span> {target.address}
@@ -232,27 +255,10 @@ function Settings() {
                             </div>
                           )}
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(target)}
-                        >
-                          <Edit2 className="size-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(target.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </>
                   )}
-                </div>
+                </Card>
               ))}
             </div>
           )}
