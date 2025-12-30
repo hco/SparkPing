@@ -21,10 +21,10 @@ type TimeRangeRoutes = Extract<FileRouteTypes['fullPaths'], '/targets/$targetId'
 
 /**
  * Hook for managing time range search parameters in the URL.
- * 
+ *
  * Provides a unified interface for reading and updating time range
  * related URL parameters for routes that use TimeRangeSearchParams.
- * 
+ *
  * @param routePath - The route path to bind to (must have TimeRangeSearchParams in validateSearch)
  */
 export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
@@ -32,7 +32,7 @@ export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
 
   const searchParams = routeApi.useSearch();
   const navigate = routeApi.useNavigate();
-  
+
   const { preset, from, to, bucket, refresh, interval } = searchParams;
 
   const updateSearch = useCallback(
@@ -96,11 +96,11 @@ export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
     bucket,
     refresh,
     interval,
-    
+
     // Derived values
     timeRange,
     timeQuery,
-    
+
     // Update functions
     updateSearch,
     setTimeRange,
@@ -110,4 +110,3 @@ export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
     resetTimeFilter,
   };
 }
-
