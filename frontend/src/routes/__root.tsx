@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { createRootRoute, Link, Outlet, retainSearchParams, useRouterState } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 import { NavigationMenu, NavigationMenuItem, NavigationMenuList } from '@/components/ui/navigation-menu'
 import { cn } from '@/lib/utils'
@@ -7,8 +7,15 @@ import { Sun, Moon, Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import LogoLight from '@/assets/logo/sparkping_logo.svg'
 import LogoDark from '@/assets/logo/sparkping_logo_dark.svg'
+import { type TimeRangeSearchParams, validateTimeRangeSearch } from '@/utils/timeRangeUtils'
 
 export const Route = createRootRoute({
+  validateSearch: (search: Record<string, unknown>): TimeRangeSearchParams => {
+    return validateTimeRangeSearch(search);
+  },
+  search: {
+    middlewares: [retainSearchParams(['preset', 'from', 'to', 'bucket', 'refresh', 'interval'])],
+  },
   component: RootComponent,
 })
 
