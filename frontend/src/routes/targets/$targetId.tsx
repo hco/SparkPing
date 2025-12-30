@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState, useCallback } from 'react';
+import { createFileRoute } from '@tanstack/react-router';
+import { useMemo, useState } from 'react';
 import { D3LatencyChart } from '@/components/charts/D3LatencyChart';
 import { D3PacketLossChart } from '@/components/charts/D3PacketLossChart';
 import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
@@ -9,29 +9,16 @@ import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { TargetStatsBar } from '@/components/TargetStatsBar';
 import { useTargetPingData } from '@/hooks/useTargetPingData';
 import { useTargetStats } from '@/hooks/useTargetStats';
+import { useTimeRangeSearch } from '@/hooks/useTimeRangeSearch';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorDisplay } from '@/components/ErrorDisplay';
 import { EmptyState } from '@/components/EmptyState';
-import {
-  type TimeRange,
-  type TimeRangeSearchParams,
-  validateTimeRangeSearch,
-  searchParamsToTimeRange,
-  timeRangeToSearchParams,
-  timeRangeToApiQuery,
-  BUCKET_DURATION_OPTIONS,
-} from '@/utils/timeRangeUtils';
+import { type TimeRangeSearchParams, validateTimeRangeSearch } from '@/utils/timeRangeUtils';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { DurationPicker } from '@/components/DurationPicker';
 import {
   Card,
   CardContent,
@@ -50,37 +37,20 @@ export const Route = createFileRoute('/targets/$targetId')({
 
 function TargetDetails() {
   const { targetId } = Route.useParams();
-  const { preset, from, to, bucket, refresh, interval } = Route.useSearch();
-  const navigate = useNavigate({ from: Route.fullPath });
   const [showLegacyCharts, setShowLegacyCharts] = useState(false);
 
-  const updateSearch = useCallback(
-    (updates: Partial<TimeRangeSearchParams>) => {
-      navigate({
-        search: (prev) => ({ ...prev, ...updates }),
-        replace: true,
-      });
-    },
-    [navigate]
-  );
-
-  // Convert URL params to TimeRange object
-  const timeRange: TimeRange = useMemo(() => {
-    return searchParamsToTimeRange({ preset, from, to });
-  }, [preset, from, to]);
-
-  // Handle time range changes from picker
-  const handleTimeRangeChange = useCallback(
-    (range: TimeRange) => {
-      updateSearch(timeRangeToSearchParams(range));
-    },
-    [updateSearch]
-  );
-
-  // Calculate time query for API
-  const timeQuery = useMemo(() => {
-    return timeRangeToApiQuery(timeRange);
-  }, [timeRange]);
+  const {
+    bucket,
+    refresh,
+    interval,
+    timeRange,
+    timeQuery,
+    setTimeRange,
+    setAutoRefresh,
+    setRefreshInterval,
+    setBucket,
+    resetTimeFilter,
+  } = useTimeRangeSearch();
 
   const {
     data: aggregatedData,
@@ -129,34 +99,22 @@ function TargetDetails() {
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <TimeRangePicker
             value={timeRange}
-            onChange={handleTimeRangeChange}
+            onChange={setTimeRange}
             autoRefresh={refresh}
-            onAutoRefreshChange={(value) => updateSearch({ refresh: value })}
+            onAutoRefreshChange={setAutoRefresh}
             refreshInterval={interval}
-            onRefreshIntervalChange={(value) => updateSearch({ interval: value })}
+            onRefreshIntervalChange={setRefreshInterval}
             loading={isLoading}
             onRefresh={() => refetch()}
             className="flex-1"
           />
           
-          {/* Bucket Duration Selector */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card/50 backdrop-blur-sm shadow-sm">
-            <Label htmlFor="bucket-duration" className="text-sm text-muted-foreground whitespace-nowrap">
-              Resolution
-            </Label>
-            <Select value={bucket} onValueChange={(value) => updateSearch({ bucket: value })}>
-              <SelectTrigger id="bucket-duration" className="w-24 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {BUCKET_DURATION_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <DurationPicker
+            value={bucket!}
+            onChange={setBucket}
+            label="Resolution"
+            id="bucket-duration"
+          />
         </div>
 
         {error && <ErrorDisplay error={error instanceof Error ? error.message : 'Failed to fetch data'} />}
@@ -238,7 +196,7 @@ function TargetDetails() {
             )}
           </div>
         ) : isEmpty ? (
-          <EmptyState query={{ target: targetId }} onClearTimeFilter={() => updateSearch({ preset: '30d', from: undefined, to: undefined })} />
+          <EmptyState query={{ target: targetId }} onClearTimeFilter={resetTimeFilter} />
         ) : null}
       {/* Chart Options */}
       <Card className="mt-6">
