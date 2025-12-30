@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { D3LatencyChart } from '@/components/charts/D3LatencyChart';
 import { D3PacketLossChart } from '@/components/charts/D3PacketLossChart';
 import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
@@ -54,7 +54,10 @@ function TargetDetails() {
 
   const {
     data: aggregatedData,
+    targetData,
+    targetName,
     isLoading,
+    isFetching,
     error,
     refetch,
   } = useTargetPingData({
@@ -65,15 +68,6 @@ function TargetDetails() {
     enabled: true,
     refetchInterval: refresh ? interval! * 1000 : false,
   });
-
-  const targetData = useMemo(() => {
-    if (!aggregatedData) return [];
-    return aggregatedData.data.filter((bucket) => bucket.target === targetId);
-  }, [aggregatedData, targetId]);
-
-  const targetName = useMemo(() => {
-    return targetData[0]?.target_name || targetId;
-  }, [targetData, targetId]);
 
   // Calculate statistics including percentiles
   const stats = useTargetStats(targetData);
@@ -104,7 +98,7 @@ function TargetDetails() {
             onAutoRefreshChange={setAutoRefresh}
             refreshInterval={interval}
             onRefreshIntervalChange={setRefreshInterval}
-            loading={isLoading}
+            loading={isFetching}
             onRefresh={() => refetch()}
             className="flex-1"
           />

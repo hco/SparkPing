@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchPingAggregated } from '../api';
 import type { PingAggregatedQuery } from '../types';
 
@@ -26,12 +26,22 @@ export function useTargetPingData({
     to,
   };
 
-  return useQuery({
+  const result = useQuery({
     queryKey: ['targetPingData', target, query],
     queryFn: () => fetchPingAggregated(query),
     enabled: enabled && !!target,
     refetchInterval,
+    placeholderData: keepPreviousData,
   });
+
+  const targetData = result.data?.data.filter((bucket) => bucket.target === target) ?? [];
+  const targetName = targetData[0]?.target_name || target;
+
+  return {
+    ...result,
+    targetData,
+    targetName,
+  };
 }
 
 
