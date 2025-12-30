@@ -1,12 +1,14 @@
 import { useCallback, useMemo } from 'react';
 import { getRouteApi } from '@tanstack/react-router';
 import type { FileRouteTypes } from '@/routeTree.gen';
+import type { BucketDuration } from '@/components/DurationPicker';
 import {
   type TimeRange,
   type TimeRangeSearchParams,
   searchParamsToTimeRange,
   timeRangeToSearchParams,
   timeRangeToApiQuery,
+  suggestBucketForTimeRange,
 } from '@/utils/timeRangeUtils';
 
 type UpdateSearchOptions = {
@@ -51,11 +53,23 @@ export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
   }, [preset, from, to]);
 
   // Handle time range changes (converts TimeRange to search params)
+  // Also adjusts bucket duration if current value is inappropriate for the new range
   const setTimeRange = useCallback(
     (range: TimeRange) => {
-      updateSearch(timeRangeToSearchParams(range));
+      const timeRangeParams = timeRangeToSearchParams(range);
+      
+      // Check if bucket duration needs adjustment for the new time range
+      const currentBucket = bucket as BucketDuration;
+      const suggestedBucket = suggestBucketForTimeRange(range, currentBucket);
+      
+      if (suggestedBucket !== currentBucket) {
+        // Update both time range and bucket together
+        updateSearch({ ...timeRangeParams, bucket: suggestedBucket });
+      } else {
+        updateSearch(timeRangeParams);
+      }
     },
-    [updateSearch]
+    [updateSearch, bucket]
   );
 
   // Calculate time query for API

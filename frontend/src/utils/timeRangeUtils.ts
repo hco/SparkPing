@@ -1,6 +1,21 @@
 import { format } from 'date-fns';
 import { BUCKET_DURATION_OPTIONS, type BucketDuration } from '@/components/DurationPicker';
 
+/**
+ * Maps bucket duration string values to their equivalent in seconds.
+ * Used for calculating acceptable bucket ranges based on time range duration.
+ */
+const BUCKET_DURATIONS_SECONDS: Record<BucketDuration, number> = {
+  '1s': 1,
+  '5s': 5,
+  '10s': 10,
+  '30s': 30,
+  '1m': 60,
+  '5m': 300,
+  '15m': 900,
+  '1h': 3600,
+};
+
 // Preset time range options (relative)
 const PRESET_RANGES = [
   { value: '5m', label: '5m', duration: { minutes: 5 } },
@@ -163,6 +178,102 @@ function findClosestPreset(durationMs: number): PresetValue | undefined {
 // Check if range is "live" (tracking current time)
 export function isLiveRange(range: TimeRange): boolean {
   return range.type === 'preset' || !range.to;
+}
+
+/**
+ * Calculate the acceptable range of bucket durations for a given time range.
+ * 
+ * We want to have a reasonable number of data points for visualization:
+ * - Minimum ~50 points (not too sparse)
+ * - Maximum ~2000 points (not too dense, also efficient)
+ * 
+ * @param timeRangeMs - The time range duration in milliseconds
+ * @returns Object with minBucketSeconds and maxBucketSeconds
+ */
+function getAcceptableBucketRange(timeRangeMs: number): { minSeconds: number; maxSeconds: number } {
+  const timeRangeSeconds = timeRangeMs / 1000;
+  
+  // minBucket = timeRange / maxPoints (don't exceed ~2000 points)
+  // maxBucket = timeRange / minPoints (have at least ~50 points)
+  const minBucketSeconds = timeRangeSeconds / 2000;
+  const maxBucketSeconds = timeRangeSeconds / 50;
+  
+  return {
+    minSeconds: minBucketSeconds,
+    maxSeconds: maxBucketSeconds,
+  };
+}
+
+/**
+ * Suggests an adjusted bucket duration when the time range changes.
+ * 
+ * Returns the current bucket if it's still reasonable for the new time range.
+ * Otherwise, returns the closest acceptable bucket duration.
+ * 
+ * @param timeRange - The new time range
+ * @param currentBucket - The current bucket duration value
+ * @returns The suggested bucket duration (same as current if acceptable, or adjusted)
+ */
+export function suggestBucketForTimeRange(
+  timeRange: TimeRange,
+  currentBucket: BucketDuration
+): BucketDuration {
+  const { from, to } = resolveTimeRange(timeRange);
+  const durationMs = to.getTime() - from.getTime();
+  
+  const { minSeconds, maxSeconds } = getAcceptableBucketRange(durationMs);
+  const currentBucketSeconds = BUCKET_DURATIONS_SECONDS[currentBucket];
+  
+  // If current bucket is within acceptable range, keep it
+  if (currentBucketSeconds >= minSeconds && currentBucketSeconds <= maxSeconds) {
+    return currentBucket;
+  }
+  
+  // Find the closest acceptable bucket
+  const bucketOptions = BUCKET_DURATION_OPTIONS.map(opt => ({
+    value: opt.value as BucketDuration,
+    seconds: BUCKET_DURATIONS_SECONDS[opt.value as BucketDuration],
+  }));
+  
+  // Filter to acceptable buckets
+  const acceptableBuckets = bucketOptions.filter(
+    b => b.seconds >= minSeconds && b.seconds <= maxSeconds
+  );
+  
+  if (acceptableBuckets.length > 0) {
+    // Pick the one closest to current bucket
+    let closest = acceptableBuckets[0];
+    let closestDiff = Math.abs(Math.log(closest.seconds / currentBucketSeconds));
+    
+    for (const bucket of acceptableBuckets) {
+      const diff = Math.abs(Math.log(bucket.seconds / currentBucketSeconds));
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closest = bucket;
+      }
+    }
+    
+    return closest.value;
+  }
+  
+  // No acceptable buckets in range - pick the closest one to the acceptable range
+  if (currentBucketSeconds < minSeconds) {
+    // Current bucket is too small - find smallest bucket >= minSeconds
+    const larger = bucketOptions.filter(b => b.seconds >= minSeconds);
+    if (larger.length > 0) {
+      return larger[0].value;
+    }
+    // Fall back to largest available
+    return bucketOptions[bucketOptions.length - 1].value;
+  } else {
+    // Current bucket is too large - find largest bucket <= maxSeconds
+    const smaller = bucketOptions.filter(b => b.seconds <= maxSeconds);
+    if (smaller.length > 0) {
+      return smaller[smaller.length - 1].value;
+    }
+    // Fall back to smallest available
+    return bucketOptions[0].value;
+  }
 }
 
 // Create a default time range
