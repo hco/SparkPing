@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useRouter, useRouterState } from '@tanstack/react-router';
+import { getRouteApi } from '@tanstack/react-router';
 import {
   type TimeRange,
   type TimeRangeSearchParams,
@@ -10,43 +10,40 @@ import {
 
 type UpdateSearchOptions = {
   replace?: boolean;
-};  
+};
 
 /**
-/**
- * Custom hook to update time range search parameters in the URL using TanStack Router.
- * Returns a callback function for partial/optional updates with optional replace navigation.
+ * Routes that support TimeRangeSearchParams.
+ * Add new routes here as they adopt time range search functionality.
  */
-const useUpdateSearch = () => {
-  const router = useRouter();
-  
-  return useCallback(
-    (updates: Partial<TimeRangeSearchParams>, {replace = false}: UpdateSearchOptions = {}) => {
-      router.navigate({
-        to: '.',
-        search: { ...router.state.location.search, ...updates },
-        replace: replace,
-      });
-    },
-    [router]
-  );
-};  
+type TimeRangeRoutes = '/targets/$targetId';
 
 /**
  * Hook for managing time range search parameters in the URL.
  * 
  * Provides a unified interface for reading and updating time range
- * related URL parameters across any route that uses TimeRangeSearchParams.
+ * related URL parameters for routes that use TimeRangeSearchParams.
+ * 
+ * @param routePath - The route path to bind to (must have TimeRangeSearchParams in validateSearch)
  */
-export function useTimeRangeSearch() {
-  const routerState = useRouterState();
+export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
+  const routeApi = getRouteApi(routePath);
   
-  // Get current search params from router state
-  const searchParams = routerState.location.search as TimeRangeSearchParams;
+  // Typed from the route's validateSearch
+  const searchParams = routeApi.useSearch();
+  const navigate = routeApi.useNavigate();
   
   const { preset, from, to, bucket, refresh, interval } = searchParams;
 
-  const updateSearch = useUpdateSearch();
+  const updateSearch = useCallback(
+    (updates: Partial<TimeRangeSearchParams>, { replace = false }: UpdateSearchOptions = {}) => {
+      navigate({
+        search: (prev) => ({ ...prev, ...updates }),
+        replace,
+      });
+    },
+    [navigate]
+  );
 
   // Convert URL params to TimeRange object
   const timeRange: TimeRange = useMemo(() => {

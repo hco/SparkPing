@@ -50,7 +50,7 @@ function TargetDetails() {
     setRefreshInterval,
     setBucket,
     resetTimeFilter,
-  } = useTimeRangeSearch();
+  } = useTimeRangeSearch(Route.fullPath);
 
   const {
     data: aggregatedData,
