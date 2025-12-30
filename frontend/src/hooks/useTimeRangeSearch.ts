@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { getRouteApi } from '@tanstack/react-router';
+import type { FileRouteTypes } from '@/routeTree.gen';
 import {
   type TimeRange,
   type TimeRangeSearchParams,
@@ -14,9 +15,9 @@ type UpdateSearchOptions = {
 
 /**
  * Routes that support TimeRangeSearchParams.
- * Add new routes here as they adopt time range search functionality.
+ * This type is validated against the generated route tree.
  */
-type TimeRangeRoutes = '/targets/$targetId';
+type TimeRangeRoutes = Extract<FileRouteTypes['fullPaths'], '/targets/$targetId'>;
 
 /**
  * Hook for managing time range search parameters in the URL.
