@@ -27,9 +27,8 @@ type TimeRangeRoutes = '/targets/$targetId';
  * @param routePath - The route path to bind to (must have TimeRangeSearchParams in validateSearch)
  */
 export function useTimeRangeSearch(routePath: TimeRangeRoutes) {
-  const routeApi = getRouteApi(routePath);
-  
-  // Typed from the route's validateSearch
+  const routeApi = useMemo(() => getRouteApi(routePath), [routePath]);
+
   const searchParams = routeApi.useSearch();
   const navigate = routeApi.useNavigate();
   
