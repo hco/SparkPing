@@ -8,6 +8,30 @@ import {
   timeRangeToApiQuery,
 } from '@/utils/timeRangeUtils';
 
+type UpdateSearchOptions = {
+  replace?: boolean;
+};  
+
+/**
+/**
+ * Custom hook to update time range search parameters in the URL using TanStack Router.
+ * Returns a callback function for partial/optional updates with optional replace navigation.
+ */
+const useUpdateSearch = () => {
+  const router = useRouter();
+  
+  return useCallback(
+    (updates: Partial<TimeRangeSearchParams>, {replace = false}: UpdateSearchOptions = {}) => {
+      router.navigate({
+        to: '.',
+        search: { ...router.state.location.search, ...updates },
+        replace: replace,
+      });
+    },
+    [router]
+  );
+};  
+
 /**
  * Hook for managing time range search parameters in the URL.
  * 
@@ -15,7 +39,6 @@ import {
  * related URL parameters across any route that uses TimeRangeSearchParams.
  */
 export function useTimeRangeSearch() {
-  const router = useRouter();
   const routerState = useRouterState();
   
   // Get current search params from router state
@@ -23,18 +46,7 @@ export function useTimeRangeSearch() {
   
   const { preset, from, to, bucket, refresh, interval } = searchParams;
 
-  // Update search params in URL using router.navigate with current location
-  const updateSearch = useCallback(
-    (updates: Partial<TimeRangeSearchParams>) => {
-      const currentSearch = router.state.location.search as TimeRangeSearchParams;
-      router.navigate({
-        to: '.',
-        search: { ...currentSearch, ...updates },
-        replace: false,
-      });
-    },
-    [router]
-  );
+  const updateSearch = useUpdateSearch();
 
   // Convert URL params to TimeRange object
   const timeRange: TimeRange = useMemo(() => {
