@@ -2,6 +2,16 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.44] - 2025-12-30
+
+### ✨ Features
+
+- Keep time range selection when switching devices
+- Automatically change the bucket size if it is inappropriate for the selected duration
+
+### 🐛 Bug Fixes
+
+- Fix changelog
 ## [0.1.43] - 2025-12-30
 
 ### 📝 Other
