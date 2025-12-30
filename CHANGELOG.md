@@ -2,7 +2,7 @@
 
 All notable changes to SparkPing will be documented in this file.
 
-## [Unreleased]
+## [0.1.43] - 2025-12-30
 
 ### 📝 Other
 
@@ -17,7 +17,6 @@ All notable changes to SparkPing will be documented in this file.
 ### 📝 Other
 
 - Improve settings mobile view
-- Release 0.1.42
 ## [0.1.41] - 2025-12-29
 
 ### ✨ Features
@@ -42,42 +41,31 @@ add knip to detect dead code
 - Use shadcn card
 - Use card in more places
 - Improve mobile padding
-- Release 0.1.41
 ## [0.1.40] - 2025-12-23
 
 ### 📝 Other
 
 - Debug performance issues in HA addon
-- Release 0.1.40
 ## [0.1.39] - 2025-12-23
 
 ### 📝 Other
 
 - Keep on trying with host mode & ingress
-- Release 0.1.39
 ## [0.1.38] - 2025-12-23
 
 ### 📝 Other
 
 - Another try at host modeHA addon
-- Release 0.1.38
 ## [0.1.37] - 2025-12-23
 
 ### 📝 Other
 
 - Use host network in Home Assistant
-- Release 0.1.37
-## [0.1.36] - 2025-12-22
-
-### 📝 Other
-
-- Release 0.1.36
 ## [0.1.35] - 2025-12-22
 
 ### 📝 Other
 
 - Add icons to discovered devices
-- Release 0.1.35
 ## [0.1.34] - 2025-12-22
 
 ### 📝 Other
@@ -85,7 +73,6 @@ add knip to detect dead code
 - Improve Discovery
 
 it’s now live, contains more details and has a search
-- Release 0.1.34
 ## [0.1.33] - 2025-12-19
 
 ### 🐛 Bug Fixes
@@ -98,7 +85,6 @@ it’s now live, contains more details and has a search
 - Add better time picker
 - Implemented device discovery
 - Try bumping rust app version on release
-- Release 0.1.33
 ## [0.1.32] - 2025-12-18
 
 ### 📝 Other

@@ -52,7 +52,7 @@ commit_parsers = [
     { message = "^test", group = "🧪 Testing" },
     { message = "^chore", skip = true },
     # { message = "^chore: bump add-on version to", skip = true },
-    # { message = "^Release [0-9]+\\.[0-9]+\\.[0-9]+$", skip = true },
+    { message = "^Release [0-9]+\\.[0-9]+\\.[0-9]+$", skip = true },
     { message = "^((C|c)leanup|WIP|Release)$", skip = true, group = "🔧 Miscellaneous" },
     { body = ".*security", group = "🔐 Security" },
     { message = ".*", group = "📝 Other" },
