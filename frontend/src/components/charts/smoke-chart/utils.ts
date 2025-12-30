@@ -3,9 +3,6 @@ import * as d3 from 'd3';
 import type { BucketDataPoint } from '../../../types';
 import type { ChartDataPoint, ChartStats } from './types';
 
-// Re-export from shared palette for backwards compatibility
-export { getPacketLossColor } from '../../../lib/chartColors';
-
 /**
  * Get time axis format based on time range
  */

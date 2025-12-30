@@ -1,6 +1,6 @@
 import type * as d3 from 'd3';
 import type { ChartDataPoint, ChartScales } from '../types';
-import { getPacketLossColor } from '../utils';
+import { getPacketLossColor } from '@/lib/chartColors';
 
 interface RenderPacketLossOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;

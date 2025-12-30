@@ -10,17 +10,13 @@ import {
   calculateChartStats,
   calculateP99,
 } from './utils';
-import {
-  renderSmokeBars,
-  renderPacketLoss,
-  renderMedianLine,
-  renderStatLine,
-  renderGrid,
-  renderAxes,
-  renderStatsPanel,
-  renderLegend,
-  setupTooltip,
-} from './layers';
+import { renderSmokeBars } from './layers/renderSmokeBars';
+import { renderPacketLoss } from './layers/renderPacketLoss';
+import { renderStatLine, renderMedianLine } from './layers/renderStatLines';
+import { renderGrid, renderAxes } from './layers/renderGridAndAxes';
+import { renderStatsPanel } from './layers/renderStatsPanel';
+import { renderLegend } from './layers/renderLegend';
+import { setupTooltip } from './layers/renderTooltip';
 import { ChartControls } from './ChartControls';
 import { chartColors, getThemeColors } from '../../../lib/chartColors';
 

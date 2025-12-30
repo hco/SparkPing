@@ -25,9 +25,6 @@ export interface TimeRange {
   to?: Date; // undefined means "now" (live)
 }
 
-// Re-export for backwards compatibility
-export { BUCKET_DURATION_OPTIONS, type BucketDuration } from '@/components/DurationPicker';
-
 // Get the duration in milliseconds for a preset
 function getPresetDurationMs(preset: PresetValue): number {
   const range = PRESET_RANGES.find(r => r.value === preset);

@@ -4,7 +4,7 @@ import { D3LatencyChart } from '@/components/charts/D3LatencyChart';
 import { D3PacketLossChart } from '@/components/charts/D3PacketLossChart';
 import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
 import { D3RRDStyleChart } from '@/components/charts/D3RRDStyleChart';
-import { D3SmokeChart } from '@/components/charts/D3SmokeChart';
+import { D3SmokeChart } from '@/components/charts/smoke-chart/D3SmokeChart';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { TargetStatsBar } from '@/components/TargetStatsBar';
 import { useTargetPingData } from '@/hooks/useTargetPingData';
