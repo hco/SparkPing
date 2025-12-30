@@ -30,7 +30,7 @@ export function useTimeRangeSearch() {
       router.navigate({
         to: '.',
         search: { ...currentSearch, ...updates },
-        replace: true,
+        replace: false,
       });
     },
     [router]
