@@ -4,6 +4,7 @@ node = "24"
 "cargo:cargo-watch" = { version = "latest" }
 "cargo:cargo-edit" = { version = "latest" }
 "npm:release-it" = { version = "latest" }
+"git-cliff" = { version = "2.11.0" }
 
 [settings]
 # Enable hooks (required for postinstall hook to work)
@@ -218,3 +219,7 @@ run = "release-it major --ci"
 description = "Dry run a release (no changes)"
 depends = ["install"]
 run = "release-it --dry-run"
+
+[tasks."release:changelog"]
+description = "Generate the changelog"
+run = "git-cliff --output CHANGELOG.md"
