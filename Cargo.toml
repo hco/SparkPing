@@ -29,3 +29,5 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
 async-stream = "0.3"
 hostname = "0.4"
 if-addrs = "0.10"
+dialoguer = "0.11"
+console = "0.15"

@@ -1,6 +1,7 @@
 mod api;
 mod config;
 mod config_file;
+mod config_wizard;
 mod discovery;
 mod logging;
 mod ping;
@@ -33,6 +34,10 @@ struct Args {
     /// Path to the configuration file (TOML format)
     #[arg(short, long, default_value = "config.toml")]
     config: PathBuf,
+
+    /// Initialize a new configuration file interactively
+    #[arg(long)]
+    init: bool,
 }
 
 /// Get the time range of all data in tsink storage
@@ -183,6 +188,91 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
     let config_path = args.config.clone();
+
+    // Determine the actual config file path (with .toml extension if not specified)
+    let config_file_path = if config_path.extension().is_some() {
+        config_path.clone()
+    } else {
+        config_path.with_extension("toml")
+    };
+
+    // Handle --init flag: run the configuration wizard
+    if args.init {
+        if config_file_path.exists() {
+            eprintln!(
+                "Config file '{}' already exists. Remove it first or use a different path.",
+                config_file_path.display()
+            );
+            std::process::exit(1);
+        }
+
+        let config_content = config_wizard::run_config_wizard(&config_file_path)
+            .map_err(|e| {
+                eprintln!("ERROR: Configuration wizard failed: {}", e);
+                e
+            })?;
+
+        config_wizard::write_config_file(&config_file_path, &config_content)
+            .map_err(|e| {
+                eprintln!("ERROR: Failed to write config file: {}", e);
+                e
+            })?;
+
+        eprintln!(
+            "Configuration saved to '{}'. Run SparkPing without --init to start.",
+            config_file_path.display()
+        );
+        std::process::exit(0);
+    }
+
+    // Check if config file exists
+    if !config_file_path.exists() {
+        // If running in an interactive terminal, offer to create config
+        if config_wizard::is_interactive() {
+            let should_create = config_wizard::prompt_create_config(&config_file_path)
+                .map_err(|e| {
+                    eprintln!("ERROR: Failed to prompt user: {}", e);
+                    e
+                })?;
+
+            if should_create {
+                let config_content = config_wizard::run_config_wizard(&config_file_path)
+                    .map_err(|e| {
+                        eprintln!("ERROR: Configuration wizard failed: {}", e);
+                        e
+                    })?;
+
+                config_wizard::write_config_file(&config_file_path, &config_content)
+                    .map_err(|e| {
+                        eprintln!("ERROR: Failed to write config file: {}", e);
+                        e
+                    })?;
+
+                eprintln!();
+                eprintln!(
+                    "Configuration saved! Starting SparkPing..."
+                );
+                eprintln!();
+            } else {
+                eprintln!();
+                eprintln!(
+                    "No configuration file. Run with --init to create one, or provide a config file with -c."
+                );
+                std::process::exit(1);
+            }
+        } else {
+            // Non-interactive mode: just error out
+            eprintln!(
+                "ERROR: Config file '{}' not found.",
+                config_file_path.display()
+            );
+            eprintln!();
+            eprintln!("To create a configuration file interactively, run:");
+            eprintln!("  {} --init", std::env::args().next().unwrap_or_else(|| "sparkping".to_string()));
+            eprintln!();
+            std::process::exit(1);
+        }
+    }
 
     // Load configuration from the specified file
     // Output errors to stderr before logging is initialized
