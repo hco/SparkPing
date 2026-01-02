@@ -1,18 +1,33 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { DiscoveredDevice, DiscoveryEvent } from '@/types';
+import type { DiscoveredDevice, DiscoveryEvent, SubnetSuggestion } from '@/types';
 import { getBasePath } from '@/lib/basePath';
 
-export type DiscoveryStatus = 'idle' | 'running' | 'error';
+export type DiscoveryStatus = 'idle' | 'running' | 'completed' | 'error';
 
-interface UseDeviceDiscoveryResult {
-  /** List of discovered devices */
+export interface UnifiedDiscoveryConfig {
+  /** Enable mDNS discovery */
+  mdnsEnabled: boolean;
+  /** Enable IP scan discovery */
+  ipScanEnabled: boolean;
+  /** Selected subnet for IP scan */
+  selectedSubnet?: SubnetSuggestion;
+  /** Custom CIDR for IP scan */
+  cidr?: string;
+  /** Custom start IP for IP scan */
+  startIp?: string;
+  /** Custom end IP for IP scan */
+  endIp?: string;
+}
+
+interface UseUnifiedDiscoveryResult {
+  /** List of discovered devices (merged from all methods) */
   devices: DiscoveredDevice[];
   /** Current status of discovery */
   status: DiscoveryStatus;
   /** Status message from the server */
   message: string | null;
-  /** Start device discovery (runs indefinitely until stopped) */
-  startDiscovery: () => void;
+  /** Start unified discovery with the given configuration */
+  startDiscovery: (config: UnifiedDiscoveryConfig) => void;
   /** Stop discovery */
   stopDiscovery: () => void;
   /** Clear discovered devices list */
@@ -22,10 +37,10 @@ interface UseDeviceDiscoveryResult {
 }
 
 /**
- * Hook for managing device discovery via SSE.
- * Discovery runs indefinitely until the user stops it or closes the page.
+ * Hook for managing unified device discovery via SSE.
+ * Supports multiple discovery methods running simultaneously with merged results.
  */
-export function useDeviceDiscovery(): UseDeviceDiscoveryResult {
+export function useUnifiedDiscovery(): UseUnifiedDiscoveryResult {
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
   const [status, setStatus] = useState<DiscoveryStatus>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -52,7 +67,7 @@ export function useDeviceDiscovery(): UseDeviceDiscoveryResult {
     }
   }, [status]);
 
-  const startDiscovery = useCallback(() => {
+  const startDiscovery = useCallback((config: UnifiedDiscoveryConfig) => {
     // Close existing connection if any
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -63,10 +78,28 @@ export function useDeviceDiscovery(): UseDeviceDiscoveryResult {
     setMessage(null);
     setStatus('running');
 
-    // Build the SSE URL (no duration - runs indefinitely)
+    // Build the SSE URL with query parameters
     const basePath = getBasePath();
-    const url = `${basePath}api/discovery/start`;
+    const params = new URLSearchParams();
 
+    // Add mDNS flag
+    params.set('mdns', config.mdnsEnabled.toString());
+
+    // Add IP scan configuration
+    params.set('ip_scan', config.ipScanEnabled.toString());
+
+    if (config.ipScanEnabled) {
+      if (config.selectedSubnet) {
+        params.set('cidr', config.selectedSubnet.cidr);
+      } else if (config.cidr) {
+        params.set('cidr', config.cidr);
+      } else if (config.startIp && config.endIp) {
+        params.set('start_ip', config.startIp);
+        params.set('end_ip', config.endIp);
+      }
+    }
+
+    const url = `${basePath}api/discovery/unified?${params.toString()}`;
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 
@@ -101,9 +134,8 @@ export function useDeviceDiscovery(): UseDeviceDiscoveryResult {
             break;
 
           case 'completed':
-            // Server-initiated completion (shouldn't happen with indefinite discovery)
             setMessage(data.message);
-            setStatus('idle');
+            setStatus('completed');
             eventSource.close();
             eventSourceRef.current = null;
             break;

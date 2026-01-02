@@ -64,6 +64,19 @@ The backend follows Rust best practices with a clear separation of concerns.
 - `DiscoveredDevice` and `DiscoveredService` structs
 - Automatic service type detection via DNS-SD meta-query
 
+#### `src/ip_scan.rs`
+- IP range scanning for device discovery
+- Subnet suggestion from local interfaces and traceroute
+- CIDR notation and custom IP range parsing
+- Concurrent TCP port scanning (ports 80, 443, 22 by default)
+- Private network detection for traceroute filtering
+
+#### `src/unified_discovery.rs`
+- Coordinates multiple discovery methods (mDNS + IP scan)
+- Merges results by IP address (deduplication)
+- Combines device information from multiple sources
+- Single stream output for client consumption
+
 ### API Module (`src/api/`)
 
 REST API built with Axum.
@@ -94,7 +107,10 @@ REST API built with Axum.
 - `dto.rs` - Request/response DTOs for targets
 
 #### `src/api/discovery/`
-- SSE endpoint for streaming device discovery results
+- `mod.rs` - Discovery API handlers
+- SSE endpoint for mDNS device discovery
+- SSE endpoint for IP range scanning
+- Subnet suggestion endpoint (local interfaces + traceroute)
 
 ## Frontend (React + TypeScript)
 
@@ -137,7 +153,7 @@ Single-page application built with Vite, React, and TanStack Router.
 - `smoke-chart/` - Smoke test visualization components
 
 #### Feature Components
-- `DeviceDiscoveryPanel.tsx` - mDNS device discovery UI
+- `UnifiedDiscoveryPanel.tsx` - Unified device discovery UI (mDNS + IP scan)
 - `TimeRangePicker.tsx` - Time range selection with presets
 - `DurationPicker.tsx` - Duration input component
 - `TargetStatsBar.tsx` - Target statistics display
@@ -150,7 +166,7 @@ Single-page application built with Vite, React, and TanStack Router.
 - `useDashboardData.ts` - Dashboard data fetching
 - `useTargetPingData.ts` - Individual target ping data
 - `useTargetStats.ts` - Target statistics aggregation
-- `useDeviceDiscovery.ts` - mDNS discovery SSE connection
+- `useUnifiedDiscovery.ts` - Unified discovery SSE connection (mDNS + IP scan)
 - `useTimeRangeSearch.ts` - URL-based time range state
 - `useUserPreferences.ts` - Local storage preferences
 - `useTheme.ts` - Theme switching
@@ -205,7 +221,8 @@ Integration for running SparkPing as a Home Assistant add-on.
 | `/api/targets/:id` | PUT | Update target |
 | `/api/targets/:id` | DELETE | Delete target |
 | `/api/storage/stats` | GET | Storage statistics |
-| `/api/discovery/start` | GET (SSE) | Stream device discovery events |
+| `/api/discovery/subnets` | GET | Get suggested subnets for IP scanning |
+| `/api/discovery/unified` | GET (SSE) | Stream unified discovery events (mDNS + IP scan, merged) |
 
 ## Import Notes
 

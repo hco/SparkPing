@@ -148,3 +148,21 @@ export type DiscoveryEvent =
   | { event_type: 'completed'; message: string; device_count: number }
   | { event_type: 'error'; message: string };
 
+// IP Scan Discovery types
+
+export interface SubnetSuggestion {
+  /** Human-readable label for this subnet */
+  label: string;
+  /** The subnet in CIDR notation (e.g., "192.168.1.0/24") */
+  cidr: string;
+  /** Subnet mask (e.g., "255.255.255.0") */
+  subnet_mask: string;
+  /** First usable IP in the range */
+  start_ip: string;
+  /** Last usable IP in the range */
+  end_ip: string;
+  /** Number of hosts in this subnet */
+  host_count: number;
+  /** Source of this suggestion (e.g., "local", "traceroute") */
+  source: string;
+}

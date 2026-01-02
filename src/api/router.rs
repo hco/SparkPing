@@ -1,5 +1,5 @@
 use crate::api::{
-    discovery::start_discovery,
+    discovery::{get_subnets, start_unified_discovery},
     middleware::ingress_ip_filter_middleware,
     ping::handlers as ping_handlers,
     targets::handlers as target_handlers,
@@ -56,7 +56,8 @@ pub fn create_router(
         .route("/api/targets", get(target_handlers::get_targets).post(target_handlers::create_target))
         .route("/api/targets/:id", put(target_handlers::update_target).delete(target_handlers::delete_target))
         .route("/api/storage/stats", get(ping_handlers::get_storage_stats))
-        .route("/api/discovery/start", get(start_discovery))
+        .route("/api/discovery/subnets", get(get_subnets))
+        .route("/api/discovery/unified", get(start_unified_discovery))
         .with_state(state);
 
     // Apply IP filtering middleware if home_assistant_ingress_only is enabled

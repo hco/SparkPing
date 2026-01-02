@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
-import { DeviceDiscoveryPanel } from '@/components/DeviceDiscoveryPanel'
+import { UnifiedDiscoveryPanel } from '@/components/UnifiedDiscoveryPanel'
 import { PageLayout } from '@/components/PageLayout'
 
 export const Route = createFileRoute('/settings')({
@@ -279,7 +279,7 @@ function Settings() {
         </Card>
 
       {/* Device Discovery Section */}
-      <DeviceDiscoveryPanel existingAddresses={existingAddresses} />
+      <UnifiedDiscoveryPanel existingAddresses={existingAddresses} />
     </PageLayout>
   )
 }

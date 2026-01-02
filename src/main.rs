@@ -3,10 +3,12 @@ mod config;
 mod config_file;
 mod config_wizard;
 mod discovery;
+mod ip_scan;
 mod logging;
 mod ping;
 mod storage;
 mod tasks;
+mod unified_discovery;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
