@@ -1,3 +1,5 @@
+import type { VendorInfo, SonosVendorInfo } from '../types';
+
 /**
  * Device information extracted from DNS-SD TXT records
  */
@@ -226,8 +228,9 @@ function parsePrinter(
 }
 
 /**
- * Parse Sonos device information
+ * Parse Sonos device information from mDNS TXT records
  * Service type: _sonos._tcp.local.
+ * Note: This is a fallback when vendor_info is not available
  */
 function parseSonos(
   _serviceType: string,
@@ -250,6 +253,53 @@ function parseSonos(
     model,
     metadata,
   };
+}
+
+/**
+ * Parse Sonos device information from vendor-specific info
+ * This provides richer information than mDNS TXT records
+ */
+function parseSonosFromVendorInfo(vendorInfo: SonosVendorInfo): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  // Basic info
+  metadata['zoneName'] = vendorInfo.zone_name;
+  if (vendorInfo.software_version) metadata['softwareVersion'] = vendorInfo.software_version;
+  if (vendorInfo.hardware_version) metadata['hardwareVersion'] = vendorInfo.hardware_version;
+  if (vendorInfo.serial_number) metadata['serialNumber'] = vendorInfo.serial_number;
+  if (vendorInfo.mac_address) metadata['macAddress'] = vendorInfo.mac_address;
+  if (vendorInfo.local_uid) metadata['localUid'] = vendorInfo.local_uid;
+  if (vendorInfo.household_id) metadata['householdId'] = vendorInfo.household_id;
+  if (vendorInfo.series_id) metadata['seriesId'] = vendorInfo.series_id;
+  
+  // Model info from device description
+  if (vendorInfo.model_name) metadata['modelName'] = vendorInfo.model_name;
+  if (vendorInfo.model_number) metadata['modelNumber'] = vendorInfo.model_number;
+  if (vendorInfo.model_url) metadata['modelUrl'] = vendorInfo.model_url;
+  if (vendorInfo.api_version) metadata['apiVersion'] = vendorInfo.api_version;
+  if (vendorInfo.display_version) metadata['displayVersion'] = vendorInfo.display_version;
+  if (vendorInfo.zone_type !== null) metadata['zoneType'] = String(vendorInfo.zone_type);
+  if (vendorInfo.icon_url) metadata['iconUrl'] = vendorInfo.icon_url;
+  
+  return {
+    deviceType: 'Sonos Speaker',
+    manufacturer: 'Sonos',
+    // Prefer model_name (e.g., "Era 300") over series_id (e.g., "A101")
+    model: vendorInfo.model_name || vendorInfo.series_id || null,
+    metadata,
+  };
+}
+
+/**
+ * Parse device information from vendor-specific info
+ */
+function parseDeviceInfoFromVendorInfo(vendorInfo: VendorInfo): DeviceInfo | null {
+  switch (vendorInfo.vendor) {
+    case 'sonos':
+      return parseSonosFromVendorInfo(vendorInfo);
+    default:
+      return null;
+  }
 }
 
 /**
@@ -349,6 +399,231 @@ function parseSpotifyConnect(
   };
 }
 
+/**
+ * Parse Philips Hue device information
+ * Service type: _hue._tcp.local.
+ * 
+ * Hue devices expose useful info in TXT records:
+ * - bridgeid: Device identifier (MAC-based, e.g., "ecb5fafffe808331")
+ * - modelid: Model identifier (e.g., "BSB002" for Hue Bridge v2)
+ * 
+ * Known model ID prefixes:
+ * - BSB: Hue Bridge (BSB001=v1, BSB002=v2, BSB003=Pro)
+ * - HSB: Hue Sync Box (HSB001/HSB1=original, HSB002/HSB2=8K)
+ */
+function parseHueDevice(
+  _serviceType: string,
+  txtProperties: Record<string, string>,
+  instanceName: string
+): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  const bridgeId = txtProperties['bridgeid'] || null;
+  const modelId = txtProperties['modelid'] || null;
+  
+  if (bridgeId) metadata['bridgeId'] = bridgeId;
+  if (modelId) metadata['modelId'] = modelId;
+  
+  // Map Hue model IDs to human-readable model names and device types
+  const modelInfo: Record<string, { model: string; deviceType: string }> = {
+    // Hue Bridges
+    'BSB001': { model: 'Hue Bridge v1', deviceType: 'Smart Home Hub' },
+    'BSB002': { model: 'Hue Bridge v2', deviceType: 'Smart Home Hub' },
+    'BSB003': { model: 'Hue Bridge Pro', deviceType: 'Smart Home Hub' },
+    // Hue Sync Boxes
+    'HSB001': { model: 'Hue Play HDMI Sync Box', deviceType: 'HDMI Sync Box' },
+    'HSB1': { model: 'Hue Play HDMI Sync Box', deviceType: 'HDMI Sync Box' },
+    'HSB002': { model: 'Hue Play HDMI Sync Box 8K', deviceType: 'HDMI Sync Box' },
+    'HSB2': { model: 'Hue Play HDMI Sync Box 8K', deviceType: 'HDMI Sync Box' },
+  };
+  
+  // Determine device info from model ID
+  let deviceType = 'Hue Device';
+  let model: string | null = null;
+  
+  if (modelId && modelInfo[modelId]) {
+    deviceType = modelInfo[modelId].deviceType;
+    model = modelInfo[modelId].model;
+  } else if (modelId) {
+    // Try to infer device type from model ID prefix
+    if (modelId.startsWith('BSB')) {
+      deviceType = 'Smart Home Hub';
+      model = `Hue Bridge (${modelId})`;
+    } else if (modelId.startsWith('HSB')) {
+      deviceType = 'HDMI Sync Box';
+      model = `Hue Sync Box (${modelId})`;
+    } else {
+      model = modelId;
+    }
+  } else {
+    // Try to infer from instance name
+    const nameLower = instanceName.toLowerCase();
+    if (nameLower.includes('bridge')) {
+      deviceType = 'Smart Home Hub';
+      model = 'Hue Bridge';
+    } else if (nameLower.includes('sync')) {
+      deviceType = 'HDMI Sync Box';
+      model = 'Hue Sync Box';
+    }
+  }
+  
+  return {
+    deviceType,
+    manufacturer: 'Philips',
+    model,
+    metadata,
+  };
+}
+
+/**
+ * Parse WiZ smart light information
+ * Service type: _wiz._udp.local.
+ * 
+ * WiZ is a Signify brand (same company as Philips Hue) for WiFi-based smart lights.
+ * Unlike Hue (which uses Zigbee + Bridge), WiZ devices connect directly to WiFi.
+ */
+function parseWizDevice(
+  _serviceType: string,
+  txtProperties: Record<string, string>,
+  instanceName: string
+): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  // WiZ TXT records can include various device info
+  const mac = txtProperties['mac'] || null;
+  const moduleId = txtProperties['moduleName'] || txtProperties['module'] || null;
+  const fwVersion = txtProperties['fwVersion'] || txtProperties['fw'] || null;
+  
+  if (mac) metadata['mac'] = mac;
+  if (moduleId) metadata['moduleId'] = moduleId;
+  if (fwVersion) metadata['firmwareVersion'] = fwVersion;
+  
+  // WiZ devices are typically smart bulbs, but could be plugs or other devices
+  let deviceType = 'Smart Light';
+  const nameLower = instanceName.toLowerCase();
+  if (nameLower.includes('plug') || nameLower.includes('socket')) {
+    deviceType = 'Smart Plug';
+  } else if (nameLower.includes('strip')) {
+    deviceType = 'Light Strip';
+  }
+  
+  return {
+    deviceType,
+    manufacturer: 'WiZ',
+    model: moduleId || null,
+    metadata,
+  };
+}
+
+/**
+ * Parse Shelly device information
+ * Service type: _shelly._tcp.local.
+ * 
+ * Shelly devices expose useful info in TXT records:
+ * - app: Device model code (e.g., "PlugSG3", "PlusPlugS", "Pro4PM")
+ * - gen: Generation (1, 2, or 3)
+ * - ver: Firmware version
+ */
+function parseShelly(
+  _serviceType: string,
+  txtProperties: Record<string, string>,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _instanceName: string
+): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  const appCode = txtProperties['app'] || null;
+  const generation = txtProperties['gen'] || null;
+  const version = txtProperties['ver'] || null;
+  
+  if (appCode) metadata['appCode'] = appCode;
+  if (generation) metadata['generation'] = generation;
+  if (version) metadata['firmwareVersion'] = version;
+  
+  // Map Shelly app codes to human-readable model names
+  const modelMap: Record<string, string> = {
+    // Gen 3
+    'PlugSG3': 'Plug S Gen 3',
+    'MiniG3': 'Mini Gen 3',
+    'Mini1G3': '1PM Mini Gen 3',
+    '1G3': '1 Gen 3',
+    '1PMG3': '1PM Gen 3',
+    '2PMG3': '2PM Gen 3',
+    'RGBWG3': 'RGBW Gen 3',
+    'HTG3': 'H&T Gen 3',
+    'DimmerG3': 'Dimmer Gen 3',
+    'MotionG3': 'Motion Gen 3',
+    'I4G3': 'i4 Gen 3',
+    // Gen 2 / Plus
+    'PlusPlugS': 'Plus Plug S',
+    'PlusPlugUS': 'Plus Plug US',
+    'Plus1': 'Plus 1',
+    'Plus1PM': 'Plus 1PM',
+    'Plus2PM': 'Plus 2PM',
+    'PlusI4': 'Plus i4',
+    'PlusHT': 'Plus H&T',
+    'PlusSmoke': 'Plus Smoke',
+    'PlusDimmerUS': 'Plus Dimmer US',
+    // Pro
+    'Pro1': 'Pro 1',
+    'Pro1PM': 'Pro 1PM',
+    'Pro2': 'Pro 2',
+    'Pro2PM': 'Pro 2PM',
+    'Pro3': 'Pro 3',
+    'Pro4PM': 'Pro 4PM',
+    'ProEM': 'Pro EM',
+    'Pro3EM': 'Pro 3EM',
+    'ProDualCoverPM': 'Pro Dual Cover PM',
+    // Gen 1
+    '1': '1',
+    '1L': '1L',
+    '1PM': '1PM',
+    '25': '2.5',
+    'Plug': 'Plug',
+    'PlugS': 'Plug S',
+    'PlugUS': 'Plug US',
+    'Dimmer': 'Dimmer',
+    'Dimmer2': 'Dimmer 2',
+    'RGBW2': 'RGBW2',
+    'Bulb': 'Bulb',
+    'BulbDuo': 'Bulb Duo',
+    'Vintage': 'Vintage',
+    'EM': 'EM',
+    '3EM': '3EM',
+    'HT': 'H&T',
+    'Flood': 'Flood',
+    'Door': 'Door/Window',
+    'Motion': 'Motion',
+    'Gas': 'Gas',
+    'Smoke': 'Smoke',
+    'Button1': 'Button 1',
+    'i3': 'i3',
+    'i4': 'i4',
+    'UNI': 'UNI',
+  };
+  
+  const modelName = appCode ? (modelMap[appCode] || appCode) : null;
+  const genLabel = generation ? `Gen ${generation}` : null;
+  
+  // Construct device type like "Shelly Plug S Gen 3"
+  let deviceType = 'Shelly';
+  if (modelName) {
+    // Avoid duplication like "Plug S Gen 3 Gen 3" - some models already have Gen in the name
+    if (genLabel && !modelName.toLowerCase().includes('gen')) {
+      deviceType = `Shelly ${modelName}`;
+    } else {
+      deviceType = `Shelly ${modelName}`;
+    }
+  }
+  
+  return {
+    deviceType,
+    manufacturer: 'Shelly',
+    model: modelName,
+    metadata,
+  };
+}
+
 // Register all built-in parsers
 registerServiceTypeParser('_hap._tcp.local.', parseHomeKit);
 registerServiceTypeParser('_homekit._tcp.local.', parseHomeKit);
@@ -359,10 +634,13 @@ registerServiceTypeParser('_ipp._tcp.local.', parsePrinter);
 registerServiceTypeParser('_printer._tcp.local.', parsePrinter);
 registerServiceTypeParser('_pdl-datastream._tcp.local.', parsePrinter);
 registerServiceTypeParser('_sonos._tcp.local.', parseSonos);
+registerServiceTypeParser('_shelly._tcp.local.', parseShelly);
 registerServiceTypeParser('_esphomelib._tcp.local.', parseESPHome);
 registerServiceTypeParser('_http._tcp.local.', parseHTTPService);
 registerServiceTypeParser('_https._tcp.local.', parseHTTPService);
 registerServiceTypeParser('_spotify-connect._tcp.local.', parseSpotifyConnect);
+registerServiceTypeParser('_hue._tcp.local.', parseHueDevice);
+registerServiceTypeParser('_wiz._udp.local.', parseWizDevice);
 
 /**
  * Parse device information from a service
@@ -396,10 +674,11 @@ function parseDeviceInfo(
 }
 
 /**
- * Parse device information from multiple services
- * Merges information from all services, prioritizing more specific parsers
+ * Parse device information from multiple services and optional vendor info
+ * Merges information from all services, prioritizing vendor info when available
  * 
  * @param services - Array of services with their TXT properties
+ * @param vendorInfo - Optional vendor-specific information from device APIs
  * @returns Combined device information
  */
 export function parseDeviceInfoFromServices(
@@ -407,9 +686,18 @@ export function parseDeviceInfoFromServices(
     serviceType: string;
     txtProperties: Record<string, string>;
     instanceName: string;
-  }>
+  }>,
+  vendorInfo?: VendorInfo
 ): DeviceInfo {
   const allInfo: DeviceInfo[] = [];
+  
+  // If vendor info is available, parse it first (highest priority)
+  if (vendorInfo) {
+    const vendorDeviceInfo = parseDeviceInfoFromVendorInfo(vendorInfo);
+    if (vendorDeviceInfo) {
+      allInfo.push(vendorDeviceInfo);
+    }
+  }
   
   // Parse each service
   for (const service of services) {
@@ -423,7 +711,7 @@ export function parseDeviceInfoFromServices(
     }
   }
   
-  // Merge information (prioritize first non-null values)
+  // Merge information (prioritize first non-null values, vendor info comes first)
   const merged: DeviceInfo = {
     deviceType: null,
     manufacturer: null,
@@ -447,4 +735,3 @@ export function parseDeviceInfoFromServices(
   
   return merged;
 }
-

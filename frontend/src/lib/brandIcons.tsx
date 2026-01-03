@@ -14,6 +14,7 @@ import {
   SiSony,
   SiHp,
   SiEpson,
+  SiPhilipshue,
 } from 'react-icons/si';
 
 /**
@@ -52,6 +53,12 @@ const brandIconMap: Map<string, ComponentType<{ className?: string }>> = new Map
   ['esphome', SiEspressif],
   ['home assistant', SiHomeassistant],
   ['homeassistant', SiHomeassistant],
+  
+  // Smart home - Signify brands (Philips Hue, WiZ)
+  ['philips', SiPhilipshue],
+  ['philips hue', SiPhilipshue],
+  ['hue', SiPhilipshue],
+  ['signify', SiPhilipshue], // Parent company of Philips Hue and WiZ
 ]);
 
 /**

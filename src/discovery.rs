@@ -6,6 +6,7 @@
 //! Uses pure Rust mDNS implementation (mdns-sd) that works on all platforms
 //! without requiring system dependencies.
 
+use crate::vendor_discovery::VendorInfo;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -47,6 +48,9 @@ pub struct DiscoveredDevice {
     pub ttl: Option<u32>,
     /// The method used to discover this device
     pub discovery_method: String,
+    /// Vendor-specific information (fetched from device APIs)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendor_info: Option<VendorInfo>,
 }
 
 /// Event sent during device discovery
@@ -392,6 +396,7 @@ fn create_device_from_service(
         txt_properties: service.txt_properties.clone(),
         ttl: None,
         discovery_method: "mdns".to_string(),
+        vendor_info: None,
     }
 }
 
@@ -418,6 +423,7 @@ mod tests {
             txt_properties: HashMap::new(),
             ttl: None,
             discovery_method: "mdns".to_string(),
+            vendor_info: None,
         };
 
         let event = DiscoveryEvent::DeviceFound { device };

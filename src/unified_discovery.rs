@@ -6,8 +6,9 @@
 
 use crate::discovery::{run_mdns_discovery, DiscoveredDevice, DiscoveryEvent};
 use crate::ip_scan::{run_ip_scan_discovery, IpRangeSpec, IpScanRequest};
+use crate::vendor_discovery::{self, Vendor, VendorInfo};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, info};
@@ -72,6 +73,8 @@ struct DiscoveryState {
     active_methods: usize,
     /// Methods that have completed
     completed_methods: usize,
+    /// IP addresses for which vendor info is being fetched
+    vendor_fetch_in_progress: HashSet<String>,
 }
 
 impl DiscoveryState {
@@ -80,6 +83,7 @@ impl DiscoveryState {
             devices: HashMap::new(),
             active_methods,
             completed_methods: 0,
+            vendor_fetch_in_progress: HashSet::new(),
         }
     }
 
@@ -155,6 +159,56 @@ impl DiscoveryState {
         self.completed_methods += 1;
         self.completed_methods >= self.active_methods
     }
+
+    /// Check if vendor info should be fetched for a device
+    /// Returns Some(Vendor) if vendor fetch should be triggered, None otherwise
+    fn should_fetch_vendor_info(&mut self, device: &DiscoveredDevice) -> Option<Vendor> {
+        // Don't fetch if already has vendor info
+        if device.vendor_info.is_some() {
+            return None;
+        }
+
+        // Don't fetch if already in progress
+        if self.vendor_fetch_in_progress.contains(&device.address) {
+            return None;
+        }
+
+        // Detect vendor from service types
+        let service_types: Vec<String> = device
+            .services
+            .iter()
+            .map(|s| s.service_type.clone())
+            .collect();
+
+        if let Some(vendor) = vendor_discovery::detect_vendor(&service_types) {
+            self.vendor_fetch_in_progress.insert(device.address.clone());
+            Some(vendor)
+        } else {
+            None
+        }
+    }
+
+    /// Update a device with vendor info
+    /// Returns the updated device if found
+    fn update_device_vendor_info(
+        &mut self,
+        ip_address: &str,
+        vendor_info: VendorInfo,
+        vendor_name: Option<String>,
+    ) -> Option<DiscoveredDevice> {
+        self.vendor_fetch_in_progress.remove(ip_address);
+
+        if let Some(device) = self.devices.get_mut(ip_address) {
+            device.vendor_info = Some(vendor_info);
+            // Always prefer vendor-provided name (e.g., Sonos zone name) over mDNS instance name
+            if let Some(name) = vendor_name {
+                device.name = name;
+            }
+            Some(device.clone())
+        } else {
+            None
+        }
+    }
 }
 
 /// Internal event for coordinating discovery methods
@@ -167,6 +221,12 @@ enum InternalEvent {
     Completed(String),
     /// An error occurred
     Error(String),
+    /// Vendor-specific information was fetched for a device
+    VendorInfo {
+        ip_address: String,
+        vendor_info: VendorInfo,
+        vendor_name: Option<String>,
+    },
 }
 
 /// Run unified discovery with multiple methods and send merged results.
@@ -217,8 +277,12 @@ pub async fn run_unified_discovery(
     }
 
     // Create internal channel for coordinating discovery methods
-    let (internal_tx, mut internal_rx) = mpsc::channel::<InternalEvent>(100);
+    // Use a larger buffer to handle vendor info events
+    let (internal_tx, mut internal_rx) = mpsc::channel::<InternalEvent>(200);
     let state = Arc::new(Mutex::new(DiscoveryState::new(active_methods)));
+    
+    // Keep a reference to internal_tx for spawning vendor fetch tasks
+    let vendor_tx = internal_tx.clone();
 
     // Start mDNS discovery if enabled
     if config.mdns_enabled {
@@ -326,8 +390,33 @@ pub async fn run_unified_discovery(
 
         match event {
             InternalEvent::Device(device) => {
-                let mut state = state.lock().await;
-                if let Some((merged_device, is_new)) = state.merge_device(device) {
+                let mut state_guard = state.lock().await;
+                if let Some((merged_device, is_new)) = state_guard.merge_device(device) {
+                    // Check if we should fetch vendor-specific info
+                    if let Some(vendor) = state_guard.should_fetch_vendor_info(&merged_device) {
+                        let ip_address = merged_device.address.clone();
+                        let vendor_tx = vendor_tx.clone();
+                        
+                        // Spawn a task to fetch vendor info asynchronously
+                        tokio::spawn(async move {
+                            let (vendor_info, vendor_name) =
+                                vendor_discovery::fetch_vendor_info_with_name(vendor, &ip_address).await;
+                            
+                            if let Some(info) = vendor_info {
+                                let _ = vendor_tx
+                                    .send(InternalEvent::VendorInfo {
+                                        ip_address,
+                                        vendor_info: info,
+                                        vendor_name,
+                                    })
+                                    .await;
+                            }
+                        });
+                    }
+                    
+                    // Drop lock before sending to avoid holding it during async send
+                    drop(state_guard);
+                    
                     let event = if is_new {
                         DiscoveryEvent::DeviceFound { device: merged_device }
                     } else {
@@ -338,15 +427,43 @@ pub async fn run_unified_discovery(
                     }
                 }
             }
+            InternalEvent::VendorInfo {
+                ip_address,
+                vendor_info,
+                vendor_name,
+            } => {
+                let mut state_guard = state.lock().await;
+                if let Some(updated_device) =
+                    state_guard.update_device_vendor_info(&ip_address, vendor_info, vendor_name)
+                {
+                    drop(state_guard);
+                    
+                    debug!(
+                        "Updated device {} with vendor info: {}",
+                        updated_device.address, updated_device.name
+                    );
+                    
+                    if tx
+                        .send(DiscoveryEvent::DeviceUpdated {
+                            device: updated_device,
+                        })
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
             InternalEvent::Started(method) => {
                 debug!("{} discovery started", method);
             }
             InternalEvent::Completed(method) => {
                 debug!("{} discovery completed", method);
-                let mut state = state.lock().await;
-                if state.method_completed() {
+                let mut state_guard = state.lock().await;
+                if state_guard.method_completed() {
                     // All methods completed
-                    let device_count = state.devices.len();
+                    let device_count = state_guard.devices.len();
+                    drop(state_guard);
                     let _ = tx
                         .send(DiscoveryEvent::Completed {
                             message: format!("Discovery complete. Found {} devices.", device_count),
@@ -384,6 +501,7 @@ mod tests {
             txt_properties: HashMap::new(),
             ttl: None,
             discovery_method: "mdns".to_string(),
+            vendor_info: None,
         };
 
         let result = state.merge_device(device1);
@@ -402,6 +520,7 @@ mod tests {
             txt_properties: HashMap::new(),
             ttl: None,
             discovery_method: "ip_scan".to_string(),
+            vendor_info: None,
         };
 
         let result = state.merge_device(device2);

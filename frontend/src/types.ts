@@ -109,6 +109,46 @@ export interface StorageStatsResponse {
 
 // Device discovery types
 
+/** Sonos vendor-specific information */
+export interface SonosVendorInfo {
+  vendor: 'sonos';
+  /** The zone/room name configured on the speaker (includes L/R for stereo pairs) */
+  zone_name: string;
+  /** Hardware serial number */
+  serial_number: string | null;
+  /** Software version */
+  software_version: string | null;
+  /** Hardware version */
+  hardware_version: string | null;
+  /** Series ID (product identifier code like "A101") */
+  series_id: string | null;
+  /** IP address as reported by the device */
+  ip_address: string | null;
+  /** MAC address */
+  mac_address: string | null;
+  /** Local UID (unique identifier like "RINCON_...") */
+  local_uid: string | null;
+  /** Household control ID */
+  household_id: string | null;
+  /** Model name (e.g., "Era 300", "Five", "Beam") */
+  model_name: string | null;
+  /** Model number (e.g., "S41", "S23") */
+  model_number: string | null;
+  /** Model URL (product page) */
+  model_url: string | null;
+  /** API version */
+  api_version: string | null;
+  /** Display version (user-friendly version like "17.7") */
+  display_version: string | null;
+  /** Zone type code */
+  zone_type: number | null;
+  /** Icon URL path (e.g., "/img/icon-S41.png") */
+  icon_url: string | null;
+}
+
+/** Vendor-specific information (tagged union) */
+export type VendorInfo = SonosVendorInfo;
+
 export interface DiscoveredService {
   /** Service type (e.g., "_http._tcp.local.") */
   service_type: string;
@@ -139,6 +179,8 @@ export interface DiscoveredDevice {
   ttl: number | null;
   /** The method used to discover this device */
   discovery_method: string;
+  /** Vendor-specific information (fetched from device APIs) */
+  vendor_info?: VendorInfo;
 }
 
 export type DiscoveryEvent =

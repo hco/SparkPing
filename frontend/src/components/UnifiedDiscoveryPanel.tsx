@@ -31,6 +31,8 @@ import {
   Network,
   Globe,
   Router,
+  LayoutList,
+  Group,
 } from 'lucide-react';
 
 interface UnifiedDiscoveryPanelProps {
@@ -86,12 +88,14 @@ function getDeviceInfo(device: DiscoveredDevice): DeviceInfo {
     metadata: { ...device.txt_properties },
   };
 
+  // Pass vendor_info to get richer device information when available
   const serviceLevelInfo = parseDeviceInfoFromServices(
     device.services.map((service) => ({
       serviceType: service.service_type,
       txtProperties: service.txt_properties,
       instanceName: service.instance_name,
-    }))
+    })),
+    device.vendor_info
   );
 
   return {
@@ -123,6 +127,8 @@ function getServiceTypeName(serviceType: string): string {
     '_sonos._tcp.local.': 'Sonos',
     '_esphomelib._tcp.local.': 'ESPHome',
     '_workstation._tcp.local.': 'Workstation',
+    '_hue._tcp.local.': 'Philips Hue',
+    '_wiz._udp.local.': 'WiZ Smart Light',
   };
   return typeMap[serviceType] || serviceType.replace(/_/g, '').replace('.local.', '');
 }
@@ -202,6 +208,8 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
   const [addedDevices, setAddedDevices] = useState<Set<string>>(new Set());
   const [expandedDevices, setExpandedDevices] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [groupByManufacturer, setGroupByManufacturer] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Auto-select first local subnet when subnets load
   useEffect(() => {
@@ -270,6 +278,46 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
 
     return devices.filter((device) => matchedAddresses.has(device.address));
   }, [devices, searchQuery, searchIndex]);
+
+  // Group devices by manufacturer
+  const groupedDevices = useMemo(() => {
+    if (!groupByManufacturer) return null;
+
+    const groups = new Map<string, DiscoveredDevice[]>();
+    
+    for (const device of filteredDevices) {
+      const deviceInfo = getDeviceInfo(device);
+      const manufacturer = deviceInfo.manufacturer || 'Unknown';
+      
+      const existing = groups.get(manufacturer);
+      if (existing) {
+        existing.push(device);
+      } else {
+        groups.set(manufacturer, [device]);
+      }
+    }
+
+    // Sort groups by manufacturer name, but put "Unknown" at the end
+    const sortedGroups = Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === 'Unknown') return 1;
+      if (b === 'Unknown') return -1;
+      return a.localeCompare(b);
+    });
+
+    return sortedGroups;
+  }, [filteredDevices, groupByManufacturer]);
+
+  const handleToggleGroup = (manufacturer: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(manufacturer)) {
+        next.delete(manufacturer);
+      } else {
+        next.add(manufacturer);
+      }
+      return next;
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -589,21 +637,41 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
           </div>
         )}
 
-        {/* Search input */}
+        {/* Search and grouping controls */}
         {devices.length > 0 && (
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search by hostname, IP address, or service..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+          <div className="mb-4 space-y-3">
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search by hostname, IP address, or service..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant={groupByManufacturer ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setGroupByManufacturer(!groupByManufacturer)}
+                title={groupByManufacturer ? 'Show as list' : 'Group by manufacturer'}
+              >
+                {groupByManufacturer ? (
+                  <>
+                    <LayoutList className="size-4" />
+                    <span className="hidden sm:inline">List</span>
+                  </>
+                ) : (
+                  <>
+                    <Group className="size-4" />
+                    <span className="hidden sm:inline">Group</span>
+                  </>
+                )}
+              </Button>
             </div>
             {searchQuery && (
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Showing {filteredDevices.length} of {devices.length} device
                 {devices.length !== 1 ? 's' : ''}
               </p>
@@ -648,121 +716,242 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                 </Label>
               </div>
             )}
-            <div className="space-y-2">
-              {filteredDevices.map((device) => {
-                const isExisting = existingAddresses.has(device.address);
-                const isAdded = addedDevices.has(device.address);
-                const isSelected = selectedDevices.has(device.address);
-                const isDisabled = isExisting || isAdded;
-                const isExpanded = expandedDevices.has(device.address);
-                const deviceInfo = getDeviceInfo(device);
-
-                return (
-                  <div
-                    key={device.address}
-                    className={`rounded-lg border transition-colors ${
-                      isDisabled
-                        ? 'bg-muted/50 border-border/50 opacity-60'
-                        : isSelected
-                          ? 'bg-primary/5 border-primary/30'
-                          : 'bg-background border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 p-3">
-                      <Checkbox
-                        id={`device-${device.address}`}
-                        checked={isSelected}
-                        disabled={isDisabled}
-                        onCheckedChange={() => handleToggleDevice(device.address)}
-                      />
-                      <Label
-                        htmlFor={`device-${device.address}`}
-                        className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-muted-foreground">
-                            <DeviceIcon
-                              deviceInfo={deviceInfo}
-                              discoveryMethod={device.discovery_method}
-                              firstServiceType={
-                                device.services.length > 0
-                                  ? device.services[0].service_type
-                                  : null
-                              }
-                            />
-                          </span>
-                          <span className="font-medium text-foreground">{device.name}</span>
-                          <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
-                          {/* Discovery method badges */}
-                          {device.discovery_method.split(', ').map((method) => (
-                            <span
-                              key={method}
-                              className={`text-xs px-1.5 py-0.5 rounded ${
-                                method.includes('mdns')
-                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                  : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                              }`}
-                            >
-                              {method.includes('mdns') ? 'mDNS' : method}
-                            </span>
-                          ))}
-                          {deviceInfo.deviceType && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                              {deviceInfo.deviceType}
-                            </span>
-                          )}
-                          {device.services.length > 1 && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-600 dark:text-slate-400">
-                              {device.services.length} services
-                            </span>
-                          )}
-                          {(isExisting || isAdded) && (
-                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              {isExisting ? 'Already added' : 'Just added'}
-                            </span>
-                          )}
-                          {(deviceInfo.manufacturer || deviceInfo.model) && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              {deviceInfo.manufacturer && (() => {
-                                const BrandIcon = getBrandIcon(deviceInfo.manufacturer);
-                                return (
-                                  <>
-                                    {BrandIcon && <BrandIcon className="size-3 shrink-0" />}
-                                    <span>{deviceInfo.manufacturer}</span>
-                                  </>
-                                );
-                              })()}
-                              {deviceInfo.model && <span>{deviceInfo.model}</span>}
-                            </span>
-                          )}
-                        </div>
-                      </Label>
+            {/* Device list - flat or grouped */}
+            {groupByManufacturer && groupedDevices ? (
+              <div className="space-y-4">
+                {groupedDevices.map(([manufacturer, groupDevices]) => {
+                  const isCollapsed = collapsedGroups.has(manufacturer);
+                  const BrandIcon = getBrandIcon(manufacturer);
+                  const groupSelectableDevices = groupDevices.filter(
+                    (d) => !existingAddresses.has(d.address) && !addedDevices.has(d.address)
+                  );
+                  const groupSelectedCount = groupSelectableDevices.filter(
+                    (d) => selectedDevices.has(d.address)
+                  ).length;
+                  
+                  return (
+                    <div key={manufacturer} className="border rounded-lg overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => handleToggleDetails(device.address)}
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                        aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                        onClick={() => handleToggleGroup(manufacturer)}
+                        className="w-full flex items-center gap-3 p-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
                       >
-                        {isExpanded ? (
-                          <ChevronDown className="size-4" />
+                        {isCollapsed ? (
+                          <ChevronRight className="size-4 shrink-0" />
                         ) : (
-                          <ChevronRight className="size-4" />
+                          <ChevronDown className="size-4 shrink-0" />
                         )}
+                        {BrandIcon && <BrandIcon className="size-4 shrink-0" />}
+                        <span className="font-medium flex-1">{manufacturer}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {groupDevices.length} device{groupDevices.length !== 1 ? 's' : ''}
+                          {groupSelectedCount > 0 && (
+                            <span className="ml-2 text-primary">
+                              ({groupSelectedCount} selected)
+                            </span>
+                          )}
+                        </span>
                       </button>
-                    </div>
-                    {isExpanded && (
-                      <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
-                        <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
-                          <pre className="whitespace-pre-wrap break-words">
-                            {JSON.stringify(device, null, 2)}
-                          </pre>
+                      {!isCollapsed && (
+                        <div className="space-y-1 p-2">
+                          {groupDevices.map((device) => {
+                            const isExisting = existingAddresses.has(device.address);
+                            const isAdded = addedDevices.has(device.address);
+                            const isSelected = selectedDevices.has(device.address);
+                            const isDisabled = isExisting || isAdded;
+                            const isExpanded = expandedDevices.has(device.address);
+                            const deviceInfo = getDeviceInfo(device);
+
+                            return (
+                              <div
+                                key={device.address}
+                                className={`rounded-lg border transition-colors ${
+                                  isDisabled
+                                    ? 'bg-muted/50 border-border/50 opacity-60'
+                                    : isSelected
+                                      ? 'bg-primary/5 border-primary/30'
+                                      : 'bg-background border-border hover:border-primary/30'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 p-3">
+                                  <Checkbox
+                                    id={`device-grouped-${device.address}`}
+                                    checked={isSelected}
+                                    disabled={isDisabled}
+                                    onCheckedChange={() => handleToggleDevice(device.address)}
+                                  />
+                                  <Label
+                                    htmlFor={`device-grouped-${device.address}`}
+                                    className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
+                                  >
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium text-foreground">{device.name}</span>
+                                      <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
+                                      {deviceInfo.deviceType && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                          {deviceInfo.deviceType}
+                                        </span>
+                                      )}
+                                      {deviceInfo.model && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {deviceInfo.model}
+                                        </span>
+                                      )}
+                                      {(isExisting || isAdded) && (
+                                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                          {isExisting ? 'Already added' : 'Just added'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </Label>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleDetails(device.address)}
+                                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                                    aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="size-4" />
+                                    ) : (
+                                      <ChevronRight className="size-4" />
+                                    )}
+                                  </button>
+                                </div>
+                                {isExpanded && (
+                                  <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
+                                    <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
+                                      <pre className="whitespace-pre-wrap break-words">
+                                        {JSON.stringify(device, null, 2)}
+                                      </pre>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredDevices.map((device) => {
+                  const isExisting = existingAddresses.has(device.address);
+                  const isAdded = addedDevices.has(device.address);
+                  const isSelected = selectedDevices.has(device.address);
+                  const isDisabled = isExisting || isAdded;
+                  const isExpanded = expandedDevices.has(device.address);
+                  const deviceInfo = getDeviceInfo(device);
+
+                  return (
+                    <div
+                      key={device.address}
+                      className={`rounded-lg border transition-colors ${
+                        isDisabled
+                          ? 'bg-muted/50 border-border/50 opacity-60'
+                          : isSelected
+                            ? 'bg-primary/5 border-primary/30'
+                            : 'bg-background border-border hover:border-primary/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 p-3">
+                        <Checkbox
+                          id={`device-${device.address}`}
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onCheckedChange={() => handleToggleDevice(device.address)}
+                        />
+                        <Label
+                          htmlFor={`device-${device.address}`}
+                          className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-muted-foreground">
+                              <DeviceIcon
+                                deviceInfo={deviceInfo}
+                                discoveryMethod={device.discovery_method}
+                                firstServiceType={
+                                  device.services.length > 0
+                                    ? device.services[0].service_type
+                                    : null
+                                }
+                              />
+                            </span>
+                            <span className="font-medium text-foreground">{device.name}</span>
+                            <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
+                            {/* Discovery method badges */}
+                            {device.discovery_method.split(', ').map((method) => (
+                              <span
+                                key={method}
+                                className={`text-xs px-1.5 py-0.5 rounded ${
+                                  method.includes('mdns')
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                    : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                                }`}
+                              >
+                                {method.includes('mdns') ? 'mDNS' : method}
+                              </span>
+                            ))}
+                            {deviceInfo.deviceType && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                {deviceInfo.deviceType}
+                              </span>
+                            )}
+                            {device.services.length > 1 && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-600 dark:text-slate-400">
+                                {device.services.length} services
+                              </span>
+                            )}
+                            {(isExisting || isAdded) && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                {isExisting ? 'Already added' : 'Just added'}
+                              </span>
+                            )}
+                            {(deviceInfo.manufacturer || deviceInfo.model) && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                {deviceInfo.manufacturer && (() => {
+                                  const BrandIcon = getBrandIcon(deviceInfo.manufacturer);
+                                  return (
+                                    <>
+                                      {BrandIcon && <BrandIcon className="size-3 shrink-0" />}
+                                      <span>{deviceInfo.manufacturer}</span>
+                                    </>
+                                  );
+                                })()}
+                                {deviceInfo.model && <span>{deviceInfo.model}</span>}
+                              </span>
+                            )}
+                          </div>
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDetails(device.address)}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                          aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="size-4" />
+                          ) : (
+                            <ChevronRight className="size-4" />
+                          )}
+                        </button>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
+                          <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
+                            <pre className="whitespace-pre-wrap break-words">
+                              {JSON.stringify(device, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
 

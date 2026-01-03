@@ -420,6 +420,7 @@ pub async fn run_ip_scan_discovery(tx: mpsc::Sender<DiscoveryEvent>, request: Ip
                     txt_properties: std::collections::HashMap::new(),
                     ttl: None,
                     discovery_method: format!("ip_scan (port {})", port),
+                    vendor_info: None,
                 };
 
                 found_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

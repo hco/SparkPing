@@ -9,6 +9,7 @@ mod ping;
 mod storage;
 mod tasks;
 mod unified_discovery;
+mod vendor_discovery;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
