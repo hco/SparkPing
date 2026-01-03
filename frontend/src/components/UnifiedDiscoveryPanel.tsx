@@ -34,6 +34,7 @@ import {
   LayoutList,
   Group,
 } from 'lucide-react';
+import { JsonView } from '@/components/JsonView';
 
 interface UnifiedDiscoveryPanelProps {
   existingAddresses: Set<string>;
@@ -819,11 +820,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                                 </div>
                                 {isExpanded && (
                                   <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
-                                    <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
-                                      <pre className="whitespace-pre-wrap break-words">
-                                        {JSON.stringify(device, null, 2)}
-                                      </pre>
-                                    </div>
+                                    <JsonView data={device} className="mt-2" />
                                   </div>
                                 )}
                               </div>
@@ -940,11 +937,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                       </div>
                       {isExpanded && (
                         <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
-                          <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono overflow-x-auto">
-                            <pre className="whitespace-pre-wrap break-words">
-                              {JSON.stringify(device, null, 2)}
-                            </pre>
-                          </div>
+                          <JsonView data={device} className="mt-2" />
                         </div>
                       )}
                     </div>
