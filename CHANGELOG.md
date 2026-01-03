@@ -2,6 +2,15 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.50] - 2026-01-03
+
+### 🐛 Bug Fixes
+
+- Make sure the latest version of the frontend is used
+
+### 📝 Other
+
+- Add copy button for discovery json
 ## [0.1.48] - 2026-01-03
 
 ### 📝 Other
