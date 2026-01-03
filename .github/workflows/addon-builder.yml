@@ -53,12 +53,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: ["aarch64"]
-        # I had to disable amd64 builds for now, because they overwrite the aarch64 image?!
-        # arch: ["aarch64", "amd64"]
+        # Build both architectures; each uses a native runner (no slow QEMU).
+        # Images are tagged with arch suffix to avoid overwriting each other.
+        arch: ["aarch64", "amd64"]
     permissions:
       contents: read
       packages: write
+    # Expose image name and version for the manifest job
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Check out repository
@@ -120,11 +124,47 @@ jobs:
             --target /data/home-assistant-addon \
             --image "${{ steps.check.outputs.image }}" \
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
-            --version "${{ steps.version.outputs.version }}" \
+            --version "${{ steps.version.outputs.version }}-${{ matrix.arch }}" \
             --addon
 
-  bump-addon-version:
+  # Combine architecture-specific images into a single multi-arch manifest.
+  # This allows users to pull the image without specifying architecture.
+  create-manifest:
     needs: build
+    runs-on: ubuntu-latest
+    name: Create multi-arch manifest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ needs.build.outputs.image }}"
+          VERSION="${{ needs.build.outputs.version }}"
+
+          # Create manifest list combining both arch-specific images
+          docker manifest create "${IMAGE}:${VERSION}" \
+            "${IMAGE}:${VERSION}-aarch64" \
+            "${IMAGE}:${VERSION}-amd64"
+
+          # Annotate each image with its platform (required for correct platform detection)
+          docker manifest annotate "${IMAGE}:${VERSION}" \
+            "${IMAGE}:${VERSION}-aarch64" --os linux --arch arm64
+          docker manifest annotate "${IMAGE}:${VERSION}" \
+            "${IMAGE}:${VERSION}-amd64" --os linux --arch amd64
+
+          # Push the manifest list to the registry
+          docker manifest push "${IMAGE}:${VERSION}"
+
+  bump-addon-version:
+    needs: create-manifest
     runs-on: ubuntu-latest
     name: Bump add-on version
     permissions:
