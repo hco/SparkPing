@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { useUserPreferences } from '../../../hooks/useUserPreferences';
 import { useTheme } from '../../../hooks/useTheme';
-import type { D3SmokeChartProps, ChartVisibilityOptions, ChartMargin } from './types';
+import type { D3SmokeChartProps, ChartVisibilityOptions, ChartMargin, SmokeBarStyle } from './types';
 import {
   prepareChartData,
   filterValidLatencyData,
@@ -65,6 +65,7 @@ export function D3SmokeChart({
     showPacketLoss: preferences.showPacketLoss,
     showStatsPanel: preferences.showStatsPanel,
     clipToP99: preferences.clipToP99,
+    smokeBarStyle: preferences.smokeBarStyle,
   }), [
     preferences.showMedianLine,
     preferences.showMinLine,
@@ -74,6 +75,7 @@ export function D3SmokeChart({
     preferences.showPacketLoss,
     preferences.showStatsPanel,
     preferences.clipToP99,
+    preferences.smokeBarStyle,
   ]);
 
   // Use dynamic margin based on stats panel visibility and screen width
@@ -171,6 +173,7 @@ export function D3SmokeChart({
         innerWidth,
         chartHeight,
         barWidth,
+        style: visibility.smokeBarStyle,
       });
     }
 
@@ -255,8 +258,15 @@ export function D3SmokeChart({
     return cleanup;
   }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors]);
 
-  const handleToggle = (key: keyof ChartVisibilityOptions, value: boolean) => {
+  // Type for boolean-only visibility keys (excludes smokeBarStyle)
+  type BooleanVisibilityKey = Exclude<keyof ChartVisibilityOptions, 'smokeBarStyle'>;
+  
+  const handleToggle = (key: BooleanVisibilityKey, value: boolean) => {
     setPreference(key, value);
+  };
+
+  const handleStyleChange = (style: SmokeBarStyle) => {
+    setPreference('smokeBarStyle', style);
   };
 
   if (data.length === 0) {
@@ -269,7 +279,7 @@ export function D3SmokeChart({
 
   return (
     <div ref={containerRef} className="w-full">
-      <ChartControls visibility={visibility} onToggle={handleToggle} />
+      <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
       <svg
         ref={svgRef}
         className="w-full h-auto"

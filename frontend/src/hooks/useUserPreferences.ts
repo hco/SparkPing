@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { SmokeBarStyle } from '../components/charts/smoke-chart/types';
 
 // Define the shape of all user preferences
 export interface UserPreferences {
@@ -11,7 +12,11 @@ export interface UserPreferences {
   showPacketLoss: boolean;
   showStatsPanel: boolean;
   clipToP99: boolean;
+  smokeBarStyle: SmokeBarStyle;
 }
+
+// Valid smoke bar styles for validation
+const validSmokeBarStyles: SmokeBarStyle[] = ['classic', 'gradient', 'percentile', 'histogram'];
 
 // Default values for all preferences
 const defaultPreferences: UserPreferences = {
@@ -23,6 +28,7 @@ const defaultPreferences: UserPreferences = {
   showPacketLoss: true,
   showStatsPanel: false,
   clipToP99: false,
+  smokeBarStyle: 'classic',
 };
 
 const STORAGE_KEY = 'sparkping-user-preferences';
@@ -63,6 +69,9 @@ function loadPreferences(): UserPreferences {
       clipToP99: typeof parsed.clipToP99 === 'boolean'
         ? parsed.clipToP99
         : defaultPreferences.clipToP99,
+      smokeBarStyle: validSmokeBarStyles.includes(parsed.smokeBarStyle)
+        ? parsed.smokeBarStyle
+        : defaultPreferences.smokeBarStyle,
     };
   } catch {
     return defaultPreferences;

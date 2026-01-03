@@ -213,7 +213,47 @@ interface ChartVisibilityOptions {
   showPacketLoss: boolean;   // Background coloring
   showStatsPanel: boolean;   // Right-side panel (affects margins!)
   clipToP99: boolean;        // Clip y-scale to 99th percentile
+  smokeBarStyle: SmokeBarStyle; // 'gradient' | 'percentile' | 'histogram'
 }
+```
+
+## Smoke Bar Styles
+
+The smoke bars can be rendered in four different styles, selectable via the `smokeBarStyle` preference:
+
+### 1. Classic Style (default)
+The original simple implementation:
+- **Light gray rectangle** spanning the full min-to-max range (50% opacity)
+- **Darker band** around the average (30% of range height, 60% opacity)
+
+Simple and performant, works well for quick visual assessment.
+
+### 2. Gradient Style
+Creates a Gaussian-like gradient for each bar where:
+- The center (around average) is **darkest** (highest opacity)
+- The edges (near min/max) **fade out** (lowest opacity)
+- Uses SVG `<linearGradient>` with per-bar gradients for accurate positioning
+
+This mimics the SmokePing aesthetic where you can visually see where pings cluster.
+
+### 3. Percentile Style
+Renders concentric bands based on estimated percentile ranges:
+- **Core band (p40-p60):** Darkest, 60% opacity - where most values cluster
+- **IQR band (p25-p75):** Medium, 40% opacity - interquartile range
+- **Outer band (p5-p95):** Lightest, 25% opacity - near-total range
+
+Uses z-score estimation assuming normal distribution around the average.
+
+### 4. Histogram Style
+Divides each bar into 8 discrete vertical segments:
+- Each segment's **opacity represents expected density** at that latency level
+- Uses Gaussian probability density function centered on average
+- Creates a "stepped" visual effect that clearly shows the distribution
+
+**Implementation notes:**
+- All styles share the same `calculateBarBounds()` function for consistent positioning
+- Standard deviation is estimated as `(max - min) / 4` (assuming range ≈ 4σ)
+- The style selector only appears when smoke bars are enabled
 ```
 
 **⚠️ `showStatsPanel` affects chart dimensions:**

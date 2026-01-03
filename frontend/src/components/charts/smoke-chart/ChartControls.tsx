@@ -1,17 +1,30 @@
-import type { ChartVisibilityOptions } from './types';
+import type { ChartVisibilityOptions, SmokeBarStyle } from './types';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+// Extract only the boolean keys from ChartVisibilityOptions for checkbox controls
+type BooleanVisibilityKey = {
+  [K in keyof ChartVisibilityOptions]: ChartVisibilityOptions[K] extends boolean ? K : never;
+}[keyof ChartVisibilityOptions];
 
 interface ChartControlsProps {
   visibility: ChartVisibilityOptions;
-  onToggle: (key: keyof ChartVisibilityOptions, value: boolean) => void;
+  onToggle: (key: BooleanVisibilityKey, value: boolean) => void;
+  onStyleChange: (style: SmokeBarStyle) => void;
 }
 
 interface ControlItem {
-  key: keyof ChartVisibilityOptions;
+  key: BooleanVisibilityKey;
   label: string;
   colorClass: string;
 }
@@ -28,7 +41,14 @@ const lineControls: ControlItem[] = [
   { key: 'showAvgLine', label: 'Avg', colorClass: 'text-amber-500' },
 ];
 
-export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
+const smokeBarStyleOptions: { value: SmokeBarStyle; label: string; description: string }[] = [
+  { value: 'classic', label: 'Classic', description: 'Simple min-max range with darker band around average' },
+  { value: 'gradient', label: 'Gradient', description: 'Gaussian-like gradient centered on average' },
+  { value: 'percentile', label: 'Percentile', description: 'Multi-band gradient showing estimated percentile ranges' },
+  { value: 'histogram', label: 'Histogram', description: 'Discrete vertical bands with density coloring' },
+];
+
+export function ChartControls({ visibility, onToggle, onStyleChange }: ChartControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-2">
       {controls.map((control) => (
@@ -42,6 +62,29 @@ export function ChartControls({ visibility, onToggle }: ChartControlsProps) {
           <span className="ml-2 text-sm text-foreground">{control.label}</span>
         </label>
       ))}
+      {visibility.showSmokeBars && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Select value={visibility.smokeBarStyle} onValueChange={onStyleChange}>
+                <SelectTrigger size="sm" className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {smokeBarStyleOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {smokeBarStyleOptions.find(o => o.value === visibility.smokeBarStyle)?.description}
+          </TooltipContent>
+        </Tooltip>
+      )}
       <span className="text-muted-foreground">|</span>
       {lineControls.map((control) => (
         <label key={control.key} className="inline-flex items-center cursor-pointer">
