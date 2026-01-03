@@ -249,6 +249,7 @@ export function D3SmokeChart({
       chartHeight,
       innerWidth,
       themeColors,
+      visibility,
     });
 
     return cleanup;

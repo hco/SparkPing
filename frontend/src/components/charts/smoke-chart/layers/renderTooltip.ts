@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
 import { format } from 'date-fns';
-import type { ChartDataPoint, ChartScales } from '../types';
+import type { ChartDataPoint, ChartScales, ChartVisibilityOptions } from '../types';
 import { createThrottle } from '../utils';
 import { chartColors, getPacketLossColor, type ThemeColors } from '../../../../lib/chartColors';
 
@@ -11,6 +11,7 @@ interface SetupTooltipOptions {
   chartHeight: number;
   innerWidth: number;
   themeColors: ThemeColors;
+  visibility: ChartVisibilityOptions;
 }
 
 interface TooltipRefs {
@@ -25,6 +26,7 @@ export function setupTooltip({
   chartHeight,
   innerWidth,
   themeColors,
+  visibility,
 }: SetupTooltipOptions): TooltipRefs {
   const { xScale, yScale } = scales;
 
@@ -60,14 +62,23 @@ export function setupTooltip({
     .attr('stroke-dasharray', '3,3')
     .style('opacity', 0);
 
-  const hoverPoint = g
-    .append('circle')
-    .attr('class', 'hover-point')
-    .attr('r', 6)
-    .attr('fill', chartColors.median)
-    .attr('stroke', themeColors.tooltipBg)
-    .attr('stroke-width', 2)
-    .style('opacity', 0);
+  // Create hover points for each stat line (one per visible line type)
+  const createHoverPoint = (color: string, className: string) =>
+    g
+      .append('circle')
+      .attr('class', className)
+      .attr('r', 5)
+      .attr('fill', color)
+      .attr('stroke', themeColors.tooltipBg)
+      .attr('stroke-width', 2)
+      .style('opacity', 0);
+
+  const hoverPoints = {
+    median: createHoverPoint(chartColors.median, 'hover-point-median'),
+    avg: createHoverPoint(chartColors.avg, 'hover-point-avg'),
+    min: createHoverPoint(chartColors.min, 'hover-point-min'),
+    max: createHoverPoint(chartColors.max, 'hover-point-max'),
+  };
 
   // Add invisible overlay for mouse tracking
   const overlay = g
@@ -96,14 +107,33 @@ export function setupTooltip({
       // Update hover line position
       hoverLine.attr('x1', xPos).attr('x2', xPos).style('opacity', 1);
 
-      // Update hover point position
-      if (d.avg !== null) {
-        hoverPoint
-          .attr('cx', xPos)
-          .attr('cy', yScale(d.avg))
-          .style('opacity', 1);
+      // Update hover points based on visibility and data availability
+      // Median point
+      if (visibility.showMedianLine && d.avg !== null) {
+        hoverPoints.median.attr('cx', xPos).attr('cy', yScale(d.avg)).style('opacity', 1);
       } else {
-        hoverPoint.style('opacity', 0);
+        hoverPoints.median.style('opacity', 0);
+      }
+
+      // Avg point (only show if different from median to avoid overlap)
+      if (visibility.showAvgLine && d.avg !== null) {
+        hoverPoints.avg.attr('cx', xPos).attr('cy', yScale(d.avg)).style('opacity', 1);
+      } else {
+        hoverPoints.avg.style('opacity', 0);
+      }
+
+      // Min point
+      if (visibility.showMinLine && d.min !== null) {
+        hoverPoints.min.attr('cx', xPos).attr('cy', yScale(d.min)).style('opacity', 1);
+      } else {
+        hoverPoints.min.style('opacity', 0);
+      }
+
+      // Max point
+      if (visibility.showMaxLine && d.max !== null) {
+        hoverPoints.max.attr('cx', xPos).attr('cy', yScale(d.max)).style('opacity', 1);
+      } else {
+        hoverPoints.max.style('opacity', 0);
       }
 
       // Update tooltip
@@ -143,7 +173,10 @@ export function setupTooltip({
     .on('mouseleave', () => {
       tooltip.style('opacity', 0);
       hoverLine.style('opacity', 0);
-      hoverPoint.style('opacity', 0);
+      hoverPoints.median.style('opacity', 0);
+      hoverPoints.avg.style('opacity', 0);
+      hoverPoints.min.style('opacity', 0);
+      hoverPoints.max.style('opacity', 0);
     });
 
   return {
