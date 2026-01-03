@@ -2,6 +2,17 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.45] - 2026-01-03
+
+### ✨ Features
+
+- Add vendor specific discoveries
+
+### 📝 Other
+
+- Remove flickering of target name while changing time range
+- Optionally generate a config on first start
+- Add support for ip scanning discovery
 ## [0.1.44] - 2025-12-30
 
 ### ✨ Features
