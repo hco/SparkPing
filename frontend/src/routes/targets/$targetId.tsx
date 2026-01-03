@@ -1,9 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
-import { D3LatencyChart } from '@/components/charts/D3LatencyChart';
-import { D3PacketLossChart } from '@/components/charts/D3PacketLossChart';
-import { D3CombinedChart } from '@/components/charts/D3CombinedChart';
-import { D3RRDStyleChart } from '@/components/charts/D3RRDStyleChart';
 import { D3SmokeChart } from '@/components/charts/smoke-chart/D3SmokeChart';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { TargetStatsBar } from '@/components/TargetStatsBar';
@@ -16,8 +11,6 @@ import { EmptyState } from '@/components/EmptyState';
 import { type TimeRangeSearchParams, validateTimeRangeSearch } from '@/utils/timeRangeUtils';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { DurationPicker } from '@/components/DurationPicker';
 import {
   Card,
@@ -37,7 +30,6 @@ export const Route = createFileRoute('/targets/$targetId')({
 
 function TargetDetails() {
   const { targetId } = Route.useParams();
-  const [showLegacyCharts, setShowLegacyCharts] = useState(false);
 
   const {
     bucket,
@@ -131,55 +123,6 @@ function TargetDetails() {
                 </div>
               </CardContent>
             </Card>
-            {showLegacyCharts && (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">Latency Overview</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="w-full" style={{ height: '500px' }}>
-                      <D3LatencyChart data={targetData} height={500} />
-                    </div>
-                    <h3 className="text-xl font-semibold text-foreground">Packet Loss</h3>
-                    <div className="w-full" style={{ height: '300px' }}>
-                      <D3PacketLossChart data={targetData} height={300} />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Combined Chart - All Metrics */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">Combined View - All Metrics</CardTitle>
-                    <CardDescription>
-                      Latency ranges shown as color-coded bars (avg markers) with packet loss intensity bars below
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="w-full" style={{ height: '500px' }}>
-                      <D3CombinedChart data={targetData} height={500} />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* RRD-Style Chart */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">Performance Overview (RRD-Style)</CardTitle>
-                    <CardDescription>
-                      Classic network monitoring visualization with latency range shading, average line, and color-coded packet loss indicators
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="w-full" style={{ height: '500px' }}>
-                      <D3RRDStyleChart data={targetData} height={500} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-
 
             {/* Statistics */}
             {aggregatedData && stats && (
@@ -192,21 +135,6 @@ function TargetDetails() {
         ) : isEmpty ? (
           <EmptyState query={{ target: targetId }} onClearTimeFilter={resetTimeFilter} />
         ) : null}
-      {/* Chart Options */}
-      <Card className="mt-6">
-        <CardContent className="pt-6">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="separate-charts"
-              checked={showLegacyCharts}
-              onCheckedChange={(checked) => setShowLegacyCharts(checked === true)}
-            />
-            <Label htmlFor="separate-charts" className="text-sm font-normal cursor-pointer">
-              Show Legacy Charts
-            </Label>
-          </div>
-        </CardContent>
-      </Card>
     </PageLayout>
   );
 }
