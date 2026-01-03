@@ -2,6 +2,11 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.47] - 2026-01-03
+
+### ✨ Features
+
+- Add more variants of the smoke bar
 ## [0.1.46] - 2026-01-03
 
 ### 📝 Other
