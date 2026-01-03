@@ -2,6 +2,11 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.48] - 2026-01-03
+
+### 📝 Other
+
+- Try to re-enable am64 builds
 ## [0.1.47] - 2026-01-03
 
 ### ✨ Features
