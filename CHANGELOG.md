@@ -2,6 +2,15 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.46] - 2026-01-03
+
+### 📝 Other
+
+- Remove legacy charts
+
+e.g. we now detect sonos device names,  and improved support for hue or shelly
+- Improve tooltip
+- Add detailed explanation of smoke chart
 ## [0.1.45] - 2026-01-03
 
 ### ✨ Features
