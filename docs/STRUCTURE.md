@@ -150,7 +150,7 @@ Single-page application built with Vite, React, and TanStack Router.
 - `D3LatencyChart.tsx` - Latency-only chart
 - `D3PacketLossChart.tsx` - Packet loss chart
 - `D3RRDStyleChart.tsx` - RRD-style area chart
-- `smoke-chart/` - Smoke test visualization components
+- `smoke-chart/` - Smoke ping visualization (see `smoke-chart/ARCHITECTURE.md` for detailed component documentation)
 
 #### Feature Components
 - `UnifiedDiscoveryPanel.tsx` - Unified device discovery UI (mDNS + IP scan)
