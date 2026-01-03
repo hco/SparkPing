@@ -400,6 +400,171 @@ function parseSpotifyConnect(
 }
 
 /**
+ * Parse Xiaomi Mi IoT (miio) device information
+ * Service type: _miio._udp.local.
+ * 
+ * Xiaomi devices use a consistent naming pattern in their instance name:
+ * - Format: {brand}-{devicetype}-{version}_miio{deviceid}
+ * - Examples:
+ *   - zhimi-airpurifier-v7_miio357210272 (Zhimi Air Purifier v7)
+ *   - yeelink-light-ceiling1_miio12345678 (Yeelight Ceiling Light)
+ *   - chuangmi-plug-m1_miio87654321 (Chuangmi Smart Plug M1)
+ * 
+ * Known brand prefixes (Xiaomi ecosystem brands):
+ * - zhimi: Air purifiers, humidifiers, fans
+ * - yeelink: Smart lights (Yeelight)
+ * - chuangmi: Smart plugs, cameras
+ * - viomi: Kitchen appliances, vacuum cleaners
+ * - dmaker: Fans
+ * - roborock: Robot vacuums
+ * - rockrobo: Robot vacuums
+ * - lumi: Sensors, gateways (Aqara)
+ * - dreame: Vacuums, hair dryers
+ * - roidmi: Vacuums, air purifiers
+ * - philips: Philips-branded Xiaomi lights
+ */
+function parseMiioDevice(
+  _serviceType: string,
+  txtProperties: Record<string, string>,
+  instanceName: string
+): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  // Extract MAC from TXT properties
+  const mac = txtProperties['mac'] || null;
+  const epoch = txtProperties['epoch'] || null;
+  
+  if (mac) metadata['mac'] = mac;
+  if (epoch) metadata['epoch'] = epoch;
+  
+  // Parse the instance name format: {brand}-{devicetype}-{version}_miio{deviceid}
+  // Example: zhimi-airpurifier-v7_miio357210272
+  let deviceType: string | null = null;
+  let model: string | null = null;
+  let manufacturer: string = 'Xiaomi';
+  
+  // Split by _miio to separate device info from device ID
+  const miioSplit = instanceName.split('_miio');
+  const devicePart = miioSplit[0];
+  const deviceId = miioSplit[1] || null;
+  
+  if (deviceId) {
+    metadata['deviceId'] = deviceId;
+  }
+  
+  // Parse the device part: {brand}-{devicetype}-{version}
+  // Handle cases with and without version
+  const parts = devicePart.split('-');
+  const brand = parts[0]?.toLowerCase() || '';
+  
+  // Map brand prefixes to manufacturer names and descriptions
+  const brandMap: Record<string, { manufacturer: string; brandName: string }> = {
+    'zhimi': { manufacturer: 'Xiaomi', brandName: 'Zhimi' },
+    'yeelink': { manufacturer: 'Xiaomi', brandName: 'Yeelight' },
+    'chuangmi': { manufacturer: 'Xiaomi', brandName: 'Chuangmi' },
+    'viomi': { manufacturer: 'Viomi', brandName: 'Viomi' },
+    'dmaker': { manufacturer: 'Xiaomi', brandName: 'Dmaker' },
+    'roborock': { manufacturer: 'Roborock', brandName: 'Roborock' },
+    'rockrobo': { manufacturer: 'Roborock', brandName: 'Roborock' },
+    'lumi': { manufacturer: 'Aqara', brandName: 'Aqara' },
+    'dreame': { manufacturer: 'Dreame', brandName: 'Dreame' },
+    'roidmi': { manufacturer: 'Roidmi', brandName: 'Roidmi' },
+    'philips': { manufacturer: 'Philips', brandName: 'Philips' },
+    'xiaomi': { manufacturer: 'Xiaomi', brandName: 'Xiaomi' },
+    'chunmi': { manufacturer: 'Xiaomi', brandName: 'Chunmi' },
+    'qmi': { manufacturer: 'Xiaomi', brandName: 'Xiaomi' },
+  };
+  
+  const brandInfo = brandMap[brand];
+  if (brandInfo) {
+    manufacturer = brandInfo.manufacturer;
+    metadata['brand'] = brandInfo.brandName;
+  } else if (brand) {
+    // Unknown brand, still likely a Xiaomi ecosystem device
+    metadata['brand'] = brand;
+  }
+  
+  // Map device type keywords to human-readable names
+  const deviceTypeMap: Record<string, string> = {
+    'airpurifier': 'Air Purifier',
+    'air-purifier': 'Air Purifier',
+    'humidifier': 'Humidifier',
+    'vacuum': 'Robot Vacuum',
+    'light': 'Smart Light',
+    'lamp': 'Smart Lamp',
+    'ceiling': 'Ceiling Light',
+    'bslamp': 'Bedside Lamp',
+    'mono': 'Smart Light',
+    'ct': 'Color Temperature Light',
+    'color': 'Color Light',
+    'strip': 'Light Strip',
+    'plug': 'Smart Plug',
+    'switch': 'Smart Switch',
+    'gateway': 'Gateway',
+    'sensor': 'Sensor',
+    'fan': 'Smart Fan',
+    'heater': 'Heater',
+    'cooker': 'Rice Cooker',
+    'kettle': 'Smart Kettle',
+    'dishwasher': 'Dishwasher',
+    'washer': 'Washing Machine',
+    'camera': 'Camera',
+    'cateye': 'Video Doorbell',
+    'airfresh': 'Air Fresh System',
+    'dehumidifier': 'Dehumidifier',
+    'airmonitor': 'Air Quality Monitor',
+    'waterheater': 'Water Heater',
+    'ir': 'IR Controller',
+    'remote': 'Remote',
+    'curtain': 'Smart Curtain',
+    'lock': 'Smart Lock',
+  };
+  
+  // Extract device type from parts (usually the second part)
+  if (parts.length >= 2) {
+    const typeKey = parts[1].toLowerCase();
+    deviceType = deviceTypeMap[typeKey] || null;
+    
+    // Build model string from parts (excluding brand)
+    const modelParts = parts.slice(1);
+    model = modelParts.map(p => {
+      // Capitalize first letter of each part
+      if (p.match(/^v\d+/)) return p.toUpperCase(); // Version like v7 -> V7
+      return p.charAt(0).toUpperCase() + p.slice(1);
+    }).join(' ');
+    
+    // Clean up model name
+    if (model) {
+      // Remove redundant spacing
+      model = model.replace(/\s+/g, ' ').trim();
+    }
+  }
+  
+  // If we couldn't determine device type, try to infer from the full device part
+  if (!deviceType) {
+    const lowerDevicePart = devicePart.toLowerCase();
+    for (const [keyword, typeName] of Object.entries(deviceTypeMap)) {
+      if (lowerDevicePart.includes(keyword)) {
+        deviceType = typeName;
+        break;
+      }
+    }
+  }
+  
+  // Default device type if still unknown
+  if (!deviceType) {
+    deviceType = 'Mi IoT Device';
+  }
+  
+  return {
+    deviceType,
+    manufacturer,
+    model,
+    metadata,
+  };
+}
+
+/**
  * Parse Philips Hue device information
  * Service type: _hue._tcp.local.
  * 
@@ -641,6 +806,7 @@ registerServiceTypeParser('_https._tcp.local.', parseHTTPService);
 registerServiceTypeParser('_spotify-connect._tcp.local.', parseSpotifyConnect);
 registerServiceTypeParser('_hue._tcp.local.', parseHueDevice);
 registerServiceTypeParser('_wiz._udp.local.', parseWizDevice);
+registerServiceTypeParser('_miio._udp.local.', parseMiioDevice);
 
 /**
  * Parse device information from a service

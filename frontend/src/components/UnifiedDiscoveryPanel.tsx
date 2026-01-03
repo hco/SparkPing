@@ -130,6 +130,7 @@ function getServiceTypeName(serviceType: string): string {
     '_workstation._tcp.local.': 'Workstation',
     '_hue._tcp.local.': 'Philips Hue',
     '_wiz._udp.local.': 'WiZ Smart Light',
+    '_miio._udp.local.': 'Xiaomi Mi IoT',
   };
   return typeMap[serviceType] || serviceType.replace(/_/g, '').replace('.local.', '');
 }

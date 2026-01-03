@@ -15,6 +15,7 @@ import {
   SiHp,
   SiEpson,
   SiPhilipshue,
+  SiXiaomi,
 } from 'react-icons/si';
 
 /**
@@ -59,6 +60,18 @@ const brandIconMap: Map<string, ComponentType<{ className?: string }>> = new Map
   ['philips hue', SiPhilipshue],
   ['hue', SiPhilipshue],
   ['signify', SiPhilipshue], // Parent company of Philips Hue and WiZ
+  
+  // Xiaomi ecosystem brands
+  ['xiaomi', SiXiaomi],
+  ['zhimi', SiXiaomi],
+  ['yeelight', SiXiaomi],
+  ['chuangmi', SiXiaomi],
+  ['viomi', SiXiaomi],
+  ['dmaker', SiXiaomi],
+  ['roborock', SiXiaomi],
+  ['aqara', SiXiaomi],
+  ['dreame', SiXiaomi],
+  ['roidmi', SiXiaomi],
 ]);
 
 /**
