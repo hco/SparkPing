@@ -15,7 +15,10 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
+use axum::http::{header, HeaderValue};
+use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::info;
 use tsink::Storage;
 
@@ -69,11 +72,31 @@ pub fn create_router(
     // Add static file serving if static directory is provided
     if let Some(static_path) = static_dir {
         let index_path = static_path.join("index.html");
-        
-        // Serve static files with fallback to index.html for SPA routing
-        let serve_dir = ServeDir::new(&static_path)
-            .not_found_service(ServeFile::new(&index_path));
-        
+        let assets_path = static_path.join("assets");
+
+        // Serve /assets/* with long cache headers (files have content hashes)
+        // Cache for 1 year with immutable directive
+        let assets_service = ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            ))
+            .service(ServeDir::new(&assets_path));
+
+        router = router.nest_service("/assets", assets_service);
+
+        // Serve other static files with no-cache (always revalidate)
+        // This ensures index.html is always fresh after deployments
+        let serve_dir = ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache, must-revalidate"),
+            ))
+            .service(
+                ServeDir::new(&static_path)
+                    .not_found_service(ServeFile::new(&index_path)),
+            );
+
         router = router.nest_service("/", serve_dir);
     }
 
