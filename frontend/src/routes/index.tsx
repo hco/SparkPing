@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState, useMemo } from 'react'
 import { useDashboardData } from '@/hooks/useDashboardData'
 import { Sparkline, PacketLossSparkline } from '@/components/Sparkline'
 import { LoadingState } from '@/components/LoadingState'
 import { ErrorDisplay } from '@/components/ErrorDisplay'
 import { PageLayout } from '@/components/PageLayout'
 import { chartColors, getPacketLossClass, getLatencyStatusColor } from '@/lib/chartColors'
-import { RefreshCw, Settings, Activity } from 'lucide-react'
+import { compareIpAddresses, type SortField } from '@/lib/sorting'
+import { RefreshCw, Settings, Activity, ArrowUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/')({
@@ -17,6 +19,20 @@ function Dashboard() {
     enabled: true,
     refetchInterval: 5000,
   })
+  const [sortField, setSortField] = useState<SortField>('name')
+
+  // Sort targets based on selected field
+  const sortedTargetStats = useMemo(() => {
+    return [...targetStats].sort((a, b) => {
+      if (sortField === 'ip') {
+        return compareIpAddresses(a.target.address, b.target.address)
+      }
+      // Sort by name (use address as fallback if no name)
+      const aName = (a.target.name || a.target.address).toLowerCase()
+      const bName = (b.target.name || b.target.address).toLowerCase()
+      return aName.localeCompare(bName)
+    })
+  }, [targetStats, sortField])
 
   const formatLatency = (value: number | null): string => {
     if (value === null) return '—'
@@ -34,6 +50,25 @@ function Dashboard() {
             <p className="text-muted-foreground text-sm mt-1">Network monitoring dashboard</p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center rounded-md border border-input">
+              <Button
+                variant={sortField === 'name' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="rounded-r-none border-0"
+                onClick={() => setSortField('name')}
+              >
+                <ArrowUpDown className="size-3.5 mr-1" />
+                Name
+              </Button>
+              <Button
+                variant={sortField === 'ip' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="rounded-l-none border-0"
+                onClick={() => setSortField('ip')}
+              >
+                IP
+              </Button>
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -88,7 +123,7 @@ function Dashboard() {
             </div>
 
             {/* Target rows */}
-            {targetStats.map((stat) => {
+            {sortedTargetStats.map((stat) => {
               const latencyData = stat.recentData.map((d) => d.avg ?? 0)
               const packetLossData = stat.recentData.map((d) => 
                 d.count > 0 ? (d.failed_count / d.count) * 100 : 0
