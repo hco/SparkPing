@@ -1,7 +1,6 @@
 {
   "hooks": {
     "before:bump": "mise exec -- cargo set-version ${version}",
-    "after:bump": "mise exec -- git-cliff --output CHANGELOG.md --tag ${version} && git add Cargo.toml Cargo.lock CHANGELOG.md"
+    "after:bump": "mise exec -- git-cliff --output CHANGELOG.md --tag ${version} && cp CHANGELOG.md home-assistant-addon/CHANGELOG.md && git add Cargo.toml Cargo.lock CHANGELOG.md home-assistant-addon/CHANGELOG.md"
   }
 }
-
