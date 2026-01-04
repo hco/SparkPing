@@ -1,7 +1,18 @@
 # Changelog
 
-All notable changes to SparkPing will be documented in this file.
+## [0.1.55] - 2026-01-04
 
+### ✨ Features
+
+- Add brush-to-zoom functionality to smoke chart
+
+### 📝 Other
+
+- Limit HA addon changelog to last 5 releases
+
+Add cliff-ha.toml config that uses Tera's slice filter in the header
+template to render only the 5 most recent releases. Update release-it
+to use this config for the home-assistant-addon changelog.
 ## [0.1.54] - 2026-01-04
 
 ### 📝 Other
