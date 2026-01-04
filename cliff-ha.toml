@@ -1,45 +1,37 @@
-# git-cliff configuration
+# git-cliff configuration for Home Assistant addon (last 5 releases only)
 # https://git-cliff.org/docs/configuration
 
 [changelog]
-# Changelog header
+# Render everything in header since it has access to `releases` array
 header = """
 # Changelog
 
-"""
-# Template for the changelog body
-body = """
-{% if version %}\
-    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for release in releases | slice(end=5) %}
+{% if release.version %}\
+## [{{ release.version | trim_start_matches(pat="v") }}] - {{ release.timestamp | date(format="%Y-%m-%d") }}
 {% else %}\
-    ## [Unreleased]
+## [Unreleased]
 {% endif %}\
-{% for group, commits in commits | group_by(attribute="group") %}
-    ### {{ group | striptags | trim | upper_first }}
-    {% for commit in commits %}
-        - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
-            {{ commit.message | upper_first }}\
-    {% endfor %}
+{% for group, commits in release.commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}\
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}
+{% endfor %}\
+{% endfor %}
 {% endfor %}
 """
-# Changelog footer
+# Body is empty since we render everything in header
+body = ""
 footer = ""
-# Remove leading and trailing whitespace
 trim = true
 
 [git]
-# Parse conventional commits
 conventional_commits = true
-# Filter out unconventional commits
 filter_unconventional = false
-# Process each line of a commit as an individual commit
 split_commits = false
-# Regex for preprocessing the commit messages
 commit_preprocessors = [
-    # Remove issue numbers from commit messages
     { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "" },
 ]
-# Regex for parsing and grouping commits
 commit_parsers = [
     { message = "^feat", group = "✨ Features" },
     { message = "^fix", group = "🐛 Bug Fixes" },
@@ -49,25 +41,13 @@ commit_parsers = [
     { message = "^style", group = "🎨 Styling" },
     { message = "^test", group = "🧪 Testing" },
     { message = "^chore", skip = true },
-    # { message = "^chore: bump add-on version to", skip = true },
     { message = "^Release [0-9]+\\.[0-9]+\\.[0-9]+$", skip = true },
     { message = "^((C|c)leanup|WIP|Release)$", skip = true, group = "🔧 Miscellaneous" },
     { body = ".*security", group = "🔐 Security" },
     { message = ".*", group = "📝 Other" },
 ]
-# Protect breaking changes from being skipped
 protect_breaking_commits = false
-# Filter out commits by pattern
 filter_commits = false
-# Regex for matching git tags
 tag_pattern = "v[0-9].*"
-# Sort commits by oldest first
 topo_order = false
-# Sort commits by date
 sort_commits = "oldest"
-
-
-
-
-
-
