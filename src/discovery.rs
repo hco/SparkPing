@@ -65,7 +65,10 @@ pub enum DiscoveryEvent {
     /// Discovery has started
     Started { message: String },
     /// Discovery has completed (kept for API compatibility)
-    Completed { message: String, device_count: usize },
+    Completed {
+        message: String,
+        device_count: usize,
+    },
     /// An error occurred during discovery
     Error { message: String },
 }
@@ -200,7 +203,7 @@ pub async fn run_mdns_discovery(tx: mpsc::Sender<DiscoveryEvent>) {
 
                         if let Some(address) = primary_address {
                             let is_new_device = !devices.contains_key(&address);
-                            
+
                             if is_new_device {
                                 // Create new device
                                 let device = create_device_from_service(&service, info, &address);
@@ -209,9 +212,9 @@ pub async fn run_mdns_discovery(tx: mpsc::Sender<DiscoveryEvent>) {
                                     "Discovered device #{}: {} at {} via {}",
                                     device_count, device.name, device.address, service.service_type
                                 );
-                                
+
                                 devices.insert(address.clone(), device.clone());
-                                
+
                                 // Send DeviceFound event
                                 if tx
                                     .send(DiscoveryEvent::DeviceFound { device })
@@ -225,21 +228,21 @@ pub async fn run_mdns_discovery(tx: mpsc::Sender<DiscoveryEvent>) {
                             } else {
                                 // Update existing device with new service
                                 let device = devices.get_mut(&address).unwrap();
-                                
+
                                 // Check if this service already exists
                                 let service_exists = device.services.iter().any(|s| {
                                     s.service_type == service.service_type
                                         && s.fullname == service.fullname
                                 });
-                                
+
                                 if !service_exists {
                                     device.services.push(service.clone());
-                                    
+
                                     // Merge TXT properties
                                     for (key, value) in &service.txt_properties {
                                         device.txt_properties.insert(key.clone(), value.clone());
                                     }
-                                    
+
                                     // Update addresses if needed
                                     let all_addresses: Vec<String> = info
                                         .get_addresses()
@@ -251,12 +254,12 @@ pub async fn run_mdns_discovery(tx: mpsc::Sender<DiscoveryEvent>) {
                                             device.addresses.push(addr);
                                         }
                                     }
-                                    
+
                                     info!(
                                         "Updated device {} at {} with new service {}",
                                         device.name, device.address, service.service_type
                                     );
-                                    
+
                                     // Send DeviceUpdated event
                                     if tx
                                         .send(DiscoveryEvent::DeviceUpdated {
@@ -328,7 +331,7 @@ fn extract_service_type_from_meta(fullname: &str) -> Option<String> {
 fn extract_service_info(info: &ServiceInfo, service_type: &str) -> Option<DiscoveredService> {
     // Get the full DNS name
     let fullname = info.get_fullname().to_string();
-    
+
     // Get the service instance name, removing the service type suffix
     let service_type_no_dot = service_type.trim_end_matches('.');
     let instance_name = fullname

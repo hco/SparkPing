@@ -22,8 +22,14 @@ pub fn start_ping_task(
         loop {
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
-                let result =
-                    perform_ping(&target_id, &target_address, sequence, &target_name, socket_type).await;
+                let result = perform_ping(
+                    &target_id,
+                    &target_address,
+                    sequence,
+                    &target_name,
+                    socket_type,
+                )
+                .await;
 
                 // Write result to tsink
                 if let Err(e) = write_ping_result(&*storage, &result) {
@@ -39,4 +45,3 @@ pub fn start_ping_task(
 
     handle
 }
-

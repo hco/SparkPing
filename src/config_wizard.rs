@@ -108,7 +108,10 @@ pub fn run_config_wizard(config_path: &Path) -> Result<String, Box<dyn std::erro
     let config_content = generate_config(&db_path, &host, socket_type);
 
     // Show summary
-    term.write_line(&format!("{}", style("Configuration Summary").bold().green()))?;
+    term.write_line(&format!(
+        "{}",
+        style("Configuration Summary").bold().green()
+    ))?;
     term.write_line(&format!("  Database path: {}", style(&db_path).cyan()))?;
     term.write_line(&format!("  Listen address: {}", style(&host).cyan()))?;
     term.write_line(&format!(
@@ -190,20 +193,14 @@ fn select_socket_type(term: &Term) -> Result<SocketType, Box<dyn std::error::Err
         style("✗ Not available").red()
     };
 
-    term.write_line(&format!(
-        "  DGRAM (unprivileged): {}",
-        dgram_status
-    ))?;
+    term.write_line(&format!("  DGRAM (unprivileged): {}", dgram_status))?;
     if !dgram_result.works {
         if let Some(ref err) = dgram_result.error {
             term.write_line(&format!("    Error: {}", style(err).dim()))?;
         }
     }
 
-    term.write_line(&format!(
-        "  RAW (requires root):  {}",
-        raw_status
-    ))?;
+    term.write_line(&format!("  RAW (requires root):  {}", raw_status))?;
     if !raw_result.works {
         if let Some(ref err) = raw_result.error {
             term.write_line(&format!("    Error: {}", style(err).dim()))?;
@@ -310,10 +307,7 @@ fn select_socket_type(term: &Term) -> Result<SocketType, Box<dyn std::error::Err
         }
         (true, true) => {
             // Both work - let user choose, default to dgram
-            let options = vec![
-                "dgram (unprivileged) - recommended",
-                "raw (requires root)",
-            ];
+            let options = vec!["dgram (unprivileged) - recommended", "raw (requires root)"];
             let selection = Select::new()
                 .with_prompt("Both socket types work. Select preferred type")
                 .items(&options)

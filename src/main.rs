@@ -102,7 +102,6 @@ fn reload_config(path: &PathBuf) -> Result<AppConfig, String> {
     Ok(app_config)
 }
 
-
 /// Reload targets by comparing old and new configs
 async fn reload_targets(
     old_config: &AppConfig,
@@ -133,8 +132,10 @@ async fn reload_targets(
     // Check if socket_type changed - if so, restart all tasks
     let socket_type_changed = old_config.ping.socket_type != new_config.ping.socket_type;
     if socket_type_changed {
-        info!("Socket type changed from {:?} to {:?}, restarting all ping tasks", 
-              old_config.ping.socket_type, new_config.ping.socket_type);
+        info!(
+            "Socket type changed from {:?} to {:?}, restarting all ping tasks",
+            old_config.ping.socket_type, new_config.ping.socket_type
+        );
     }
 
     // Find removed targets
@@ -169,7 +170,11 @@ async fn reload_targets(
                 info!("Starting ping task for new target: {}", id);
             }
 
-            let handle = start_ping_task(new_target, Arc::clone(&storage), new_config.ping.socket_type);
+            let handle = start_ping_task(
+                new_target,
+                Arc::clone(&storage),
+                new_config.ping.socket_type,
+            );
             handles.insert(id.clone(), handle);
         }
     }
@@ -181,7 +186,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::panic::set_hook(Box::new(|panic_info| {
         eprintln!("PANIC: {}", panic_info);
         if let Some(location) = panic_info.location() {
-            eprintln!("Location: {}:{}:{}", location.file(), location.line(), location.column());
+            eprintln!(
+                "Location: {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            );
         }
         if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
             eprintln!("Message: {}", s);
@@ -210,17 +220,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
 
-        let config_content = config_wizard::run_config_wizard(&config_file_path)
-            .map_err(|e| {
-                eprintln!("ERROR: Configuration wizard failed: {}", e);
-                e
-            })?;
+        let config_content = config_wizard::run_config_wizard(&config_file_path).map_err(|e| {
+            eprintln!("ERROR: Configuration wizard failed: {}", e);
+            e
+        })?;
 
-        config_wizard::write_config_file(&config_file_path, &config_content)
-            .map_err(|e| {
-                eprintln!("ERROR: Failed to write config file: {}", e);
-                e
-            })?;
+        config_wizard::write_config_file(&config_file_path, &config_content).map_err(|e| {
+            eprintln!("ERROR: Failed to write config file: {}", e);
+            e
+        })?;
 
         eprintln!(
             "Configuration saved to '{}'. Run SparkPing without --init to start.",
@@ -233,29 +241,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !config_file_path.exists() {
         // If running in an interactive terminal, offer to create config
         if config_wizard::is_interactive() {
-            let should_create = config_wizard::prompt_create_config(&config_file_path)
-                .map_err(|e| {
+            let should_create =
+                config_wizard::prompt_create_config(&config_file_path).map_err(|e| {
                     eprintln!("ERROR: Failed to prompt user: {}", e);
                     e
                 })?;
 
             if should_create {
-                let config_content = config_wizard::run_config_wizard(&config_file_path)
-                    .map_err(|e| {
+                let config_content =
+                    config_wizard::run_config_wizard(&config_file_path).map_err(|e| {
                         eprintln!("ERROR: Configuration wizard failed: {}", e);
                         e
                     })?;
 
-                config_wizard::write_config_file(&config_file_path, &config_content)
-                    .map_err(|e| {
+                config_wizard::write_config_file(&config_file_path, &config_content).map_err(
+                    |e| {
                         eprintln!("ERROR: Failed to write config file: {}", e);
                         e
-                    })?;
+                    },
+                )?;
 
                 eprintln!();
-                eprintln!(
-                    "Configuration saved! Starting SparkPing..."
-                );
+                eprintln!("Configuration saved! Starting SparkPing...");
                 eprintln!();
             } else {
                 eprintln!();
@@ -272,7 +279,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             eprintln!();
             eprintln!("To create a configuration file interactively, run:");
-            eprintln!("  {} --init", std::env::args().next().unwrap_or_else(|| "sparkping".to_string()));
+            eprintln!(
+                "  {} --init",
+                std::env::args()
+                    .next()
+                    .unwrap_or_else(|| "sparkping".to_string())
+            );
             eprintln!();
             std::process::exit(1);
         }
@@ -284,24 +296,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_file_source = if config_path.is_absolute() {
         ::config::File::from(config_path.clone())
     } else {
-        ::config::File::with_name(
-            config_path.to_str().expect("Invalid config file path"),
-        )
+        ::config::File::with_name(config_path.to_str().expect("Invalid config file path"))
     };
-    
+
     let settings = ::config::Config::builder()
         .add_source(config_file_source)
         .build()
         .map_err(|e| {
-            eprintln!("ERROR: Failed to load config file '{}': {}", config_path.display(), e);
+            eprintln!(
+                "ERROR: Failed to load config file '{}': {}",
+                config_path.display(),
+                e
+            );
             e
         })?;
 
-    let mut app_config: AppConfig = settings.try_deserialize()
-        .map_err(|e| {
-            eprintln!("ERROR: Failed to deserialize config: {}", e);
-            e
-        })?;
+    let mut app_config: AppConfig = settings.try_deserialize().map_err(|e| {
+        eprintln!("ERROR: Failed to deserialize config: {}", e);
+        e
+    })?;
 
     // Ensure all targets have IDs (migrate if needed)
     let mut needs_save = false;
@@ -338,17 +351,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize logging before any other output
-    init_logging(&app_config.logging)
-        .map_err(|e| {
-            eprintln!("ERROR: Failed to initialize logging: {}", e);
-            e
-        })?;
+    init_logging(&app_config.logging).map_err(|e| {
+        eprintln!("ERROR: Failed to initialize logging: {}", e);
+        e
+    })?;
 
     info!("Configuration loaded successfully from: {:?}", args.config);
-    
+
     // Log version information
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
-    
+
     // Log hostname
     let hostname = hostname::get()
         .ok()
@@ -356,23 +368,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| std::env::var("HOSTNAME").ok())
         .unwrap_or_else(|| "unknown".to_string());
     info!("Hostname: {}", hostname);
-    
+
     // Log local IP addresses
     match if_addrs::get_if_addrs() {
         Ok(interfaces) => {
             let mut ipv4_addrs = Vec::new();
             let mut ipv6_addrs = Vec::new();
-            
+
             for iface in interfaces {
                 if iface.is_loopback() {
                     continue;
                 }
                 match iface.ip() {
-                    std::net::IpAddr::V4(ip) => ipv4_addrs.push((iface.name.clone(), ip.to_string())),
-                    std::net::IpAddr::V6(ip) => ipv6_addrs.push((iface.name.clone(), ip.to_string())),
+                    std::net::IpAddr::V4(ip) => {
+                        ipv4_addrs.push((iface.name.clone(), ip.to_string()))
+                    }
+                    std::net::IpAddr::V6(ip) => {
+                        ipv6_addrs.push((iface.name.clone(), ip.to_string()))
+                    }
                 }
             }
-            
+
             if !ipv4_addrs.is_empty() {
                 info!("Local IPv4 addresses:");
                 for (name, addr) in &ipv4_addrs {
@@ -393,7 +409,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             warn!("Failed to enumerate network interfaces: {}", e);
         }
     }
-    
+
     info!(
         "Server: {}:{}",
         app_config.server.host, app_config.server.port
@@ -428,7 +444,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_wal_buffer_size(16384) // 16KB
             .build()
             .map_err(|e| {
-                eprintln!("ERROR: Failed to initialize storage at '{}': {}", app_config.database.path, e);
+                eprintln!(
+                    "ERROR: Failed to initialize storage at '{}': {}",
+                    app_config.database.path, e
+                );
                 e
             })?,
     );
@@ -541,7 +560,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
         .map_err(|e| {
-            let msg = format!("Invalid server address '{}:{}': {}", server_host, server_port, e);
+            let msg = format!(
+                "Invalid server address '{}:{}': {}",
+                server_host, server_port, e
+            );
             eprintln!("ERROR: {}", msg);
             msg
         })?;
@@ -559,13 +581,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         // Use IntoMakeServiceWithConnectInfo to enable connection info tracking
         // This allows middleware to access the peer IP address via ConnectInfo
-        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-            .unwrap_or_else(|e| {
-                let msg = format!("HTTP server error: {}", e);
-                eprintln!("ERROR: {}", msg);
-                panic!("{}", msg);
-            });
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            let msg = format!("HTTP server error: {}", e);
+            eprintln!("ERROR: {}", msg);
+            panic!("{}", msg);
+        });
     });
 
     // Set up file watcher for config reloading

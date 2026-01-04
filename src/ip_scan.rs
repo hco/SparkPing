@@ -108,12 +108,7 @@ fn parse_cidr(cidr: &str) -> Result<(Ipv4Addr, u8, Ipv4Addr, Ipv4Addr), String> 
         (network + 1, (network | !mask) - 1)
     };
 
-    Ok((
-        ip,
-        prefix,
-        Ipv4Addr::from(start),
-        Ipv4Addr::from(end),
-    ))
+    Ok((ip, prefix, Ipv4Addr::from(start), Ipv4Addr::from(end)))
 }
 
 /// Parse an IP range from start and end addresses
@@ -121,9 +116,7 @@ fn parse_ip_range(start: &str, end: &str) -> Result<(Ipv4Addr, Ipv4Addr), String
     let start_ip: Ipv4Addr = start
         .parse()
         .map_err(|e| format!("Invalid start IP: {}", e))?;
-    let end_ip: Ipv4Addr = end
-        .parse()
-        .map_err(|e| format!("Invalid end IP: {}", e))?;
+    let end_ip: Ipv4Addr = end.parse().map_err(|e| format!("Invalid end IP: {}", e))?;
 
     if u32::from(start_ip) > u32::from(end_ip) {
         return Err("Start IP must be less than or equal to end IP".to_string());
@@ -258,7 +251,10 @@ pub fn get_traceroute_subnets() -> Vec<SubnetSuggestion> {
                 // Format varies by OS but generally includes IP addresses
                 for word in line.split_whitespace() {
                     // Try to parse as IPv4 address
-                    if let Ok(ip) = word.trim_matches(|c| c == '(' || c == ')').parse::<Ipv4Addr>() {
+                    if let Ok(ip) = word
+                        .trim_matches(|c| c == '(' || c == ')')
+                        .parse::<Ipv4Addr>()
+                    {
                         // Stop if we hit a public IP
                         if !is_private_ip(&ip) {
                             debug!("Hit public IP {}, stopping traceroute parsing", ip);
@@ -303,11 +299,11 @@ pub fn get_suggested_subnets() -> Vec<SubnetSuggestion> {
 
     // Add traceroute subnets
     let traceroute_subnets = get_traceroute_subnets();
-    
+
     // Filter out duplicates (same CIDR)
-    let existing_cidrs: std::collections::HashSet<_> = 
+    let existing_cidrs: std::collections::HashSet<_> =
         subnets.iter().map(|s| s.cidr.clone()).collect();
-    
+
     for subnet in traceroute_subnets {
         if !existing_cidrs.contains(&subnet.cidr) {
             subnets.push(subnet);
@@ -347,34 +343,30 @@ pub async fn run_ip_scan_discovery(tx: mpsc::Sender<DiscoveryEvent>, request: Ip
 
     // Parse the IP range
     let ips_to_scan = match &request.range {
-        IpRangeSpec::Cidr { cidr } => {
-            match parse_cidr(cidr) {
-                Ok((_, _, start, end)) => get_ips_in_range(start, end),
-                Err(e) => {
-                    error!("Failed to parse CIDR: {}", e);
-                    let _ = tx
-                        .send(DiscoveryEvent::Error {
-                            message: format!("Invalid CIDR notation: {}", e),
-                        })
-                        .await;
-                    return;
-                }
+        IpRangeSpec::Cidr { cidr } => match parse_cidr(cidr) {
+            Ok((_, _, start, end)) => get_ips_in_range(start, end),
+            Err(e) => {
+                error!("Failed to parse CIDR: {}", e);
+                let _ = tx
+                    .send(DiscoveryEvent::Error {
+                        message: format!("Invalid CIDR notation: {}", e),
+                    })
+                    .await;
+                return;
             }
-        }
-        IpRangeSpec::Range { start_ip, end_ip } => {
-            match parse_ip_range(start_ip, end_ip) {
-                Ok((start, end)) => get_ips_in_range(start, end),
-                Err(e) => {
-                    error!("Failed to parse IP range: {}", e);
-                    let _ = tx
-                        .send(DiscoveryEvent::Error {
-                            message: format!("Invalid IP range: {}", e),
-                        })
-                        .await;
-                    return;
-                }
+        },
+        IpRangeSpec::Range { start_ip, end_ip } => match parse_ip_range(start_ip, end_ip) {
+            Ok((start, end)) => get_ips_in_range(start, end),
+            Err(e) => {
+                error!("Failed to parse IP range: {}", e);
+                let _ = tx
+                    .send(DiscoveryEvent::Error {
+                        message: format!("Invalid IP range: {}", e),
+                    })
+                    .await;
+                return;
             }
-        }
+        },
     };
 
     let total_ips = ips_to_scan.len();
@@ -409,7 +401,7 @@ pub async fn run_ip_scan_discovery(tx: mpsc::Sender<DiscoveryEvent>, request: Ip
 
         let handle = tokio::spawn(async move {
             let _permit = semaphore.acquire().await;
-            
+
             if let Some(port) = check_host(ip, &ports, timeout_duration).await {
                 let device = DiscoveredDevice {
                     name: ip.to_string(),

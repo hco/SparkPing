@@ -263,8 +263,16 @@ pub async fn run_unified_discovery(
 
     // Send started event
     let methods: Vec<&str> = [
-        if config.mdns_enabled { Some("mDNS") } else { None },
-        if config.ip_scan_enabled { Some("IP Scan") } else { None },
+        if config.mdns_enabled {
+            Some("mDNS")
+        } else {
+            None
+        },
+        if config.ip_scan_enabled {
+            Some("IP Scan")
+        } else {
+            None
+        },
     ]
     .into_iter()
     .flatten()
@@ -284,7 +292,7 @@ pub async fn run_unified_discovery(
     // Use a larger buffer to handle vendor info events
     let (internal_tx, mut internal_rx) = mpsc::channel::<InternalEvent>(200);
     let state = Arc::new(Mutex::new(DiscoveryState::new(active_methods)));
-    
+
     // Keep a reference to internal_tx for spawning vendor fetch tasks
     let vendor_tx = internal_tx.clone();
 
@@ -302,20 +310,31 @@ pub async fn run_unified_discovery(
             // Forward events
             while let Some(event) = mdns_rx.recv().await {
                 match event {
-                    DiscoveryEvent::DeviceFound { device } | DiscoveryEvent::DeviceUpdated { device } => {
-                        if internal_tx.send(InternalEvent::Device(device)).await.is_err() {
+                    DiscoveryEvent::DeviceFound { device }
+                    | DiscoveryEvent::DeviceUpdated { device } => {
+                        if internal_tx
+                            .send(InternalEvent::Device(device))
+                            .await
+                            .is_err()
+                        {
                             break;
                         }
                     }
                     DiscoveryEvent::Started { .. } => {
-                        let _ = internal_tx.send(InternalEvent::Started("mDNS".to_string())).await;
+                        let _ = internal_tx
+                            .send(InternalEvent::Started("mDNS".to_string()))
+                            .await;
                     }
                     DiscoveryEvent::Completed { .. } => {
-                        let _ = internal_tx.send(InternalEvent::Completed("mDNS".to_string())).await;
+                        let _ = internal_tx
+                            .send(InternalEvent::Completed("mDNS".to_string()))
+                            .await;
                         break;
                     }
                     DiscoveryEvent::Error { message } => {
-                        let _ = internal_tx.send(InternalEvent::Error(format!("mDNS: {}", message))).await;
+                        let _ = internal_tx
+                            .send(InternalEvent::Error(format!("mDNS: {}", message)))
+                            .await;
                         break;
                     }
                 }
@@ -359,20 +378,31 @@ pub async fn run_unified_discovery(
                     // Forward events
                     while let Some(event) = scan_rx.recv().await {
                         match event {
-                            DiscoveryEvent::DeviceFound { device } | DiscoveryEvent::DeviceUpdated { device } => {
-                                if internal_tx.send(InternalEvent::Device(device)).await.is_err() {
+                            DiscoveryEvent::DeviceFound { device }
+                            | DiscoveryEvent::DeviceUpdated { device } => {
+                                if internal_tx
+                                    .send(InternalEvent::Device(device))
+                                    .await
+                                    .is_err()
+                                {
                                     break;
                                 }
                             }
                             DiscoveryEvent::Started { .. } => {
-                                let _ = internal_tx.send(InternalEvent::Started("IP Scan".to_string())).await;
+                                let _ = internal_tx
+                                    .send(InternalEvent::Started("IP Scan".to_string()))
+                                    .await;
                             }
                             DiscoveryEvent::Completed { .. } => {
-                                let _ = internal_tx.send(InternalEvent::Completed("IP Scan".to_string())).await;
+                                let _ = internal_tx
+                                    .send(InternalEvent::Completed("IP Scan".to_string()))
+                                    .await;
                                 break;
                             }
                             DiscoveryEvent::Error { message } => {
-                                let _ = internal_tx.send(InternalEvent::Error(format!("IP Scan: {}", message))).await;
+                                let _ = internal_tx
+                                    .send(InternalEvent::Error(format!("IP Scan: {}", message)))
+                                    .await;
                                 break;
                             }
                         }
@@ -400,12 +430,13 @@ pub async fn run_unified_discovery(
                     if let Some(vendor) = state_guard.should_fetch_vendor_info(&merged_device) {
                         let ip_address = merged_device.address.clone();
                         let vendor_tx = vendor_tx.clone();
-                        
+
                         // Spawn a task to fetch vendor info asynchronously
                         tokio::spawn(async move {
                             let (vendor_info, vendor_name) =
-                                vendor_discovery::fetch_vendor_info_with_name(vendor, &ip_address).await;
-                            
+                                vendor_discovery::fetch_vendor_info_with_name(vendor, &ip_address)
+                                    .await;
+
                             if let Some(info) = vendor_info {
                                 let _ = vendor_tx
                                     .send(InternalEvent::VendorInfo {
@@ -417,13 +448,13 @@ pub async fn run_unified_discovery(
                             }
                         });
                     }
-                    
+
                     // Drop lock before sending to avoid holding it during async send
                     drop(state_guard);
-                    
+
                     // Convert to identified device
                     let identified = convert_to_identified(merged_device);
-                    
+
                     let event = if is_new {
                         IdentifiedDiscoveryEvent::DeviceFound { device: identified }
                     } else {
@@ -444,19 +475,17 @@ pub async fn run_unified_discovery(
                     state_guard.update_device_vendor_info(&ip_address, vendor_info, vendor_name)
                 {
                     drop(state_guard);
-                    
+
                     debug!(
                         "Updated device {} with vendor info: {}",
                         updated_device.address, updated_device.name
                     );
-                    
+
                     // Convert to identified device
                     let identified = convert_to_identified(updated_device);
-                    
+
                     if tx
-                        .send(IdentifiedDiscoveryEvent::DeviceUpdated {
-                            device: identified,
-                        })
+                        .send(IdentifiedDiscoveryEvent::DeviceUpdated { device: identified })
                         .await
                         .is_err()
                     {

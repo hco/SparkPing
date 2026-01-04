@@ -78,11 +78,7 @@ pub async fn start_unified_discovery(
         let ports = query
             .ports
             .as_ref()
-            .map(|p| {
-                p.split(',')
-                    .filter_map(|s| s.trim().parse().ok())
-                    .collect()
-            })
+            .map(|p| p.split(',').filter_map(|s| s.trim().parse().ok()).collect())
             .unwrap_or_else(|| vec![80, 443, 22]);
 
         Some(crate::unified_discovery::IpScanConfig {

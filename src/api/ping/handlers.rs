@@ -1,11 +1,10 @@
 use super::dto::{
-    PingAggregatedQuery, PingAggregatedResponse, PingDataQuery, PingDataResponse,
-    QueryMetadata, TimeRange,
+    PingAggregatedQuery, PingAggregatedResponse, PingDataQuery, PingDataResponse, QueryMetadata,
+    TimeRange,
 };
 use super::query::{
-    aggregate_into_buckets, calculate_statistics, calculate_storage_stats,
-    parse_bucket_duration, query_ping_data_with_labels, resolve_time_range_value,
-    ResolvedPingDataQuery,
+    aggregate_into_buckets, calculate_statistics, calculate_storage_stats, parse_bucket_duration,
+    query_ping_data_with_labels, resolve_time_range_value, ResolvedPingDataQuery,
 };
 use crate::api::AppState;
 use axum::{
@@ -182,4 +181,3 @@ pub(crate) async fn get_storage_stats(
 
     Ok(Json(stats))
 }
-

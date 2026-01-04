@@ -290,4 +290,3 @@ pub(crate) async fn delete_target(
 
     Ok(StatusCode::NO_CONTENT)
 }
-

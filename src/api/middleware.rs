@@ -1,11 +1,6 @@
-use axum::{
-    extract::ConnectInfo,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
-use axum::http::Request;
 use axum::body::Body;
+use axum::http::Request;
+use axum::{extract::ConnectInfo, http::StatusCode, middleware::Next, response::Response};
 use std::net::SocketAddr;
 use tracing::{debug, warn};
 
@@ -148,11 +143,17 @@ mod tests {
     #[test]
     fn test_check_xff_contains_ingress_ip_multiple_proxies() {
         // Multiple proxies, ingress in the middle
-        assert!(check_xff_contains_ingress_ip("192.168.1.1, 172.30.32.1, 10.0.0.1"));
+        assert!(check_xff_contains_ingress_ip(
+            "192.168.1.1, 172.30.32.1, 10.0.0.1"
+        ));
         // Multiple proxies, ingress at the end
-        assert!(check_xff_contains_ingress_ip("192.168.1.1, 10.0.0.1, 172.30.32.2"));
+        assert!(check_xff_contains_ingress_ip(
+            "192.168.1.1, 10.0.0.1, 172.30.32.2"
+        ));
         // Multiple proxies, no ingress
-        assert!(!check_xff_contains_ingress_ip("192.168.1.1, 10.0.0.1, 10.0.0.2"));
+        assert!(!check_xff_contains_ingress_ip(
+            "192.168.1.1, 10.0.0.1, 10.0.0.2"
+        ));
     }
 
     #[test]
@@ -160,7 +161,9 @@ mod tests {
         // Extra whitespace should be handled
         assert!(check_xff_contains_ingress_ip("  172.30.32.1  "));
         assert!(check_xff_contains_ingress_ip("192.168.1.1,   172.30.32.1"));
-        assert!(check_xff_contains_ingress_ip("192.168.1.1 , 172.30.32.1 , 10.0.0.1"));
+        assert!(check_xff_contains_ingress_ip(
+            "192.168.1.1 , 172.30.32.1 , 10.0.0.1"
+        ));
     }
 
     #[test]
@@ -168,4 +171,3 @@ mod tests {
         assert!(!check_xff_contains_ingress_ip(""));
     }
 }
-

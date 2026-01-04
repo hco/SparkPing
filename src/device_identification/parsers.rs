@@ -547,10 +547,7 @@ fn parse_hue(txt: &HashMap<String, String>, instance_name: &str) -> ParsedInfo {
 /// Parse WiZ smart light information
 fn parse_wiz(txt: &HashMap<String, String>, instance_name: &str) -> ParsedInfo {
     let mac = txt.get("mac").cloned();
-    let module_id = txt
-        .get("moduleName")
-        .or_else(|| txt.get("module"))
-        .cloned();
+    let module_id = txt.get("moduleName").or_else(|| txt.get("module")).cloned();
     let fw_version = txt.get("fwVersion").or_else(|| txt.get("fw")).cloned();
 
     let name_lower = instance_name.to_lowercase();
@@ -663,7 +660,11 @@ fn parse_miio(txt: &HashMap<String, String>, instance_name: &str) -> ParsedInfo 
 }
 
 /// Parse Aqara device information
-fn parse_aqara(service_type: &str, txt: &HashMap<String, String>, instance_name: &str) -> ParsedInfo {
+fn parse_aqara(
+    service_type: &str,
+    txt: &HashMap<String, String>,
+    instance_name: &str,
+) -> ParsedInfo {
     let mac = txt.get("mac").cloned();
     let version = txt.get("ver").cloned();
 

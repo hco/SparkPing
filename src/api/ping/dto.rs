@@ -348,4 +348,3 @@ pub struct MetricMetadata {
     pub max_timestamp: i64,
     pub num_data_points: u64,
 }
-

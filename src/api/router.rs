@@ -6,6 +6,7 @@ use crate::api::{
     AppState,
 };
 use crate::config::AppConfig;
+use axum::http::{header, HeaderValue};
 use axum::{
     routing::{get, put},
     Router,
@@ -15,7 +16,6 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
-use axum::http::{header, HeaderValue};
 use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -38,7 +38,7 @@ pub fn create_router(
     } else {
         config_path
     };
-    
+
     let state = AppState {
         storage,
         config,
@@ -50,14 +50,25 @@ pub fn create_router(
     // Check if ingress-only filtering is enabled
     let ingress_only_enabled = {
         let config = state.config.read().ok();
-        config.map(|c| c.server.home_assistant_ingress_only).unwrap_or(false)
+        config
+            .map(|c| c.server.home_assistant_ingress_only)
+            .unwrap_or(false)
     };
 
     let mut router = Router::new()
         .route("/api/ping/data", get(ping_handlers::get_ping_data))
-        .route("/api/ping/aggregated", get(ping_handlers::get_ping_aggregated))
-        .route("/api/targets", get(target_handlers::get_targets).post(target_handlers::create_target))
-        .route("/api/targets/:id", put(target_handlers::update_target).delete(target_handlers::delete_target))
+        .route(
+            "/api/ping/aggregated",
+            get(ping_handlers::get_ping_aggregated),
+        )
+        .route(
+            "/api/targets",
+            get(target_handlers::get_targets).post(target_handlers::create_target),
+        )
+        .route(
+            "/api/targets/:id",
+            put(target_handlers::update_target).delete(target_handlers::delete_target),
+        )
         .route("/api/storage/stats", get(ping_handlers::get_storage_stats))
         .route("/api/discovery/subnets", get(get_subnets))
         .route("/api/discovery/unified", get(start_unified_discovery))
@@ -92,14 +103,10 @@ pub fn create_router(
                 header::CACHE_CONTROL,
                 HeaderValue::from_static("no-cache, must-revalidate"),
             ))
-            .service(
-                ServeDir::new(&static_path)
-                    .not_found_service(ServeFile::new(&index_path)),
-            );
+            .service(ServeDir::new(&static_path).not_found_service(ServeFile::new(&index_path)));
 
         router = router.nest_service("/", serve_dir);
     }
 
     router
 }
-

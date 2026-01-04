@@ -158,16 +158,22 @@ struct DeviceDescription {
 ///
 /// # Returns
 /// Parsed Sonos information if successful
-pub async fn fetch_sonos_info(ip_address: &str, timeout: Duration) -> Result<SonosInfo, SonosError> {
+pub async fn fetch_sonos_info(
+    ip_address: &str,
+    timeout: Duration,
+) -> Result<SonosInfo, SonosError> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
         .build()
         .map_err(|e| SonosError::HttpClient(e.to_string()))?;
 
     // Fetch zone player status (primary source, has zone name with L/R info)
-    let status_url = format!("http://{}:{}{}", ip_address, SONOS_API_PORT, SONOS_STATUS_ENDPOINT);
+    let status_url = format!(
+        "http://{}:{}{}",
+        ip_address, SONOS_API_PORT, SONOS_STATUS_ENDPOINT
+    );
     debug!("Fetching Sonos status from: {}", status_url);
-    
+
     let status_response = client
         .get(&status_url)
         .send()
@@ -186,7 +192,10 @@ pub async fn fetch_sonos_info(ip_address: &str, timeout: Duration) -> Result<Son
     let mut info = parse_zp_status(&status_body)?;
 
     // Fetch device description (for model name and other details)
-    let desc_url = format!("http://{}:{}{}", ip_address, SONOS_API_PORT, SONOS_DEVICE_DESC_ENDPOINT);
+    let desc_url = format!(
+        "http://{}:{}{}",
+        ip_address, SONOS_API_PORT, SONOS_DEVICE_DESC_ENDPOINT
+    );
     debug!("Fetching Sonos device description from: {}", desc_url);
 
     match client.get(&desc_url).send().await {
@@ -215,7 +224,10 @@ pub async fn fetch_sonos_info(ip_address: &str, timeout: Duration) -> Result<Son
             }
         }
         Ok(response) => {
-            warn!("Sonos device description returned status: {}", response.status());
+            warn!(
+                "Sonos device description returned status: {}",
+                response.status()
+            );
         }
         Err(e) => {
             warn!("Failed to fetch Sonos device description: {}", e);
@@ -242,8 +254,8 @@ fn parse_zp_status(xml: &str) -> Result<SonosInfo, SonosError> {
         xml.to_string()
     };
 
-    let support_info: ZPSupportInfo =
-        from_str(&clean_xml).map_err(|e: quick_xml::DeError| SonosError::XmlParse(e.to_string()))?;
+    let support_info: ZPSupportInfo = from_str(&clean_xml)
+        .map_err(|e: quick_xml::DeError| SonosError::XmlParse(e.to_string()))?;
 
     let zp = support_info.zp_info;
 
@@ -276,22 +288,17 @@ fn parse_device_description(xml: &str) -> Result<DeviceDescription, SonosError> 
     let device = root.device;
 
     // Prefer displayName over modelName if available (it's cleaner, e.g., "Era 300" vs "Sonos Era 300")
-    let model_name = device
-        .display_name
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            // Strip "Sonos " prefix from model_name if present for cleaner display
-            device.model_name.map(|name| {
-                name.strip_prefix("Sonos ")
-                    .map(|s| s.to_string())
-                    .unwrap_or(name)
-            })
-        });
+    let model_name = device.display_name.filter(|s| !s.is_empty()).or_else(|| {
+        // Strip "Sonos " prefix from model_name if present for cleaner display
+        device.model_name.map(|name| {
+            name.strip_prefix("Sonos ")
+                .map(|s| s.to_string())
+                .unwrap_or(name)
+        })
+    });
 
     // Parse zone_type as u32
-    let zone_type = device
-        .zone_type
-        .and_then(|s| s.parse::<u32>().ok());
+    let zone_type = device.zone_type.and_then(|s| s.parse::<u32>().ok());
 
     // Get first icon URL
     let icon_url = device
@@ -379,7 +386,7 @@ mod tests {
     #[test]
     fn test_parse_zp_status() {
         let info = parse_zp_status(SAMPLE_ZP_STATUS).expect("Failed to parse");
-        
+
         assert_eq!(info.zone_name, "Musikzimmer (R)");
         assert_eq!(info.serial_number, Some("F0-F6-C1-C6-E7-84:6".to_string()));
         assert_eq!(info.software_version, Some("92.0-72090".to_string()));
@@ -397,11 +404,14 @@ mod tests {
     #[test]
     fn test_parse_device_description() {
         let desc = parse_device_description(SAMPLE_DEVICE_DESC).expect("Failed to parse");
-        
+
         // displayName should be preferred over modelName
         assert_eq!(desc.model_name, Some("Era 300".to_string()));
         assert_eq!(desc.model_number, Some("S41".to_string()));
-        assert_eq!(desc.model_url, Some("http://www.sonos.com/products/zoneplayers/S41".to_string()));
+        assert_eq!(
+            desc.model_url,
+            Some("http://www.sonos.com/products/zoneplayers/S41".to_string())
+        );
         assert_eq!(desc.api_version, Some("1.49.1".to_string()));
         assert_eq!(desc.display_version, Some("17.7".to_string()));
         assert_eq!(desc.zone_type, Some(43));
@@ -412,7 +422,7 @@ mod tests {
     fn test_parse_minimal_zp_status() {
         let minimal = r#"<?xml version="1.0"?><ZPSupportInfo><ZPInfo><ZoneName>Living Room</ZoneName></ZPInfo></ZPSupportInfo>"#;
         let info = parse_zp_status(minimal).expect("Failed to parse");
-        
+
         assert_eq!(info.zone_name, "Living Room");
         assert!(info.serial_number.is_none());
     }

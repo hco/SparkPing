@@ -1,6 +1,6 @@
 use super::dto::{
-    BucketDataPoint, PartitionMetadata, PingDataPoint, PingStatistics,
-    TargetStorageStats, TimeRangeValue,
+    BucketDataPoint, PartitionMetadata, PingDataPoint, PingStatistics, TargetStorageStats,
+    TimeRangeValue,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -395,13 +395,16 @@ pub(super) fn calculate_storage_stats(
             for (_metric_key, metric_meta) in partition_meta.metrics {
                 // Extract target_id from the metric name (which is hex-encoded)
                 if let Some(target_id) = extract_target_id_from_metric_name(&metric_meta.name) {
-                    let stats = target_stats.entry(target_id.clone()).or_insert(TargetStorageStats {
-                        target_id,
-                        size_bytes: 0,
-                        data_point_count: 0,
-                        earliest_timestamp: None,
-                        latest_timestamp: None,
-                    });
+                    let stats =
+                        target_stats
+                            .entry(target_id.clone())
+                            .or_insert(TargetStorageStats {
+                                target_id,
+                                size_bytes: 0,
+                                data_point_count: 0,
+                                earliest_timestamp: None,
+                                latest_timestamp: None,
+                            });
                     stats.size_bytes += metric_meta.encoded_size;
                     stats.data_point_count += metric_meta.num_data_points;
 
@@ -447,4 +450,3 @@ pub(super) fn calculate_storage_stats(
         targets,
     })
 }
-

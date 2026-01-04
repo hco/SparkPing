@@ -106,7 +106,6 @@ impl DeviceInfo {
             ..Default::default()
         }
     }
-
 }
 
 #[allow(dead_code)]
@@ -152,7 +151,10 @@ pub enum IdentifiedDiscoveryEvent {
     /// Discovery has started
     Started { message: String },
     /// Discovery has completed
-    Completed { message: String, device_count: usize },
+    Completed {
+        message: String,
+        device_count: usize,
+    },
     /// An error occurred during discovery
     Error { message: String },
 }

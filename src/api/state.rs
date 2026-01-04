@@ -1,9 +1,9 @@
 use crate::config::AppConfig;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::collections::HashMap;
 use tsink::Storage;
 
 /// Application state for API routes
@@ -15,4 +15,3 @@ pub struct AppState {
     pub write_flag: Arc<AtomicBool>,
     pub config_path: PathBuf,
 }
-

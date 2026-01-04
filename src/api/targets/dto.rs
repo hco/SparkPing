@@ -9,4 +9,3 @@ pub struct TargetRequest {
     pub ping_count: Option<u16>,
     pub ping_interval: Option<u64>,
 }
-
