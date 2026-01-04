@@ -2,6 +2,12 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.54] - 2026-01-04
+
+### 📝 Other
+
+- Reduce settings target list size
+- Add target sorting to start page
 ## [0.1.52] - 2026-01-04
 
 ### ✨ Features
