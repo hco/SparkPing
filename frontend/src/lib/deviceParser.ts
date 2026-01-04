@@ -681,6 +681,181 @@ function parseWizDevice(
 }
 
 /**
+ * Parse Aqara device information
+ * Service types: _aqara-setup._tcp.local., _aqara-fp2._tcp.local., etc.
+ * 
+ * Aqara devices are part of the Xiaomi/Lumi ecosystem and expose useful info:
+ * - mac: MAC address
+ * - serialNumber: Serial number
+ * - id: Lumi device ID (format: lumi1.{hex_mac})
+ * - ver: Version
+ * 
+ * Known Aqara model prefixes (from HomeKit 'md' field):
+ * - PS-S02D: Presence Sensor FP2
+ * - PS-S02: Presence Sensor FP1
+ * - RTCGQ12LM: Motion Sensor P1
+ * - RTCGQ14LM: Motion Sensor E1
+ * - MCCGQ11LM: Door/Window Sensor
+ * - MCCGQ14LM: Door/Window Sensor E1
+ * - WSDCGQ11LM: Temperature & Humidity Sensor
+ * - SJCGQ11LM: Water Leak Sensor
+ * - LLKZMK11LM: Two-way Control Module
+ * - QBKG03LM: Wall Switch (Double Rocker)
+ * - DJT11LM: Vibration Sensor
+ */
+function parseAqaraDevice(
+  serviceType: string,
+  txtProperties: Record<string, string>,
+  instanceName: string
+): DeviceInfo {
+  const metadata: Record<string, string> = {};
+  
+  // Extract common Aqara TXT properties
+  const mac = txtProperties['mac'] || null;
+  const serialNumber = txtProperties['serialNumber'] || txtProperties['sn'] || null;
+  const lumiId = txtProperties['id'] || null;
+  const version = txtProperties['ver'] || null;
+  const setupId = txtProperties['setupid'] || null;
+  const mnid = txtProperties['mnid'] || null;
+  
+  if (mac) metadata['mac'] = mac;
+  if (serialNumber) metadata['serialNumber'] = serialNumber;
+  if (lumiId) metadata['lumiId'] = lumiId;
+  if (version) metadata['version'] = version;
+  if (setupId) metadata['setupId'] = setupId;
+  if (mnid) metadata['manufacturerId'] = mnid;
+  
+  // Try to determine device type from service type or instance name
+  let deviceType = 'Aqara Device';
+  let model: string | null = null;
+  
+  const serviceTypeLower = serviceType.toLowerCase();
+  const instanceLower = instanceName.toLowerCase();
+  
+  // Map known Aqara device service types to human-readable names
+  if (serviceTypeLower.includes('fp2') || instanceLower.includes('fp2')) {
+    deviceType = 'Presence Sensor';
+    model = 'FP2';
+  } else if (serviceTypeLower.includes('fp1') || instanceLower.includes('fp1')) {
+    deviceType = 'Presence Sensor';
+    model = 'FP1';
+  } else if (instanceLower.includes('presence') || instanceLower.includes('presence-sensor')) {
+    deviceType = 'Presence Sensor';
+  } else if (instanceLower.includes('motion')) {
+    deviceType = 'Motion Sensor';
+  } else if (instanceLower.includes('door') || instanceLower.includes('window')) {
+    deviceType = 'Door/Window Sensor';
+  } else if (instanceLower.includes('temperature') || instanceLower.includes('humidity')) {
+    deviceType = 'Temperature & Humidity Sensor';
+  } else if (instanceLower.includes('leak') || instanceLower.includes('water')) {
+    deviceType = 'Water Leak Sensor';
+  } else if (instanceLower.includes('switch')) {
+    deviceType = 'Smart Switch';
+  } else if (instanceLower.includes('plug')) {
+    deviceType = 'Smart Plug';
+  } else if (instanceLower.includes('hub') || instanceLower.includes('gateway')) {
+    deviceType = 'Gateway';
+  } else if (instanceLower.includes('cube')) {
+    deviceType = 'Magic Cube';
+  } else if (instanceLower.includes('vibration')) {
+    deviceType = 'Vibration Sensor';
+  } else if (instanceLower.includes('camera')) {
+    deviceType = 'Camera';
+  } else if (instanceLower.includes('lock')) {
+    deviceType = 'Smart Lock';
+  } else if (instanceLower.includes('curtain') || instanceLower.includes('blind')) {
+    deviceType = 'Smart Curtain';
+  }
+  
+  return {
+    deviceType,
+    manufacturer: 'Aqara',
+    model,
+    metadata,
+  };
+}
+
+/**
+ * Aqara model code mapping
+ * Maps HomeKit model codes (from 'md' TXT property) to human-readable info
+ */
+const aqaraModelMap: Record<string, { name: string; type: string }> = {
+  // Presence Sensors
+  'PS-S02D': { name: 'Presence Sensor FP2', type: 'Presence Sensor' },
+  'PS-S02': { name: 'Presence Sensor FP1', type: 'Presence Sensor' },
+  // Motion Sensors
+  'RTCGQ12LM': { name: 'Motion Sensor P1', type: 'Motion Sensor' },
+  'RTCGQ14LM': { name: 'Motion Sensor E1', type: 'Motion Sensor' },
+  'RTCGQ15LM': { name: 'Motion Sensor P2', type: 'Motion Sensor' },
+  'RTCGQ01LM': { name: 'Motion Sensor', type: 'Motion Sensor' },
+  'RTCGQ11LM': { name: 'Motion Sensor', type: 'Motion Sensor' },
+  // Door/Window Sensors
+  'MCCGQ11LM': { name: 'Door/Window Sensor', type: 'Door/Window Sensor' },
+  'MCCGQ12LM': { name: 'Door/Window Sensor P1', type: 'Door/Window Sensor' },
+  'MCCGQ14LM': { name: 'Door/Window Sensor E1', type: 'Door/Window Sensor' },
+  // Temperature & Humidity Sensors
+  'WSDCGQ11LM': { name: 'Temperature & Humidity Sensor', type: 'Climate Sensor' },
+  'WSDCGQ12LM': { name: 'Temperature & Humidity Sensor T1', type: 'Climate Sensor' },
+  // Water Leak Sensors
+  'SJCGQ11LM': { name: 'Water Leak Sensor', type: 'Water Leak Sensor' },
+  'SJCGQ13LM': { name: 'Water Leak Sensor E1', type: 'Water Leak Sensor' },
+  // Vibration Sensors
+  'DJT11LM': { name: 'Vibration Sensor', type: 'Vibration Sensor' },
+  'DJT12LM': { name: 'Vibration Sensor T1', type: 'Vibration Sensor' },
+  // Switches
+  'QBKG03LM': { name: 'Wall Switch (Double)', type: 'Smart Switch' },
+  'QBKG04LM': { name: 'Wall Switch (Single)', type: 'Smart Switch' },
+  'QBKG11LM': { name: 'Wall Switch (Single, Neutral)', type: 'Smart Switch' },
+  'QBKG12LM': { name: 'Wall Switch (Double, Neutral)', type: 'Smart Switch' },
+  'QBKG21LM': { name: 'Wall Switch H1 (Single)', type: 'Smart Switch' },
+  'QBKG22LM': { name: 'Wall Switch H1 (Double)', type: 'Smart Switch' },
+  'WS-EUK01': { name: 'Wall Switch H1 EU (Single)', type: 'Smart Switch' },
+  'WS-EUK02': { name: 'Wall Switch H1 EU (Double)', type: 'Smart Switch' },
+  'WS-EUK03': { name: 'Wall Switch H1 EU (Triple)', type: 'Smart Switch' },
+  'WS-EUK04': { name: 'Wall Switch H1 EU (Quad)', type: 'Smart Switch' },
+  'WXKG11LM': { name: 'Wireless Mini Switch', type: 'Wireless Switch' },
+  'WXKG12LM': { name: 'Wireless Mini Switch T1', type: 'Wireless Switch' },
+  // Plugs
+  'SP-EUC01': { name: 'Smart Plug EU', type: 'Smart Plug' },
+  'ZNCZ02LM': { name: 'Smart Plug (Zigbee)', type: 'Smart Plug' },
+  'ZNCZ04LM': { name: 'Smart Plug (USB)', type: 'Smart Plug' },
+  'ZNCZ12LM': { name: 'Smart Plug (EU)', type: 'Smart Plug' },
+  // Control Modules
+  'LLKZMK11LM': { name: 'Two-way Control Module', type: 'Relay Module' },
+  'SSM-U01': { name: 'Single Switch Module T1 (No Neutral)', type: 'Relay Module' },
+  'SSM-U02': { name: 'Single Switch Module T1 (With Neutral)', type: 'Relay Module' },
+  'DCM-K01': { name: 'Dual Relay Module T2', type: 'Relay Module' },
+  // Dimmers
+  'ZNDDMK11LM': { name: 'Dimmer T1', type: 'Dimmer' },
+  // Curtain Controllers
+  'ZNCLDJ11LM': { name: 'Curtain Controller', type: 'Smart Curtain' },
+  'ZNCLDJ12LM': { name: 'Curtain Controller B1', type: 'Smart Curtain' },
+  'ZNCLBL01LM': { name: 'Roller Shade Driver E1', type: 'Smart Blind' },
+  // Hubs/Gateways
+  'ZHWG11LM': { name: 'Hub E1', type: 'Gateway' },
+  'ZHWG15LM': { name: 'Hub M1S', type: 'Gateway' },
+  'ZHWG16LM': { name: 'Hub M2', type: 'Gateway' },
+  'ZNGW01LM': { name: 'Gateway', type: 'Gateway' },
+  // Cameras
+  'CH-C01D': { name: 'Camera Hub G2H', type: 'Camera' },
+  'CH-H01D': { name: 'Camera Hub G2H Pro', type: 'Camera' },
+  'CH-H03D': { name: 'Camera Hub G3', type: 'Camera' },
+  // Cube
+  'MFKZQ01LM': { name: 'Cube', type: 'Magic Cube' },
+  // Thermostat
+  'SRTS-A01': { name: 'Smart Radiator Thermostat E1', type: 'Thermostat' },
+  // Smoke/Gas Detectors
+  'JY-GZ-01AQ': { name: 'Smart Smoke Detector', type: 'Smoke Detector' },
+  'JY-GZ-02AQ': { name: 'Natural Gas Detector', type: 'Gas Detector' },
+  // Pet Feeder
+  'ZNCWWSQ01LM': { name: 'Smart Pet Feeder C1', type: 'Pet Feeder' },
+  // LED Controller
+  'ZNLDP12LM': { name: 'LED Controller T1', type: 'LED Controller' },
+  // Air Quality
+  'VOCKQJK11LM': { name: 'TVOC Air Quality Monitor', type: 'Air Quality Monitor' },
+};
+
+/**
  * Parse Shelly device information
  * Service type: _shelly._tcp.local.
  * 
