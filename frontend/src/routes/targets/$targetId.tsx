@@ -119,7 +119,13 @@ function TargetDetails() {
               </CardHeader>
               <CardContent>
                 <div className="w-full" style={{ height: '580px' }}>
-                  <D3SmokeChart data={targetData} height={580} />
+                  <D3SmokeChart
+                    data={targetData}
+                    height={580}
+                    onApplyZoomAsTimeRange={(from, to) => {
+                      setTimeRange({ type: 'custom', from, to });
+                    }}
+                  />
                 </div>
               </CardContent>
             </Card>

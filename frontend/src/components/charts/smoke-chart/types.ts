@@ -14,6 +14,8 @@ export interface D3SmokeChartProps {
   width?: number;
   height?: number;
   margin?: ChartMargin;
+  /** Called when user wants to apply the zoomed range as a time filter */
+  onApplyZoomAsTimeRange?: (from: Date, to: Date) => void;
 }
 
 export interface ChartMargin {

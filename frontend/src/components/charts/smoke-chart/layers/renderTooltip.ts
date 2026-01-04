@@ -12,6 +12,8 @@ interface SetupTooltipOptions {
   innerWidth: number;
   themeColors: ThemeColors;
   visibility: ChartVisibilityOptions;
+  /** Optional external overlay element to attach events to (e.g., brush overlay) */
+  overlayElement?: d3.Selection<SVGRectElement, unknown, null, undefined>;
 }
 
 interface TooltipRefs {
@@ -27,6 +29,7 @@ export function setupTooltip({
   innerWidth,
   themeColors,
   visibility,
+  overlayElement,
 }: SetupTooltipOptions): TooltipRefs {
   const { xScale, yScale } = scales;
 
@@ -80,8 +83,8 @@ export function setupTooltip({
     max: createHoverPoint(chartColors.max, 'hover-point-max'),
   };
 
-  // Add invisible overlay for mouse tracking
-  const overlay = g
+  // Use provided overlay or create one for mouse tracking
+  const overlay = overlayElement ?? g
     .append('rect')
     .attr('width', innerWidth)
     .attr('height', chartHeight)

@@ -17,7 +17,9 @@ import { renderGrid, renderAxes } from './layers/renderGridAndAxes';
 import { renderStatsPanel } from './layers/renderStatsPanel';
 import { renderLegend } from './layers/renderLegend';
 import { setupTooltip } from './layers/renderTooltip';
+import { renderBrush } from './layers/renderBrush';
 import { ChartControls } from './ChartControls';
+import { ZoomControls } from './ZoomControls';
 import { chartColors, getThemeColors } from '../../../lib/chartColors';
 
 const STATS_PANEL_WIDTH = 150;
@@ -48,13 +50,25 @@ export function D3SmokeChart({
   data,
   width,
   height = 500,
+  onApplyZoomAsTimeRange,
 }: D3SmokeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: width || 800, height });
+  const [zoomedDomain, setZoomedDomain] = useState<[number, number] | null>(null);
   const { preferences, setPreference } = useUserPreferences();
   const { isDark } = useTheme();
   const themeColors = useMemo(() => getThemeColors(isDark), [isDark]);
+
+  // Reset zoom when data changes significantly (e.g., new time range selected)
+  const dataFingerprint = useMemo(() => {
+    if (data.length === 0) return '';
+    return `${data[0].timestamp_unix}-${data[data.length - 1].timestamp_unix}-${data.length}`;
+  }, [data]);
+
+  useEffect(() => {
+    setZoomedDomain(null);
+  }, [dataFingerprint]);
 
   const visibility: ChartVisibilityOptions = useMemo(() => ({
     showMedianLine: preferences.showMedianLine,
@@ -118,7 +132,15 @@ export function D3SmokeChart({
     d3.select(svgRef.current).selectAll('*').remove();
 
     // Prepare data
-    const chartData = prepareChartData(data);
+    const allChartData = prepareChartData(data);
+
+    // Filter data to zoomed domain if set
+    const chartData = zoomedDomain
+      ? allChartData.filter(
+          (d) => d.timestamp >= zoomedDomain[0] && d.timestamp <= zoomedDomain[1]
+        )
+      : allChartData;
+
     const validLatencyData = filterValidLatencyData(chartData);
     const bucketInterval = calculateBucketInterval(chartData);
 
@@ -139,8 +161,10 @@ export function D3SmokeChart({
 
     const defs = svg.append('defs');
 
-    // Create scales
-    const timeExtent = d3.extent(chartData, (d) => d.timestamp) as [number, number];
+    // Create scales - use zoomed domain if set, otherwise full extent
+    const timeExtent = zoomedDomain
+      ? (zoomedDomain as [number, number])
+      : (d3.extent(allChartData, (d) => d.timestamp) as [number, number]);
     const xScale = d3.scaleTime().domain(timeExtent).range([0, innerWidth]);
 
     // Calculate the upper bound for the y-scale
@@ -244,7 +268,19 @@ export function D3SmokeChart({
 
     renderLegend({ g, chartHeight, innerWidth, visibility, themeColors });
 
-    // Setup tooltip
+    // Setup brush for zoom first (creates the overlay)
+    const brushGroup = renderBrush({
+      g,
+      scales,
+      chartHeight,
+      innerWidth,
+      onBrushEnd: setZoomedDomain,
+    });
+
+    // Get the brush overlay to share with tooltip
+    const brushOverlay = brushGroup.select<SVGRectElement>('.overlay');
+
+    // Setup tooltip using the brush overlay for events
     const { cleanup } = setupTooltip({
       g,
       scales,
@@ -253,10 +289,11 @@ export function D3SmokeChart({
       innerWidth,
       themeColors,
       visibility,
+      overlayElement: brushOverlay,
     });
 
     return cleanup;
-  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors]);
+  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors, zoomedDomain]);
 
   // Type for boolean-only visibility keys (excludes smokeBarStyle)
   type BooleanVisibilityKey = Exclude<keyof ChartVisibilityOptions, 'smokeBarStyle'>;
@@ -269,6 +306,17 @@ export function D3SmokeChart({
     setPreference('smokeBarStyle', style);
   };
 
+  const handleResetZoom = () => {
+    setZoomedDomain(null);
+  };
+
+  const handleApplyZoom = () => {
+    if (zoomedDomain && onApplyZoomAsTimeRange) {
+      onApplyZoomAsTimeRange(new Date(zoomedDomain[0]), new Date(zoomedDomain[1]));
+      setZoomedDomain(null);
+    }
+  };
+
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-muted/50 rounded-lg">
@@ -279,7 +327,16 @@ export function D3SmokeChart({
 
   return (
     <div ref={containerRef} className="w-full">
-      <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
+        {zoomedDomain && (
+          <ZoomControls
+            zoomedDomain={zoomedDomain}
+            onReset={handleResetZoom}
+            onApply={onApplyZoomAsTimeRange ? handleApplyZoom : undefined}
+          />
+        )}
+      </div>
       <svg
         ref={svgRef}
         className="w-full h-auto"
