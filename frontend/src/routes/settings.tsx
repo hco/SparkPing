@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
-import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar } from 'lucide-react'
+import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar, ArrowUpDown } from 'lucide-react'
 import { UnifiedDiscoveryPanel } from '@/components/UnifiedDiscoveryPanel'
 import { PageLayout } from '@/components/PageLayout'
+import { compareIpAddresses, type SortField } from '@/lib/sorting'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -44,6 +45,7 @@ function Settings() {
   const queryClient = useQueryClient()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('name')
   const [formData, setFormData] = useState<TargetRequest>({
     address: '',
     name: '',
@@ -78,6 +80,20 @@ function Settings() {
     })
     return set
   }, [targets])
+
+  // Sort targets based on selected field
+  const sortedTargets = useMemo(() => {
+    if (!targets) return []
+    return [...targets].sort((a, b) => {
+      if (sortField === 'ip') {
+        return compareIpAddresses(a.address, b.address)
+      }
+      // Sort by name (use address as fallback if no name)
+      const aName = (a.name || a.address).toLowerCase()
+      const bName = (b.name || b.address).toLowerCase()
+      return aName.localeCompare(bName)
+    })
+  }, [targets, sortField])
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -154,10 +170,31 @@ function Settings() {
             <CardTitle className="text-xl">Targets</CardTitle>
             {!showAddForm && !editingId && (
               <CardAction>
-                <Button onClick={() => setShowAddForm(true)}>
-                  <Plus className="size-4" />
-                  Add Target
-                </Button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-md border border-input">
+                    <Button
+                      variant={sortField === 'name' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="rounded-r-none border-0"
+                      onClick={() => setSortField('name')}
+                    >
+                      <ArrowUpDown className="size-3.5 mr-1" />
+                      Name
+                    </Button>
+                    <Button
+                      variant={sortField === 'ip' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="rounded-l-none border-0"
+                      onClick={() => setSortField('ip')}
+                    >
+                      IP
+                    </Button>
+                  </div>
+                  <Button onClick={() => setShowAddForm(true)}>
+                    <Plus className="size-4" />
+                    Add Target
+                  </Button>
+                </div>
               </CardAction>
             )}
           </CardHeader>
@@ -169,9 +206,9 @@ function Settings() {
               No targets configured. Add your first target to get started.
             </div>
           ) : (
-            <div className="space-y-4">
-              {targets?.map((target) => (
-                <Card key={target.id} className="py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {sortedTargets.map((target) => (
+                <Card key={target.id} className="py-3">
                   {editingId === target.id ? (
                     <CardContent>
                       <TargetForm
@@ -183,80 +220,57 @@ function Settings() {
                       />
                     </CardContent>
                   ) : (
-                    <>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-3">
-                          {target.name || target.address}
-                          <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-1 rounded">
-                            ID: {target.id}
-                          </span>
-                        </CardTitle>
-                        <CardAction>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEdit(target)}
-                            >
-                              <Edit2 className="size-4" />
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(target.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
-                        </CardAction>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div>
-                            <span className="font-medium text-foreground">Address:</span> {target.address}
-                          </div>
+                    <CardContent className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-foreground truncate" title={target.name || target.address}>
+                            {target.name || target.address}
+                          </h3>
                           {target.name && (
-                            <div>
-                              <span className="font-medium text-foreground">Name:</span> {target.name}
-                            </div>
-                          )}
-                          <div>
-                            <span className="font-medium text-foreground">Ping Count:</span> {target.ping_count}
-                            {target.ping_count === 3 && (
-                              <span className="opacity-60 ml-1">(default)</span>
-                            )}
-                          </div>
-                          <div>
-                            <span className="font-medium text-foreground">Ping Interval:</span> {target.ping_interval}s
-                            {target.ping_interval === 1 && (
-                              <span className="opacity-60 ml-1">(default)</span>
-                            )}
-                          </div>
-                          {storageByTarget.get(target.id) && (
-                            <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <HardDrive className="size-3.5 text-muted-foreground" />
-                                <span className="font-medium text-foreground">Storage:</span>{' '}
-                                {formatBytes(storageByTarget.get(target.id)!.size_bytes)}
-                                <span className="text-muted-foreground ml-1">
-                                  ({storageByTarget.get(target.id)!.data_point_count.toLocaleString()} data points)
-                                </span>
-                              </div>
-                              {storageByTarget.get(target.id)!.earliest_timestamp && storageByTarget.get(target.id)!.latest_timestamp && (
-                                <div className="flex items-center gap-1.5">
-                                  <Calendar className="size-3.5 text-muted-foreground" />
-                                  <span className="font-medium text-foreground">Data range:</span>{' '}
-                                  <span className="text-muted-foreground">
-                                    {formatTimestamp(storageByTarget.get(target.id)!.earliest_timestamp!)} — {formatTimestamp(storageByTarget.get(target.id)!.latest_timestamp!)}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                            <p className="text-sm text-muted-foreground truncate" title={target.address}>
+                              {target.address}
+                            </p>
                           )}
                         </div>
-                      </CardContent>
-                    </>
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => handleEdit(target)}
+                          >
+                            <Edit2 className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(target.id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{target.ping_count} pings</span>
+                        <span>{target.ping_interval}s interval</span>
+                        {storageByTarget.get(target.id) && (
+                          <span className="flex items-center gap-1">
+                            <HardDrive className="size-3" />
+                            {formatBytes(storageByTarget.get(target.id)!.size_bytes)}
+                          </span>
+                        )}
+                      </div>
+                      {storageByTarget.get(target.id)?.earliest_timestamp && storageByTarget.get(target.id)?.latest_timestamp && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="size-3" />
+                          <span className="truncate">
+                            {formatTimestamp(storageByTarget.get(target.id)!.earliest_timestamp!)} — {formatTimestamp(storageByTarget.get(target.id)!.latest_timestamp!)}
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
                   )}
                 </Card>
               ))}
