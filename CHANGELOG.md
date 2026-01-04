@@ -2,6 +2,16 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.52] - 2026-01-04
+
+### ✨ Features
+
+- Add GitHub release with changelog to addon-builder pipeline
+
+### 📝 Other
+
+- Improve aqara device detection
+- Device identification is now being handled by the backend
 ## [0.1.51] - 2026-01-04
 
 ### 📝 Other
