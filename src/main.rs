@@ -2,6 +2,7 @@ mod api;
 mod config;
 mod config_file;
 mod config_wizard;
+mod device_identification;
 mod discovery;
 mod ip_scan;
 mod logging;

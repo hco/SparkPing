@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 /// Information about a single service discovered on a device
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct DiscoveredService {
     /// Service type (e.g., "_http._tcp.local.")
     pub service_type: String,

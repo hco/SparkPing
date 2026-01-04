@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, createElement, useEffect } from 'react';
 import { useUnifiedDiscovery, type UnifiedDiscoveryConfig } from '@/hooks/useUnifiedDiscovery';
 import { createTarget, fetchSubnets } from '@/api';
-import type { TargetRequest, DiscoveredDevice, SubnetSuggestion } from '@/types';
+import type { TargetRequest, IdentifiedDevice, SubnetSuggestion, DeviceInfo } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Document } from 'flexsearch';
-import { parseDeviceInfoFromServices, type DeviceInfo } from '@/lib/deviceParser';
 import { getBrandIcon } from '@/lib/brandIcons';
 import {
   Search,
@@ -49,22 +48,35 @@ function getServiceIcon(serviceType: string) {
 
 function DeviceIcon({
   deviceInfo,
-  discoveryMethod,
+  discoverySources,
   firstServiceType,
 }: {
   deviceInfo: DeviceInfo;
-  discoveryMethod: string;
+  discoverySources: IdentifiedDevice['discovery_sources'];
   firstServiceType: string | null;
 }) {
-  const BrandIconComponent = getBrandIcon(deviceInfo.manufacturer);
-
+  // Try icon_hint first (provided by backend)
+  const iconHint = deviceInfo.icon_hint;
+  if (iconHint) {
+    const BrandIconComponent = getBrandIcon(iconHint);
+    if (BrandIconComponent) {
+      return createElement(BrandIconComponent, {
+        className: 'size-3.5 shrink-0',
+      });
+    }
+  }
+  
+  // Then try manufacturer
+  const BrandIconComponent = getBrandIcon(deviceInfo.manufacturer ?? null);
   if (BrandIconComponent) {
     return createElement(BrandIconComponent, {
       className: 'size-3.5 shrink-0',
     });
   }
 
-  if (discoveryMethod.includes('ip_scan')) {
+  // Check if discovered via IP scan
+  const hasIpScan = discoverySources.some((s) => s.type === 'ip_scan');
+  if (hasIpScan) {
     return <Router className="size-4" />;
   }
 
@@ -75,39 +87,14 @@ function DeviceIcon({
   return <Wifi className="size-4" />;
 }
 
-function getDeviceInfo(device: DiscoveredDevice): DeviceInfo {
-  const deviceLevelInfo: DeviceInfo = {
-    deviceType: null,
-    manufacturer: device.txt_properties['manufacturer'] || 
-                  device.txt_properties['mfr'] || 
-                  device.txt_properties['ty']?.split(' ')[0] || 
-                  null,
-    model: device.txt_properties['model'] || 
-           device.txt_properties['md'] || 
-           device.txt_properties['product'] || 
-           null,
-    metadata: { ...device.txt_properties },
-  };
+/** Get the primary address for a device (for use as unique key) */
+function getDeviceAddress(device: IdentifiedDevice): string {
+  return device.device_info.primary_address;
+}
 
-  // Pass vendor_info to get richer device information when available
-  const serviceLevelInfo = parseDeviceInfoFromServices(
-    device.services.map((service) => ({
-      serviceType: service.service_type,
-      txtProperties: service.txt_properties,
-      instanceName: service.instance_name,
-    })),
-    device.vendor_info
-  );
-
-  return {
-    deviceType: deviceLevelInfo.deviceType || serviceLevelInfo.deviceType,
-    manufacturer: deviceLevelInfo.manufacturer || serviceLevelInfo.manufacturer,
-    model: deviceLevelInfo.model || serviceLevelInfo.model,
-    metadata: {
-      ...serviceLevelInfo.metadata,
-      ...deviceLevelInfo.metadata,
-    },
-  };
+/** Get a display name for the device */
+function getDeviceName(device: IdentifiedDevice): string {
+  return device.device_info.friendly_name ?? device.device_info.name;
 }
 
 function getServiceTypeName(serviceType: string): string {
@@ -230,6 +217,8 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
       addresses: string;
       services: string;
       serviceNames: string;
+      manufacturer: string;
+      deviceType: string;
     };
 
     const index = new Document<SearchableDeviceDoc>({
@@ -242,6 +231,8 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
           { field: 'addresses', tokenize: 'forward' },
           { field: 'services', tokenize: 'forward' },
           { field: 'serviceNames', tokenize: 'forward' },
+          { field: 'manufacturer', tokenize: 'forward' },
+          { field: 'deviceType', tokenize: 'forward' },
         ],
         store: true,
       },
@@ -250,15 +241,19 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
     });
 
     devices.forEach((device) => {
+      const info = device.device_info;
+      const services = device.raw_discovery.services;
       const searchableDoc: SearchableDeviceDoc = {
-        address: device.address,
-        hostname: device.hostname,
-        name: device.name,
-        addresses: device.addresses.join(' '),
-        services: device.services.map((s) => s.service_type).join(' '),
-        serviceNames: device.services.map((s) => getServiceTypeName(s.service_type)).join(' '),
+        address: info.primary_address,
+        hostname: info.hostname ?? '',
+        name: info.name,
+        addresses: info.addresses.join(' '),
+        services: services.map((s) => s.service_type).join(' '),
+        serviceNames: services.map((s) => getServiceTypeName(s.service_type)).join(' '),
+        manufacturer: info.manufacturer ?? '',
+        deviceType: info.device_type ?? '',
       };
-      index.add(device.address, searchableDoc);
+      index.add(info.primary_address, searchableDoc);
     });
 
     return index;
@@ -278,18 +273,17 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
       });
     });
 
-    return devices.filter((device) => matchedAddresses.has(device.address));
+    return devices.filter((device) => matchedAddresses.has(getDeviceAddress(device)));
   }, [devices, searchQuery, searchIndex]);
 
   // Group devices by manufacturer
   const groupedDevices = useMemo(() => {
     if (!groupByManufacturer) return null;
 
-    const groups = new Map<string, DiscoveredDevice[]>();
+    const groups = new Map<string, IdentifiedDevice[]>();
     
     for (const device of filteredDevices) {
-      const deviceInfo = getDeviceInfo(device);
-      const manufacturer = deviceInfo.manufacturer || 'Unknown';
+      const manufacturer = device.device_info.manufacturer ?? 'Unknown';
       
       const existing = groups.get(manufacturer);
       if (existing) {
@@ -388,22 +382,24 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
   const handleAddSelected = async () => {
     const devicesToAdd = devices.filter(
       (d) =>
-        selectedDevices.has(d.address) &&
-        !existingAddresses.has(d.address) &&
-        !addedDevices.has(d.address)
+        selectedDevices.has(getDeviceAddress(d)) &&
+        !existingAddresses.has(getDeviceAddress(d)) &&
+        !addedDevices.has(getDeviceAddress(d))
     );
 
     for (const device of devicesToAdd) {
+      const addr = getDeviceAddress(device);
+      const name = getDeviceName(device);
       const target: TargetRequest = {
-        address: device.address,
-        name: device.name !== device.address ? device.name : undefined,
+        address: addr,
+        name: name !== addr ? name : undefined,
       };
 
       try {
         await createMutation.mutateAsync(target);
-        setAddedDevices((prev) => new Set(prev).add(device.address));
+        setAddedDevices((prev) => new Set(prev).add(addr));
       } catch (error) {
-        console.error(`Failed to add device ${device.address}:`, error);
+        console.error(`Failed to add device ${addr}:`, error);
       }
     }
 
@@ -419,7 +415,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
   };
 
   const selectableDevices = filteredDevices.filter(
-    (d) => !existingAddresses.has(d.address) && !addedDevices.has(d.address)
+    (d) => !existingAddresses.has(getDeviceAddress(d)) && !addedDevices.has(getDeviceAddress(d))
   );
 
   const selectedCount = [...selectedDevices].filter(
@@ -428,24 +424,24 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
 
   const allSelectableSelected =
     selectableDevices.length > 0 &&
-    selectableDevices.every((d) => selectedDevices.has(d.address));
+    selectableDevices.every((d) => selectedDevices.has(getDeviceAddress(d)));
 
   const someSelectableSelected =
     selectableDevices.length > 0 &&
-    selectableDevices.some((d) => selectedDevices.has(d.address)) &&
+    selectableDevices.some((d) => selectedDevices.has(getDeviceAddress(d))) &&
     !allSelectableSelected;
 
   const handleSelectAll = () => {
     if (allSelectableSelected) {
       setSelectedDevices((prev) => {
         const next = new Set(prev);
-        selectableDevices.forEach((d) => next.delete(d.address));
+        selectableDevices.forEach((d) => next.delete(getDeviceAddress(d)));
         return next;
       });
     } else {
       setSelectedDevices((prev) => {
         const next = new Set(prev);
-        selectableDevices.forEach((d) => next.add(d.address));
+        selectableDevices.forEach((d) => next.add(getDeviceAddress(d)));
         return next;
       });
     }
@@ -725,10 +721,10 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                   const isCollapsed = collapsedGroups.has(manufacturer);
                   const BrandIcon = getBrandIcon(manufacturer);
                   const groupSelectableDevices = groupDevices.filter(
-                    (d) => !existingAddresses.has(d.address) && !addedDevices.has(d.address)
+                    (d) => !existingAddresses.has(getDeviceAddress(d)) && !addedDevices.has(getDeviceAddress(d))
                   );
                   const groupSelectedCount = groupSelectableDevices.filter(
-                    (d) => selectedDevices.has(d.address)
+                    (d) => selectedDevices.has(getDeviceAddress(d))
                   ).length;
                   
                   return (
@@ -757,16 +753,18 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                       {!isCollapsed && (
                         <div className="space-y-1 p-2">
                           {groupDevices.map((device) => {
-                            const isExisting = existingAddresses.has(device.address);
-                            const isAdded = addedDevices.has(device.address);
-                            const isSelected = selectedDevices.has(device.address);
+                            const addr = getDeviceAddress(device);
+                            const name = getDeviceName(device);
+                            const info = device.device_info;
+                            const isExisting = existingAddresses.has(addr);
+                            const isAdded = addedDevices.has(addr);
+                            const isSelected = selectedDevices.has(addr);
                             const isDisabled = isExisting || isAdded;
-                            const isExpanded = expandedDevices.has(device.address);
-                            const deviceInfo = getDeviceInfo(device);
+                            const isExpanded = expandedDevices.has(addr);
 
                             return (
                               <div
-                                key={device.address}
+                                key={addr}
                                 className={`rounded-lg border transition-colors ${
                                   isDisabled
                                     ? 'bg-muted/50 border-border/50 opacity-60'
@@ -777,26 +775,26 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                               >
                                 <div className="flex items-center gap-3 p-3">
                                   <Checkbox
-                                    id={`device-grouped-${device.address}`}
+                                    id={`device-grouped-${addr}`}
                                     checked={isSelected}
                                     disabled={isDisabled}
-                                    onCheckedChange={() => handleToggleDevice(device.address)}
+                                    onCheckedChange={() => handleToggleDevice(addr)}
                                   />
                                   <Label
-                                    htmlFor={`device-grouped-${device.address}`}
+                                    htmlFor={`device-grouped-${addr}`}
                                     className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
                                   >
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-medium text-foreground">{device.name}</span>
-                                      <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
-                                      {deviceInfo.deviceType && (
+                                      <span className="font-medium text-foreground">{name}</span>
+                                      <span className="text-xs text-muted-foreground font-mono">{addr}</span>
+                                      {info.device_type && (
                                         <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                          {deviceInfo.deviceType}
+                                          {info.device_type}
                                         </span>
                                       )}
-                                      {deviceInfo.model && (
+                                      {info.model && (
                                         <span className="text-xs text-muted-foreground">
-                                          {deviceInfo.model}
+                                          {info.model}
                                         </span>
                                       )}
                                       {(isExisting || isAdded) && (
@@ -808,7 +806,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                                   </Label>
                                   <button
                                     type="button"
-                                    onClick={() => handleToggleDetails(device.address)}
+                                    onClick={() => handleToggleDetails(addr)}
                                     className="text-muted-foreground hover:text-foreground transition-colors p-1"
                                     aria-label={isExpanded ? 'Hide details' : 'Show details'}
                                   >
@@ -821,7 +819,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                                 </div>
                                 {isExpanded && (
                                   <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
-                                    <JsonView data={device} className="mt-2" />
+                                    <JsonView data={device.raw_discovery} className="mt-2" />
                                   </div>
                                 )}
                               </div>
@@ -836,16 +834,19 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
             ) : (
               <div className="space-y-2">
                 {filteredDevices.map((device) => {
-                  const isExisting = existingAddresses.has(device.address);
-                  const isAdded = addedDevices.has(device.address);
-                  const isSelected = selectedDevices.has(device.address);
+                  const addr = getDeviceAddress(device);
+                  const name = getDeviceName(device);
+                  const info = device.device_info;
+                  const services = device.raw_discovery.services;
+                  const isExisting = existingAddresses.has(addr);
+                  const isAdded = addedDevices.has(addr);
+                  const isSelected = selectedDevices.has(addr);
                   const isDisabled = isExisting || isAdded;
-                  const isExpanded = expandedDevices.has(device.address);
-                  const deviceInfo = getDeviceInfo(device);
+                  const isExpanded = expandedDevices.has(addr);
 
                   return (
                     <div
-                      key={device.address}
+                      key={addr}
                       className={`rounded-lg border transition-colors ${
                         isDisabled
                           ? 'bg-muted/50 border-border/50 opacity-60'
@@ -856,50 +857,50 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                     >
                       <div className="flex items-center gap-3 p-3">
                         <Checkbox
-                          id={`device-${device.address}`}
+                          id={`device-${addr}`}
                           checked={isSelected}
                           disabled={isDisabled}
-                          onCheckedChange={() => handleToggleDevice(device.address)}
+                          onCheckedChange={() => handleToggleDevice(addr)}
                         />
                         <Label
-                          htmlFor={`device-${device.address}`}
+                          htmlFor={`device-${addr}`}
                           className={`flex-1 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}
                         >
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-muted-foreground">
                               <DeviceIcon
-                                deviceInfo={deviceInfo}
-                                discoveryMethod={device.discovery_method}
+                                deviceInfo={info}
+                                discoverySources={device.discovery_sources}
                                 firstServiceType={
-                                  device.services.length > 0
-                                    ? device.services[0].service_type
+                                  services.length > 0
+                                    ? services[0].service_type
                                     : null
                                 }
                               />
                             </span>
-                            <span className="font-medium text-foreground">{device.name}</span>
-                            <span className="text-xs text-muted-foreground font-mono">{device.address}</span>
+                            <span className="font-medium text-foreground">{name}</span>
+                            <span className="text-xs text-muted-foreground font-mono">{addr}</span>
                             {/* Discovery method badges */}
-                            {device.discovery_method.split(', ').map((method) => (
+                            {device.discovery_sources.map((source, i) => (
                               <span
-                                key={method}
+                                key={i}
                                 className={`text-xs px-1.5 py-0.5 rounded ${
-                                  method.includes('mdns')
+                                  source.type === 'mdns'
                                     ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                                     : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
                                 }`}
                               >
-                                {method.includes('mdns') ? 'mDNS' : method}
+                                {source.type === 'mdns' ? 'mDNS' : source.type}
                               </span>
                             ))}
-                            {deviceInfo.deviceType && (
+                            {info.device_type && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                {deviceInfo.deviceType}
+                                {info.device_type}
                               </span>
                             )}
-                            {device.services.length > 1 && (
+                            {services.length > 1 && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-600 dark:text-slate-400">
-                                {device.services.length} services
+                                {services.length} services
                               </span>
                             )}
                             {(isExisting || isAdded) && (
@@ -907,25 +908,25 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                                 {isExisting ? 'Already added' : 'Just added'}
                               </span>
                             )}
-                            {(deviceInfo.manufacturer || deviceInfo.model) && (
+                            {(info.manufacturer || info.model) && (
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                {deviceInfo.manufacturer && (() => {
-                                  const BrandIcon = getBrandIcon(deviceInfo.manufacturer);
+                                {info.manufacturer && (() => {
+                                  const BrandIcon = getBrandIcon(info.manufacturer);
                                   return (
                                     <>
                                       {BrandIcon && <BrandIcon className="size-3 shrink-0" />}
-                                      <span>{deviceInfo.manufacturer}</span>
+                                      <span>{info.manufacturer}</span>
                                     </>
                                   );
                                 })()}
-                                {deviceInfo.model && <span>{deviceInfo.model}</span>}
+                                {info.model && <span>{info.model}</span>}
                               </span>
                             )}
                           </div>
                         </Label>
                         <button
                           type="button"
-                          onClick={() => handleToggleDetails(device.address)}
+                          onClick={() => handleToggleDetails(addr)}
                           className="text-muted-foreground hover:text-foreground transition-colors p-1"
                           aria-label={isExpanded ? 'Hide details' : 'Show details'}
                         >
@@ -938,7 +939,7 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
                       </div>
                       {isExpanded && (
                         <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-2">
-                          <JsonView data={device} className="mt-2" />
+                          <JsonView data={device.raw_discovery} className="mt-2" />
                         </div>
                       )}
                     </div>

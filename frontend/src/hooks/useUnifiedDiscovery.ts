@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { DiscoveredDevice, DiscoveryEvent, SubnetSuggestion } from '@/types';
+import type { IdentifiedDevice, DiscoveryEvent, SubnetSuggestion } from '@/types';
 import { getBasePath } from '@/lib/basePath';
 
 export type DiscoveryStatus = 'idle' | 'running' | 'completed' | 'error';
@@ -21,7 +21,7 @@ export interface UnifiedDiscoveryConfig {
 
 interface UseUnifiedDiscoveryResult {
   /** List of discovered devices (merged from all methods) */
-  devices: DiscoveredDevice[];
+  devices: IdentifiedDevice[];
   /** Current status of discovery */
   status: DiscoveryStatus;
   /** Status message from the server */
@@ -41,7 +41,7 @@ interface UseUnifiedDiscoveryResult {
  * Supports multiple discovery methods running simultaneously with merged results.
  */
 export function useUnifiedDiscovery(): UseUnifiedDiscoveryResult {
-  const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
+  const [devices, setDevices] = useState<IdentifiedDevice[]>([]);
   const [status, setStatus] = useState<DiscoveryStatus>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -110,8 +110,10 @@ export function useUnifiedDiscovery(): UseUnifiedDiscoveryResult {
         switch (data.event_type) {
           case 'device_found':
             setDevices((prev) => {
-              // Check if we already have this device (by address)
-              const exists = prev.some((d) => d.address === data.device.address);
+              // Check if we already have this device (by primary address)
+              const exists = prev.some(
+                (d) => d.device_info.primary_address === data.device.device_info.primary_address
+              );
               if (exists) {
                 return prev;
               }
@@ -123,7 +125,9 @@ export function useUnifiedDiscovery(): UseUnifiedDiscoveryResult {
             setDevices((prev) => {
               // Update the existing device with new data
               return prev.map((d) =>
-                d.address === data.device.address ? data.device : d
+                d.device_info.primary_address === data.device.device_info.primary_address
+                  ? data.device
+                  : d
               );
             });
             break;

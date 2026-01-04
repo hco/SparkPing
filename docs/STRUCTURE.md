@@ -64,6 +64,13 @@ The backend follows Rust best practices with a clear separation of concerns.
 - `DiscoveredDevice` and `DiscoveredService` structs
 - Automatic service type detection via DNS-SD meta-query
 
+#### `src/device_identification/`
+- Device identification from mDNS services and TXT records
+- `DeviceInfo` struct with high-level device information (name, manufacturer, model, device type, etc.)
+- `IdentifiedDevice` struct wrapping parsed info + discovery sources + raw data
+- Parsers for: HomeKit, AirPlay, Chromecast, Sonos, Shelly, ESPHome, Philips Hue, WiZ, Xiaomi Mi IoT, Aqara, printers
+- Icon hints for frontend display
+
 #### `src/ip_scan.rs`
 - IP range scanning for device discovery
 - Subnet suggestion from local interfaces and traceroute
@@ -74,7 +81,7 @@ The backend follows Rust best practices with a clear separation of concerns.
 #### `src/unified_discovery.rs`
 - Coordinates multiple discovery methods (mDNS + IP scan)
 - Merges results by IP address (deduplication)
-- Combines device information from multiple sources
+- Converts raw `DiscoveredDevice` to `IdentifiedDevice` with parsed info
 - Single stream output for client consumption
 
 ### API Module (`src/api/`)
@@ -178,8 +185,7 @@ Single-page application built with Vite, React, and TanStack Router.
 - `queryClient.ts` - TanStack Query configuration
 - `basePath.ts` - Base path detection for HA ingress
 - `chartColors.ts` - Chart color palette
-- `deviceParser.ts` - Device name/icon parsing
-- `brandIcons.tsx` - Brand icon components
+- `brandIcons.tsx` - Brand icon components (uses backend-provided icon_hint)
 - `utils.ts` - General utilities
 
 ### Context (`src/context/`)

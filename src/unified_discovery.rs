@@ -4,6 +4,7 @@
 //! merges results into a unified stream. Devices are deduplicated by IP address
 //! to ensure each device is only reported once, even if discovered by multiple methods.
 
+use crate::device_identification::{convert_to_identified, IdentifiedDiscoveryEvent};
 use crate::discovery::{run_mdns_discovery, DiscoveredDevice, DiscoveryEvent};
 use crate::ip_scan::{run_ip_scan_discovery, IpRangeSpec, IpScanRequest};
 use crate::vendor_discovery::{self, Vendor, VendorInfo};
@@ -233,8 +234,11 @@ enum InternalEvent {
 ///
 /// This function coordinates multiple discovery methods, merges their results
 /// by IP address, and sends unified events to the client.
+///
+/// Events are sent as `IdentifiedDiscoveryEvent` which contains fully parsed
+/// device information.
 pub async fn run_unified_discovery(
-    tx: mpsc::Sender<DiscoveryEvent>,
+    tx: mpsc::Sender<IdentifiedDiscoveryEvent>,
     config: UnifiedDiscoveryConfig,
 ) {
     info!("Starting unified discovery");
@@ -250,7 +254,7 @@ pub async fn run_unified_discovery(
 
     if active_methods == 0 {
         let _ = tx
-            .send(DiscoveryEvent::Error {
+            .send(IdentifiedDiscoveryEvent::Error {
                 message: "No discovery methods enabled".to_string(),
             })
             .await;
@@ -267,7 +271,7 @@ pub async fn run_unified_discovery(
     .collect();
 
     if tx
-        .send(DiscoveryEvent::Started {
+        .send(IdentifiedDiscoveryEvent::Started {
             message: format!("Starting discovery ({})...", methods.join(" + ")),
         })
         .await
@@ -417,10 +421,13 @@ pub async fn run_unified_discovery(
                     // Drop lock before sending to avoid holding it during async send
                     drop(state_guard);
                     
+                    // Convert to identified device
+                    let identified = convert_to_identified(merged_device);
+                    
                     let event = if is_new {
-                        DiscoveryEvent::DeviceFound { device: merged_device }
+                        IdentifiedDiscoveryEvent::DeviceFound { device: identified }
                     } else {
-                        DiscoveryEvent::DeviceUpdated { device: merged_device }
+                        IdentifiedDiscoveryEvent::DeviceUpdated { device: identified }
                     };
                     if tx.send(event).await.is_err() {
                         break;
@@ -443,9 +450,12 @@ pub async fn run_unified_discovery(
                         updated_device.address, updated_device.name
                     );
                     
+                    // Convert to identified device
+                    let identified = convert_to_identified(updated_device);
+                    
                     if tx
-                        .send(DiscoveryEvent::DeviceUpdated {
-                            device: updated_device,
+                        .send(IdentifiedDiscoveryEvent::DeviceUpdated {
+                            device: identified,
                         })
                         .await
                         .is_err()
@@ -465,7 +475,7 @@ pub async fn run_unified_discovery(
                     let device_count = state_guard.devices.len();
                     drop(state_guard);
                     let _ = tx
-                        .send(DiscoveryEvent::Completed {
+                        .send(IdentifiedDiscoveryEvent::Completed {
                             message: format!("Discovery complete. Found {} devices.", device_count),
                             device_count,
                         })

@@ -67,4 +67,3 @@ export async function fetchSubnets(): Promise<SubnetSuggestion[]> {
   const response = await apiClient.get<SubnetSuggestion[]>('/api/discovery/subnets');
   return response.data;
 }
-

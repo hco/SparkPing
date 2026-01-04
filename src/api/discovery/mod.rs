@@ -1,4 +1,4 @@
-use crate::discovery::DiscoveryEvent;
+use crate::device_identification::IdentifiedDiscoveryEvent;
 use crate::ip_scan::{get_suggested_subnets, SubnetSuggestion};
 use crate::unified_discovery::{run_unified_discovery, UnifiedDiscoveryConfig};
 use async_stream::stream;
@@ -104,7 +104,7 @@ pub async fn start_unified_discovery(
     };
 
     let stream = stream! {
-        let (tx, mut rx) = mpsc::channel::<DiscoveryEvent>(100);
+        let (tx, mut rx) = mpsc::channel::<IdentifiedDiscoveryEvent>(100);
 
         // Spawn the unified discovery task
         tokio::spawn(async move {
@@ -123,7 +123,7 @@ pub async fn start_unified_discovery(
             }
 
             // If this was an error or completed event, we're done
-            if matches!(event, DiscoveryEvent::Error { .. } | DiscoveryEvent::Completed { .. }) {
+            if matches!(event, IdentifiedDiscoveryEvent::Error { .. } | IdentifiedDiscoveryEvent::Completed { .. }) {
                 break;
             }
         }

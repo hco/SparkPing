@@ -162,30 +162,62 @@ export interface DiscoveredService {
   txt_properties: Record<string, string>;
 }
 
-export interface DiscoveredDevice {
-  /** Human-readable name of the device (primary name) */
+/** High-level device information extracted by the backend */
+export interface DeviceInfo {
+  /** Best available name for the device */
   name: string;
-  /** Primary IP address of the device (first IPv4, or first IPv6 if no IPv4) */
-  address: string;
+  /** Friendly/zone name (e.g., Sonos room name) */
+  friendly_name?: string;
   /** All IP addresses (IPv4 and IPv6) */
   addresses: string[];
-  /** Hostname of the device (e.g., "device.local.") */
-  hostname: string;
-  /** All services discovered on this device */
+  /** Primary IP address (first IPv4, or first address if no IPv4) */
+  primary_address: string;
+  /** Hostname (e.g., "device.local") */
+  hostname?: string;
+  /** Device type (e.g., "Smart Speaker", "Printer", "Router") */
+  device_type?: string;
+  /** Manufacturer name (e.g., "Sonos", "Apple", "Google") */
+  manufacturer?: string;
+  /** Device model (e.g., "Era 300", "Chromecast Ultra") */
+  model?: string;
+  /** Firmware/software version */
+  firmware_version?: string;
+  /** MAC address (when available from TXT records or vendor info) */
+  mac_address?: string;
+  /** Hint for frontend icon selection (e.g., "sonos", "apple", "printer") */
+  icon_hint?: string;
+}
+
+/** Source of device discovery */
+export type DiscoverySource =
+  | { type: 'mdns'; service_types: string[] }
+  | { type: 'ip_scan'; ports: number[] };
+
+/** Raw discovery data preserved for detailed inspection */
+export interface RawDiscoveryData {
+  /** All discovered services with their full details */
   services: DiscoveredService[];
-  /** Combined TXT properties from all services (merged) */
+  /** Combined TXT properties from all services */
   txt_properties: Record<string, string>;
-  /** TTL (Time To Live) if available */
-  ttl: number | null;
-  /** The method used to discover this device */
-  discovery_method: string;
-  /** Vendor-specific information (fetched from device APIs) */
+  /** Vendor-specific information (if fetched) */
   vendor_info?: VendorInfo;
+  /** TTL from mDNS (if available) */
+  ttl?: number;
+}
+
+/** A fully identified device with parsed information from the backend */
+export interface IdentifiedDevice {
+  /** High-level device information (parsed by backend) */
+  device_info: DeviceInfo;
+  /** Discovery sources that found this device */
+  discovery_sources: DiscoverySource[];
+  /** Raw discovery data for detailed inspection */
+  raw_discovery: RawDiscoveryData;
 }
 
 export type DiscoveryEvent =
-  | { event_type: 'device_found'; device: DiscoveredDevice }
-  | { event_type: 'device_updated'; device: DiscoveredDevice }
+  | { event_type: 'device_found'; device: IdentifiedDevice }
+  | { event_type: 'device_updated'; device: IdentifiedDevice }
   | { event_type: 'started'; message: string }
   | { event_type: 'completed'; message: string; device_count: number }
   | { event_type: 'error'; message: string };
