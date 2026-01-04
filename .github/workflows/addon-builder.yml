@@ -195,3 +195,40 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add home-assistant-addon/config.yaml
           git diff --staged --quiet || (git commit -m "chore: bump add-on version to ${{ steps.version.outputs.version }}" && git push)
+
+  create-release:
+    needs: bump-addon-version
+    runs-on: ubuntu-latest
+    name: Create GitHub Release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff@2.11.0
+
+      - name: Generate release changelog
+        id: changelog
+        run: |
+          # Generate changelog for just this release (commits since previous tag)
+          CHANGELOG=$(git-cliff --latest --strip header)
+
+          # Handle multi-line output for GitHub Actions
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "${{ steps.changelog.outputs.changelog }}"
