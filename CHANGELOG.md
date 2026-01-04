@@ -2,6 +2,11 @@
 
 All notable changes to SparkPing will be documented in this file.
 
+## [0.1.51] - 2026-01-04
+
+### 📝 Other
+
+- Improve xiaomi discovery
 ## [0.1.50] - 2026-01-03
 
 ### 🐛 Bug Fixes
