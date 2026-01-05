@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.56] - 2026-01-05
+
+### 📝 Other
+- Add search to homepage/settings
+
+
 ## [0.1.55] - 2026-01-04
 
 ### ✨ Features
@@ -35,15 +41,6 @@ to use this config for the home-assistant-addon changelog.
 
 ### 📝 Other
 - Improve xiaomi discovery
-
-
-## [0.1.50] - 2026-01-03
-
-### 🐛 Bug Fixes
-- Make sure the latest version of the frontend is used
-
-### 📝 Other
-- Add copy button for discovery json
 
 
 

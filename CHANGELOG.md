@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.56] - 2026-01-05
+
+### 📝 Other
+
+- Add search to homepage/settings
 ## [0.1.55] - 2026-01-04
 
 ### ✨ Features
