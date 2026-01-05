@@ -34,6 +34,7 @@ import {
   Group,
 } from 'lucide-react';
 import { JsonView } from '@/components/JsonView';
+import { SearchInput } from '@/components/SearchInput';
 
 interface UnifiedDiscoveryPanelProps {
   existingAddresses: Set<string>;
@@ -639,16 +640,11 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
         {devices.length > 0 && (
           <div className="mb-4 space-y-3">
             <div className="flex gap-2 items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search by hostname, IP address, or service..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search by hostname, IP address, or service..."
+              />
               <Button
                 variant={groupByManufacturer ? 'default' : 'outline'}
                 size="sm"

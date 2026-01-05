@@ -9,6 +9,7 @@ import { chartColors, getPacketLossClass, getLatencyStatusColor } from '@/lib/ch
 import { compareIpAddresses, type SortField } from '@/lib/sorting'
 import { RefreshCw, Settings, Activity, ArrowUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SearchInput } from '@/components/SearchInput'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -20,10 +21,23 @@ function Dashboard() {
     refetchInterval: 5000,
   })
   const [sortField, setSortField] = useState<SortField>('name')
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Sort targets based on selected field
-  const sortedTargetStats = useMemo(() => {
-    return [...targetStats].sort((a, b) => {
+  // Filter and sort targets
+  const filteredAndSortedTargetStats = useMemo(() => {
+    // First filter by search query
+    let filtered = targetStats
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = targetStats.filter((stat) => {
+        const name = (stat.target.name || '').toLowerCase()
+        const address = stat.target.address.toLowerCase()
+        return name.includes(query) || address.includes(query)
+      })
+    }
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
       if (sortField === 'ip') {
         return compareIpAddresses(a.target.address, b.target.address)
       }
@@ -32,7 +46,7 @@ function Dashboard() {
       const bName = (b.target.name || b.target.address).toLowerCase()
       return aName.localeCompare(bName)
     })
-  }, [targetStats, sortField])
+  }, [targetStats, sortField, searchQuery])
 
   const formatLatency = (value: number | null): string => {
     if (value === null) return '—'
@@ -44,7 +58,8 @@ function Dashboard() {
   return (
     <PageLayout>
       {/* Header */}
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-8">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-foreground tracking-tight">SparkPing</h1>
             <p className="text-muted-foreground text-sm mt-1">Network monitoring dashboard</p>
@@ -88,7 +103,17 @@ function Dashboard() {
               </Button>
             </Link>
           </div>
-        </header>
+        </div>
+        {targetStats.length > 0 && (
+          <div className="flex gap-2 items-center">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search targets by name or IP address..."
+            />
+          </div>
+        )}
+      </header>
 
         {error && (
           <ErrorDisplay error={error instanceof Error ? error.message : 'Failed to fetch data'} />
@@ -108,22 +133,35 @@ function Dashboard() {
               </Button>
             </Link>
           </div>
+        ) : filteredAndSortedTargetStats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="text-muted-foreground text-6xl mb-4">🔍</div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">No targets found</h2>
+            <p className="text-muted-foreground mb-6">No targets match your search query.</p>
+          </div>
         ) : (
-          <div className="space-y-3">
-            {/* Table header */}
-            <div className="grid grid-cols-[80px_1fr_80px_80px_80px_70px_130px_130px] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              <div></div>
-              <div>Target</div>
-              <div className="text-right">Min</div>
-              <div className="text-right">Median</div>
-              <div className="text-right">Max</div>
-              <div className="text-right">Loss</div>
-              <div className="text-center">Latency</div>
-              <div className="text-center">Packet Loss</div>
-            </div>
+          <>
+            {searchQuery && (
+              <p className="text-sm text-muted-foreground mb-3">
+                Showing {filteredAndSortedTargetStats.length} of {targetStats.length} target
+                {targetStats.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            <div className="space-y-3">
+              {/* Table header */}
+              <div className="grid grid-cols-[80px_1fr_80px_80px_80px_70px_130px_130px] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <div></div>
+                <div>Target</div>
+                <div className="text-right">Min</div>
+                <div className="text-right">Median</div>
+                <div className="text-right">Max</div>
+                <div className="text-right">Loss</div>
+                <div className="text-center">Latency</div>
+                <div className="text-center">Packet Loss</div>
+              </div>
 
-            {/* Target rows */}
-            {sortedTargetStats.map((stat) => {
+              {/* Target rows */}
+              {filteredAndSortedTargetStats.map((stat) => {
               const latencyData = stat.recentData.map((d) => d.avg ?? 0)
               const packetLossData = stat.recentData.map((d) => 
                 d.count > 0 ? (d.failed_count / d.count) * 100 : 0
@@ -216,8 +254,9 @@ function Dashboard() {
                   </div>
                 </Link>
               )
-            })}
-          </div>
+              })}
+            </div>
+          </>
         )}
 
       {/* Footer with auto-refresh indicator */}

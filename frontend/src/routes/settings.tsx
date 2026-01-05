@@ -11,6 +11,7 @@ import { Trash2, Edit2, Plus, X, Save, HardDrive, Calendar, ArrowUpDown } from '
 import { UnifiedDiscoveryPanel } from '@/components/UnifiedDiscoveryPanel'
 import { PageLayout } from '@/components/PageLayout'
 import { compareIpAddresses, type SortField } from '@/lib/sorting'
+import { SearchInput } from '@/components/SearchInput'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -46,6 +47,7 @@ function Settings() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [sortField, setSortField] = useState<SortField>('name')
+  const [searchQuery, setSearchQuery] = useState('')
   const [formData, setFormData] = useState<TargetRequest>({
     address: '',
     name: '',
@@ -81,10 +83,23 @@ function Settings() {
     return set
   }, [targets])
 
-  // Sort targets based on selected field
-  const sortedTargets = useMemo(() => {
+  // Filter and sort targets
+  const filteredAndSortedTargets = useMemo(() => {
     if (!targets) return []
-    return [...targets].sort((a, b) => {
+    
+    // First filter by search query
+    let filtered = targets
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = targets.filter((target) => {
+        const name = (target.name || '').toLowerCase()
+        const address = target.address.toLowerCase()
+        return name.includes(query) || address.includes(query)
+      })
+    }
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
       if (sortField === 'ip') {
         return compareIpAddresses(a.address, b.address)
       }
@@ -93,7 +108,7 @@ function Settings() {
       const bName = (b.name || b.address).toLowerCase()
       return aName.localeCompare(bName)
     })
-  }, [targets, sortField])
+  }, [targets, sortField, searchQuery])
 
   const createMutation = useMutation({
     mutationFn: createTarget,
@@ -206,8 +221,29 @@ function Settings() {
               No targets configured. Add your first target to get started.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {sortedTargets.map((target) => (
+            <>
+              {targets && targets.length > 0 && (
+                <div className="mb-4">
+                  <SearchInput
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Search targets by name or IP address..."
+                  />
+                  {searchQuery && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Showing {filteredAndSortedTargets.length} of {targets.length} target
+                      {targets.length !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              )}
+              {filteredAndSortedTargets.length === 0 ? (
+                <div className="text-muted-foreground py-8 text-center">
+                  No targets match your search query.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {filteredAndSortedTargets.map((target) => (
                 <Card key={target.id} className="py-3">
                   {editingId === target.id ? (
                     <CardContent>
@@ -273,8 +309,10 @@ function Settings() {
                     </CardContent>
                   )}
                 </Card>
-              ))}
-            </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {showAddForm && (
