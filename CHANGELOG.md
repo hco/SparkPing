@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.57] - 2026-01-06
+
+### ✨ Features
+
+- Add real histogram data (percentiles) to smoke charts
 ## [0.1.56] - 2026-01-05
 
 ### 📝 Other

@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.57] - 2026-01-06
+
+### ✨ Features
+- Add real histogram data (percentiles) to smoke charts
+
+
 ## [0.1.56] - 2026-01-05
 
 ### 📝 Other
@@ -35,12 +41,6 @@ to use this config for the home-assistant-addon changelog.
 ### 📝 Other
 - Improve aqara device detection
 - Device identification is now being handled by the backend
-
-
-## [0.1.51] - 2026-01-04
-
-### 📝 Other
-- Improve xiaomi discovery
 
 
 
