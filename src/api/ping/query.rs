@@ -1,6 +1,6 @@
 use super::dto::{
-    BucketDataPoint, PartitionMetadata, PingDataPoint, PingStatistics, TargetStorageStats,
-    TimeRangeValue,
+    BucketDataPoint, PartitionMetadata, Percentiles, PingDataPoint, PingStatistics,
+    TargetStorageStats, TimeRangeValue,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -187,10 +187,31 @@ pub(super) fn resolve_time_range_value(value: &TimeRangeValue) -> Result<i64, St
     }
 }
 
+/// Calculate percentiles from a sorted vector of values
+fn calculate_percentiles(sorted_values: &[f64]) -> Option<Percentiles> {
+    if sorted_values.is_empty() {
+        return None;
+    }
+
+    let percentile = |p: f64| -> f64 {
+        let index = (p * (sorted_values.len() - 1) as f64).round() as usize;
+        sorted_values[index.min(sorted_values.len() - 1)]
+    };
+
+    Some(Percentiles {
+        p50: percentile(0.50),
+        p75: percentile(0.75),
+        p90: percentile(0.90),
+        p95: percentile(0.95),
+        p99: percentile(0.99),
+    })
+}
+
 /// Aggregate ping data points into time buckets, grouped by target
 pub(super) fn aggregate_into_buckets(
     points: &[PingDataPoint],
     bucket_duration_seconds: i64,
+    include_percentiles: bool,
 ) -> Vec<BucketDataPoint> {
     if points.is_empty() || bucket_duration_seconds <= 0 {
         return Vec::new();
@@ -221,12 +242,20 @@ pub(super) fn aggregate_into_buckets(
             let failed: Vec<_> = bucket_points.iter().filter(|p| !p.success).collect();
 
             // Calculate min, max, avg for successful pings (latency)
-            let latencies: Vec<f64> = successful.iter().filter_map(|p| p.latency_ms).collect();
+            let mut latencies: Vec<f64> = successful.iter().filter_map(|p| p.latency_ms).collect();
 
             let min = latencies.iter().copied().reduce(f64::min);
             let max = latencies.iter().copied().reduce(f64::max);
             let avg = if !latencies.is_empty() {
                 Some(latencies.iter().sum::<f64>() / latencies.len() as f64)
+            } else {
+                None
+            };
+
+            // Calculate percentiles if requested
+            let percentiles = if include_percentiles && !latencies.is_empty() {
+                latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                calculate_percentiles(&latencies)
             } else {
                 None
             };
@@ -242,6 +271,7 @@ pub(super) fn aggregate_into_buckets(
                 min,
                 max,
                 avg,
+                percentiles,
                 count: bucket_points.len(),
                 successful_count: successful.len(),
                 failed_count: failed.len(),
@@ -449,4 +479,46 @@ pub(super) fn calculate_storage_stats(
         total_size_bytes: total_size,
         targets,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_percentiles() {
+        // Test with a simple sorted array
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let percentiles = calculate_percentiles(&values).unwrap();
+
+        // Check that percentiles are in ascending order
+        assert!(percentiles.p50 <= percentiles.p75);
+        assert!(percentiles.p75 <= percentiles.p90);
+        assert!(percentiles.p90 <= percentiles.p95);
+        assert!(percentiles.p95 <= percentiles.p99);
+
+        // Check approximate values (median should be around 5.5)
+        assert!((percentiles.p50 - 5.5).abs() < 1.0);
+        assert!(percentiles.p99 > percentiles.p50);
+    }
+
+    #[test]
+    fn test_calculate_percentiles_empty() {
+        let values: Vec<f64> = vec![];
+        let percentiles = calculate_percentiles(&values);
+        assert!(percentiles.is_none());
+    }
+
+    #[test]
+    fn test_calculate_percentiles_single_value() {
+        let values = vec![42.0];
+        let percentiles = calculate_percentiles(&values).unwrap();
+
+        // All percentiles should be the same value
+        assert_eq!(percentiles.p50, 42.0);
+        assert_eq!(percentiles.p75, 42.0);
+        assert_eq!(percentiles.p90, 42.0);
+        assert_eq!(percentiles.p95, 42.0);
+        assert_eq!(percentiles.p99, 42.0);
+    }
 }

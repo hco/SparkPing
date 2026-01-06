@@ -49,6 +49,14 @@ export interface PingDataQuery {
   limit?: number;
 }
 
+export interface Percentiles {
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+  p99: number;
+}
+
 export interface BucketDataPoint {
   timestamp: string;
   timestamp_unix: number;
@@ -58,6 +66,7 @@ export interface BucketDataPoint {
   min: number | null;
   max: number | null;
   avg: number | null;
+  percentiles?: Percentiles;
   count: number;
   successful_count: number;
   failed_count: number;
@@ -69,6 +78,7 @@ export interface PingAggregatedQuery {
   to?: number;
   metric?: 'latency' | 'failed' | 'all';
   bucket?: string;
+  include_percentiles?: boolean;
 }
 
 export interface PingAggregatedResponse {

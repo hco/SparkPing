@@ -126,7 +126,8 @@ pub(crate) async fn get_ping_aggregated(
     })?;
 
     // Aggregate into buckets
-    let bucket_data = aggregate_into_buckets(&points, bucket_duration_seconds);
+    let include_percentiles = query.include_percentiles.unwrap_or(false);
+    let bucket_data = aggregate_into_buckets(&points, bucket_duration_seconds, include_percentiles);
 
     let data_time_range = if !points.is_empty() {
         Some(TimeRange {

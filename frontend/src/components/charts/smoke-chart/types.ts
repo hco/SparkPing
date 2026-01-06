@@ -1,4 +1,4 @@
-import type { BucketDataPoint } from '../../../types';
+import type { BucketDataPoint, Percentiles } from '../../../types';
 
 /**
  * Style options for smoke bar visualization:
@@ -31,6 +31,7 @@ export interface ChartDataPoint {
   min: number | null;
   max: number | null;
   avg: number | null;
+  percentiles?: Percentiles;
   count: number;
   successfulCount: number;
   failedCount: number;

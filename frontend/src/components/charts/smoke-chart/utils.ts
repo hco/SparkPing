@@ -39,6 +39,7 @@ export function prepareChartData(data: BucketDataPoint[]): ChartDataPoint[] {
         min: bucket.min,
         max: bucket.max,
         avg: bucket.avg,
+        percentiles: bucket.percentiles,
         count: bucket.count,
         successfulCount: bucket.successful_count,
         failedCount: bucket.failed_count,

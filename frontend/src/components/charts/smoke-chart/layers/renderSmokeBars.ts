@@ -137,8 +137,8 @@ function renderClassicStyle(
 
 /**
  * Style 1: Gradient Heatmap
- * Creates a Gaussian-like gradient centered on the average value.
- * The center (around avg) is darkest, edges (near min/max) fade out.
+ * Creates a gradient centered on the median (if percentiles available) or average.
+ * Uses real percentile data when available, falls back to Gaussian estimation.
  */
 function renderGradientStyle(
   smokeGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
@@ -155,9 +155,6 @@ function renderGradientStyle(
     
     if (rangeHeight <= 0) return;
 
-    // Calculate the position of the average relative to min/max range (0 = max, 1 = min)
-    const avgPosition = (bounds.avg - bounds.max) / (bounds.min - bounds.max);
-    
     // Create unique gradient for this bar
     const gradientId = `smoke-gradient-${i}`;
     const gradient = defs
@@ -169,15 +166,37 @@ function renderGradientStyle(
       .attr('x2', 0)
       .attr('y2', 1);
 
-    // Create Gaussian-like distribution with peak at average
-    // Using multiple color stops to simulate the bell curve
-    const stops = [
-      { offset: 0, opacity: 0.15 },      // At max (top)
-      { offset: avgPosition * 0.5, opacity: 0.35 },
-      { offset: avgPosition, opacity: 0.7 },  // At average (peak)
-      { offset: avgPosition + (1 - avgPosition) * 0.5, opacity: 0.35 },
-      { offset: 1, opacity: 0.15 },      // At min (bottom)
-    ];
+    let stops: Array<{ offset: number; opacity: number }>;
+
+    if (point.percentiles) {
+      // Use real percentile data to create gradient
+      const range = bounds.max - bounds.min;
+      const p50Pos = (point.percentiles.p50 - bounds.max) / range;
+      const p75Pos = (point.percentiles.p75 - bounds.max) / range;
+      const p90Pos = (point.percentiles.p90 - bounds.max) / range;
+      const p95Pos = (point.percentiles.p95 - bounds.max) / range;
+      
+      stops = [
+        { offset: 0, opacity: 0.15 },           // At max (top)
+        { offset: p95Pos * 0.5, opacity: 0.25 },
+        { offset: p90Pos, opacity: 0.4 },
+        { offset: p75Pos, opacity: 0.55 },
+        { offset: p50Pos, opacity: 0.7 },       // At median (peak)
+        { offset: p50Pos + (1 - p50Pos) * 0.5, opacity: 0.35 },
+        { offset: 1, opacity: 0.15 },           // At min (bottom)
+      ];
+    } else {
+      // Fall back to Gaussian estimation based on average
+      const avgPosition = (bounds.avg - bounds.max) / (bounds.min - bounds.max);
+      
+      stops = [
+        { offset: 0, opacity: 0.15 },      // At max (top)
+        { offset: avgPosition * 0.5, opacity: 0.35 },
+        { offset: avgPosition, opacity: 0.7 },  // At average (peak)
+        { offset: avgPosition + (1 - avgPosition) * 0.5, opacity: 0.35 },
+        { offset: 1, opacity: 0.15 },      // At min (bottom)
+      ];
+    }
 
     stops.forEach(stop => {
       gradient
@@ -199,8 +218,8 @@ function renderGradientStyle(
 
 /**
  * Style 2: Percentile Bands
- * Estimates percentile ranges and renders concentric bands.
- * Uses the IQR (interquartile range) estimation based on standard deviation.
+ * Renders concentric bands showing percentile ranges.
+ * Uses real percentile data when available, falls back to estimation.
  */
 function renderPercentileStyle(
   smokeGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
@@ -213,65 +232,81 @@ function renderPercentileStyle(
   // Define percentile bands with their visual properties
   // Ordered from outermost (lightest) to innermost (darkest)
   const bands = [
-    { name: 'outer', percentile: 0.95, color: '#d1d5db', opacity: 0.25 },  // p5-p95 range
-    { name: 'mid', percentile: 0.75, color: '#9ca3af', opacity: 0.4 },    // p25-p75 range (IQR)
-    { name: 'inner', percentile: 0.5, color: '#6b7280', opacity: 0.6 },   // p40-p60 range (core)
+    { name: 'outer', color: '#d1d5db', opacity: 0.25 },   // p5-p95 range
+    { name: 'mid', color: '#9ca3af', opacity: 0.4 },      // p25-p75 range (IQR)
+    { name: 'inner', color: '#6b7280', opacity: 0.6 },    // p40-p60 range (core)
   ];
 
   validLatencyData.forEach((point, i) => {
     const bounds = calculateBarBounds(point, i, validLatencyData, bucketInterval, xScale, yScale, barWidth);
-    // Range in latency values (max is higher latency, min is lower)
     const range = bounds.max - bounds.min;
     
     if (range <= 0) return;
 
-    // Estimate standard deviation from the range
-    // Using range/4 as a rough approximation (range ≈ 4σ for normal distribution)
-    const estimatedStdDev = range / 4;
-    const avg = bounds.avg;
+    if (point.percentiles) {
+      // Use real percentile data
+      const p = point.percentiles;
+      const bandRanges = [
+        { top: p.p95, bottom: bounds.min },  // Outer: min to p95
+        { top: p.p75, bottom: (bounds.min + p.p50) / 2 },  // Mid: ~p25 to p75
+        { top: (p.p75 + p.p50) / 2, bottom: p.p50 },  // Inner: around median
+      ];
 
-    // Draw bands from outermost to innermost
-    bands.forEach(band => {
-      // Calculate band boundaries using z-scores
-      // For percentile p, z = Φ^(-1)(p) where Φ is the standard normal CDF
-      // Simplified approximation for common percentiles
-      let zScore: number;
-      switch (band.percentile) {
-        case 0.95: zScore = 1.96; break;  // ±1.96σ covers 95%
-        case 0.75: zScore = 1.15; break;  // ±1.15σ covers 75%
-        case 0.5: zScore = 0.67; break;   // ±0.67σ covers 50%
-        default: zScore = 1;
-      }
+      bands.forEach((band, idx) => {
+        const bandRange = bandRanges[idx];
+        const topY = yScale(Math.min(bandRange.top, bounds.max));
+        const bottomY = yScale(Math.max(bandRange.bottom, bounds.min));
+        const bandHeight = bottomY - topY;
 
-      const bandTop = avg + zScore * estimatedStdDev;
-      const bandBottom = avg - zScore * estimatedStdDev;
-      
-      // Clamp to min/max
-      const clampedTop = Math.min(bandTop, bounds.max);
-      const clampedBottom = Math.max(bandBottom, bounds.min);
-      
-      const topY = yScale(clampedTop);
-      const bottomY = yScale(clampedBottom);
-      const bandHeight = bottomY - topY;
+        if (bandHeight > 0) {
+          smokeGroup
+            .append('rect')
+            .attr('x', bounds.startX)
+            .attr('y', topY)
+            .attr('width', bounds.width)
+            .attr('height', bandHeight)
+            .attr('fill', band.color)
+            .attr('opacity', band.opacity);
+        }
+      });
+    } else {
+      // Fall back to estimation using standard deviation
+      const estimatedStdDev = range / 4;
+      const avg = bounds.avg;
 
-      if (bandHeight > 0) {
-        smokeGroup
-          .append('rect')
-          .attr('x', bounds.startX)
-          .attr('y', topY)
-          .attr('width', bounds.width)
-          .attr('height', bandHeight)
-          .attr('fill', band.color)
-          .attr('opacity', band.opacity);
-      }
-    });
+      const zScores = [1.96, 1.15, 0.67];  // For 95%, 75%, 50%
+
+      bands.forEach((band, idx) => {
+        const zScore = zScores[idx];
+        const bandTop = avg + zScore * estimatedStdDev;
+        const bandBottom = avg - zScore * estimatedStdDev;
+        
+        const clampedTop = Math.min(bandTop, bounds.max);
+        const clampedBottom = Math.max(bandBottom, bounds.min);
+
+        const topY = yScale(clampedTop);
+        const bottomY = yScale(clampedBottom);
+        const bandHeight = bottomY - topY;
+
+        if (bandHeight > 0) {
+          smokeGroup
+            .append('rect')
+            .attr('x', bounds.startX)
+            .attr('y', topY)
+            .attr('width', bounds.width)
+            .attr('height', bandHeight)
+            .attr('fill', band.color)
+            .attr('opacity', band.opacity);
+        }
+      });
+    }
   });
 }
 
 /**
  * Style 3: Histogram Bands
  * Divides each bar into discrete vertical segments.
- * Each segment's opacity represents expected density at that latency level.
+ * Uses real percentile data to determine density when available.
  */
 function renderHistogramStyle(
   smokeGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
@@ -285,31 +320,45 @@ function renderHistogramStyle(
 
   validLatencyData.forEach((point, i) => {
     const bounds = calculateBarBounds(point, i, validLatencyData, bucketInterval, xScale, yScale, barWidth);
-    // Range in latency values (max is higher latency, min is lower)
     const range = bounds.max - bounds.min;
     
     if (range <= 0) return;
 
-    // Estimate standard deviation
-    const estimatedStdDev = range / 4;
-    const avg = bounds.avg;
-
     // Create bands from top (max latency) to bottom (min latency)
-    // In screen coordinates: max latency = top of chart, min latency = bottom
     for (let b = 0; b < numBands; b++) {
-      // Calculate latency value at center of this band
-      // Start from max (highest latency) and work down to min
       const bandTop = bounds.max - (range * b) / numBands;
       const bandBottom = bounds.max - (range * (b + 1)) / numBands;
       const bandCenter = (bandTop + bandBottom) / 2;
 
-      // Calculate probability density at this latency level
-      // Using Gaussian probability density function
-      const zScore = (bandCenter - avg) / estimatedStdDev;
-      const density = Math.exp(-0.5 * zScore * zScore);
+      let opacity: number;
 
-      // Map density to opacity (0.1 to 0.7 range)
-      const opacity = 0.1 + density * 0.6;
+      if (point.percentiles) {
+        // Use real percentile data to estimate density
+        // Count how many percentiles fall within this band
+        const p = point.percentiles;
+        const percentileValues = [bounds.min, p.p50, p.p75, p.p90, p.p95, p.p99, bounds.max];
+        
+        // Estimate density based on how "compressed" the percentiles are in this range
+        // More percentiles in a narrow range = higher density
+        const inBand = percentileValues.filter(v => v >= bandBottom && v <= bandTop).length;
+        
+        // Also consider distance from median
+        const distFromMedian = Math.abs(bandCenter - p.p50);
+        const normalizedDist = distFromMedian / (range / 2);
+        
+        // Combine both factors: more points in band + closer to median = higher opacity
+        const densityFromPoints = inBand / percentileValues.length;
+        const densityFromMedian = Math.exp(-normalizedDist * 2);
+        
+        opacity = 0.1 + (densityFromPoints * 0.3 + densityFromMedian * 0.4);
+      } else {
+        // Fall back to Gaussian estimation
+        const estimatedStdDev = range / 4;
+        const avg = bounds.avg;
+        const zScore = (bandCenter - avg) / estimatedStdDev;
+        const density = Math.exp(-0.5 * zScore * zScore);
+        opacity = 0.1 + density * 0.6;
+      }
 
       const topY = yScale(bandTop);
       const bottomY = yScale(bandBottom);

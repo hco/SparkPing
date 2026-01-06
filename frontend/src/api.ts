@@ -30,6 +30,9 @@ export async function fetchPingAggregated(query: PingAggregatedQuery = {}): Prom
   if (query.bucket) {
     params.append('bucket', query.bucket);
   }
+  if (query.include_percentiles !== undefined) {
+    params.append('include_percentiles', query.include_percentiles.toString());
+  }
 
   const response = await apiClient.get<PingAggregatedResponse>(`/api/ping/aggregated?${params.toString()}`);
   return response.data;

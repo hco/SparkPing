@@ -9,6 +9,7 @@ interface UseTargetPingDataOptions {
   to?: number;
   enabled?: boolean;
   refetchInterval?: number | false;
+  includePercentiles?: boolean;
 }
 
 export function useTargetPingData({
@@ -18,12 +19,14 @@ export function useTargetPingData({
   to,
   enabled = true,
   refetchInterval = false,
+  includePercentiles = true,
 }: UseTargetPingDataOptions) {
   const query: PingAggregatedQuery = {
     target,
     bucket,
     from,
     to,
+    include_percentiles: includePercentiles,
   };
 
   const result = useQuery({

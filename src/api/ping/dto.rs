@@ -137,6 +137,8 @@ pub struct PingAggregatedQuery {
     pub metric: Option<String>,
     /// Time bucket duration (e.g., "5m", "1h", "30s"). Default: "5m"
     pub bucket: String,
+    /// Include percentile data for histogram visualization (default: false)
+    pub include_percentiles: Option<bool>,
 }
 
 impl<'de> Deserialize<'de> for PingAggregatedQuery {
@@ -153,6 +155,7 @@ impl<'de> Deserialize<'de> for PingAggregatedQuery {
             to: Option<i64>,
             metric: Option<String>,
             bucket: Option<String>,
+            include_percentiles: Option<bool>,
         }
 
         impl Default for PingAggregatedQueryHelper {
@@ -163,6 +166,7 @@ impl<'de> Deserialize<'de> for PingAggregatedQuery {
                     to: None,
                     metric: None,
                     bucket: None,
+                    include_percentiles: None,
                 }
             }
         }
@@ -174,6 +178,7 @@ impl<'de> Deserialize<'de> for PingAggregatedQuery {
             to: helper.to,
             metric: helper.metric,
             bucket: helper.bucket.unwrap_or_else(default_bucket),
+            include_percentiles: helper.include_percentiles,
         })
     }
 }
@@ -259,6 +264,21 @@ pub struct TimeRange {
     pub latest: i64,
 }
 
+/// Percentile values for histogram data
+#[derive(Debug, Serialize, Clone)]
+pub struct Percentiles {
+    /// 50th percentile (median)
+    pub p50: f64,
+    /// 75th percentile
+    pub p75: f64,
+    /// 90th percentile
+    pub p90: f64,
+    /// 95th percentile
+    pub p95: f64,
+    /// 99th percentile
+    pub p99: f64,
+}
+
 /// Aggregated data point for a time bucket
 #[derive(Debug, Serialize, Clone)]
 pub struct BucketDataPoint {
@@ -278,6 +298,9 @@ pub struct BucketDataPoint {
     pub max: Option<f64>,
     /// Average value in this bucket
     pub avg: Option<f64>,
+    /// Percentile data for histogram visualization (only included if requested)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percentiles: Option<Percentiles>,
     /// Number of data points in this bucket
     pub count: usize,
     /// Number of successful pings in this bucket
