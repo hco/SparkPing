@@ -16,7 +16,6 @@ use crate::api::create_router;
 use crate::config::AppConfig;
 use crate::logging::init_logging;
 use crate::tasks::start_ping_task;
-use chrono::{DateTime, Utc};
 use clap::Parser;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
@@ -42,49 +41,6 @@ struct Args {
     /// Initialize a new configuration file interactively
     #[arg(long)]
     init: bool,
-}
-
-/// Get the time range of all data in tsink storage
-fn get_data_time_range(
-    storage: &dyn tsink::Storage,
-) -> Result<Option<(i64, i64)>, Box<dyn std::error::Error>> {
-    let mut earliest: Option<i64> = None;
-    let mut latest: Option<i64> = None;
-
-    // Query both metrics
-    for metric_name in &["ping_latency", "ping_failed"] {
-        let all_results = storage.select_all(metric_name, 0, i64::MAX)?;
-        for (_labels, points) in all_results {
-            for point in points {
-                if earliest.is_none() || point.timestamp < earliest.unwrap() {
-                    earliest = Some(point.timestamp);
-                }
-                if latest.is_none() || point.timestamp > latest.unwrap() {
-                    latest = Some(point.timestamp);
-                }
-            }
-        }
-    }
-
-    match (earliest, latest) {
-        (Some(e), Some(l)) => Ok(Some((e, l))),
-        _ => Ok(None),
-    }
-}
-
-/// Count total number of data points in tsink storage
-fn count_data_points(storage: &dyn tsink::Storage) -> Result<usize, Box<dyn std::error::Error>> {
-    let mut count = 0;
-
-    // Query both metrics
-    for metric_name in &["ping_latency", "ping_failed"] {
-        let all_results = storage.select_all(metric_name, 0, i64::MAX)?;
-        for (_labels, points) in all_results {
-            count += points.len();
-        }
-    }
-
-    Ok(count)
 }
 
 /// Reload config from file
@@ -478,25 +434,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("WAL directory not found: {:?}", wal_path);
     }
 
-    // Query and display data time range
-    match get_data_time_range(&**storage) {
-        Ok(Some((earliest, latest))) => {
-            let earliest_dt = DateTime::from_timestamp(earliest, 0).unwrap_or_else(|| Utc::now());
-            let latest_dt = DateTime::from_timestamp(latest, 0).unwrap_or_else(|| Utc::now());
-            info!(
-                "Data in tsink available from {} to {} ({} data points)",
-                earliest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
-                latest_dt.format("%Y-%m-%d %H:%M:%S UTC"),
-                count_data_points(&**storage).unwrap_or(0)
-            );
-        }
-        Ok(None) => {
-            info!("No data in tsink storage");
-        }
-        Err(e) => {
-            error!("Error querying data time range: {}", e);
-        }
-    }
     info!("Starting ping loop (each target runs independently in parallel)...");
     for target in &app_config.targets {
         info!(
