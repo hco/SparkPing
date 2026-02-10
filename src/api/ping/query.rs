@@ -187,6 +187,207 @@ pub(super) fn resolve_time_range_value(value: &TimeRangeValue) -> Result<i64, St
     }
 }
 
+/// Chunk duration for time-chunked queries (6 hours, matching tsink partition duration)
+const CHUNK_DURATION_SECS: i64 = 6 * 3600;
+
+/// Running accumulator for a single (target, bucket) pair.
+/// Avoids materializing intermediate PingDataPoint structs.
+struct BucketAccumulator {
+    target: String,
+    target_name: Option<String>,
+    bucket_start: i64,
+    bucket_duration: i64,
+    min: Option<f64>,
+    max: Option<f64>,
+    sum: f64,
+    successful_count: usize,
+    failed_count: usize,
+    latencies: Option<Vec<f64>>,
+}
+
+impl BucketAccumulator {
+    fn new(
+        target: String,
+        target_name: Option<String>,
+        bucket_start: i64,
+        bucket_duration: i64,
+        include_percentiles: bool,
+    ) -> Self {
+        Self {
+            target,
+            target_name,
+            bucket_start,
+            bucket_duration,
+            min: None,
+            max: None,
+            sum: 0.0,
+            successful_count: 0,
+            failed_count: 0,
+            latencies: if include_percentiles {
+                Some(Vec::new())
+            } else {
+                None
+            },
+        }
+    }
+
+    fn add_latency(&mut self, value: f64) {
+        self.successful_count += 1;
+        self.sum += value;
+        self.min = Some(match self.min {
+            Some(cur) => cur.min(value),
+            None => value,
+        });
+        self.max = Some(match self.max {
+            Some(cur) => cur.max(value),
+            None => value,
+        });
+        if let Some(ref mut lat) = self.latencies {
+            lat.push(value);
+        }
+    }
+
+    fn add_failure(&mut self) {
+        self.failed_count += 1;
+    }
+
+    fn into_bucket_data_point(mut self) -> BucketDataPoint {
+        let avg = if self.successful_count > 0 {
+            Some(self.sum / self.successful_count as f64)
+        } else {
+            None
+        };
+
+        let percentiles = self.latencies.as_mut().and_then(|lat| {
+            if lat.is_empty() {
+                return None;
+            }
+            lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            calculate_percentiles(lat)
+        });
+
+        BucketDataPoint {
+            timestamp: DateTime::from_timestamp(self.bucket_start, 0)
+                .unwrap_or_else(|| Utc::now())
+                .to_rfc3339(),
+            timestamp_unix: self.bucket_start,
+            timestamp_end_unix: self.bucket_start + self.bucket_duration,
+            target: self.target,
+            target_name: self.target_name,
+            min: self.min,
+            max: self.max,
+            avg,
+            percentiles,
+            count: self.successful_count + self.failed_count,
+            successful_count: self.successful_count,
+            failed_count: self.failed_count,
+        }
+    }
+}
+
+/// Time-chunked aggregation that processes data in small slices to avoid OOM.
+///
+/// Instead of loading all raw data into memory and then aggregating, this:
+/// 1. Divides [from, to] into 6-hour chunks
+/// 2. For each chunk, loads only that slice via select_all
+/// 3. Directly aggregates raw DataPoints into per-bucket accumulators
+/// 4. Discards raw data between chunks
+pub(super) fn query_ping_aggregated_chunked(
+    storage: &dyn Storage,
+    target_filter: Option<&str>,
+    from: i64,
+    to: i64,
+    bucket_duration_seconds: i64,
+    include_percentiles: bool,
+) -> Result<(Vec<BucketDataPoint>, Option<super::dto::TimeRange>), Box<dyn std::error::Error>> {
+    // Key: (target, bucket_start)
+    let mut accumulators: HashMap<(String, i64), BucketAccumulator> = HashMap::new();
+    let mut earliest_ts: Option<i64> = None;
+    let mut latest_ts: Option<i64> = None;
+
+    let metrics = ["ping_latency", "ping_failed"];
+
+    let mut chunk_start = from;
+    while chunk_start < to {
+        let chunk_end = (chunk_start + CHUNK_DURATION_SECS).min(to);
+
+        for metric_name in &metrics {
+            let is_latency = *metric_name == "ping_latency";
+
+            let results = storage.select_all(metric_name, chunk_start, chunk_end)?;
+
+            for (labels, points) in results {
+                // Extract target from labels
+                let target = match labels.iter().find(|l| l.name == "target") {
+                    Some(l) => &l.value,
+                    None => continue,
+                };
+
+                // Apply target filter
+                if let Some(filter) = target_filter {
+                    if target != filter {
+                        continue;
+                    }
+                }
+
+                let target_name = labels
+                    .iter()
+                    .find(|l| l.name == "target_name")
+                    .map(|l| l.value.clone());
+
+                for point in &points {
+                    // Track time range
+                    earliest_ts = Some(earliest_ts.map_or(point.timestamp, |e: i64| e.min(point.timestamp)));
+                    latest_ts = Some(latest_ts.map_or(point.timestamp, |l: i64| l.max(point.timestamp)));
+
+                    let bucket_start_ts =
+                        (point.timestamp / bucket_duration_seconds) * bucket_duration_seconds;
+                    let key = (target.clone(), bucket_start_ts);
+
+                    let acc = accumulators.entry(key).or_insert_with(|| {
+                        BucketAccumulator::new(
+                            target.clone(),
+                            target_name.clone(),
+                            bucket_start_ts,
+                            bucket_duration_seconds,
+                            include_percentiles,
+                        )
+                    });
+
+                    if is_latency {
+                        acc.add_latency(point.value);
+                    } else {
+                        acc.add_failure();
+                    }
+                }
+            }
+        }
+
+        chunk_start = chunk_end;
+    }
+
+    let data_time_range = match (earliest_ts, latest_ts) {
+        (Some(e), Some(l)) => Some(super::dto::TimeRange {
+            earliest: e,
+            latest: l,
+        }),
+        _ => None,
+    };
+
+    let mut bucket_points: Vec<BucketDataPoint> = accumulators
+        .into_values()
+        .map(|acc| acc.into_bucket_data_point())
+        .collect();
+
+    bucket_points.sort_by(|a, b| {
+        a.target
+            .cmp(&b.target)
+            .then_with(|| a.timestamp_unix.cmp(&b.timestamp_unix))
+    });
+
+    Ok((bucket_points, data_time_range))
+}
+
 /// Calculate percentiles from a sorted vector of values
 fn calculate_percentiles(sorted_values: &[f64]) -> Option<Percentiles> {
     if sorted_values.is_empty() {
@@ -208,6 +409,7 @@ fn calculate_percentiles(sorted_values: &[f64]) -> Option<Percentiles> {
 }
 
 /// Aggregate ping data points into time buckets, grouped by target
+#[allow(dead_code)]
 pub(super) fn aggregate_into_buckets(
     points: &[PingDataPoint],
     bucket_duration_seconds: i64,

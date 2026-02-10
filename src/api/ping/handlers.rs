@@ -3,8 +3,9 @@ use super::dto::{
     TimeRange,
 };
 use super::query::{
-    aggregate_into_buckets, calculate_statistics, calculate_storage_stats, parse_bucket_duration,
-    query_ping_data_with_labels, resolve_time_range_value, ResolvedPingDataQuery,
+    calculate_statistics, calculate_storage_stats, parse_bucket_duration,
+    query_ping_aggregated_chunked, query_ping_data_with_labels, resolve_time_range_value,
+    ResolvedPingDataQuery,
 };
 use crate::api::AppState;
 use axum::{
@@ -108,35 +109,21 @@ pub(crate) async fn get_ping_aggregated(
     };
     let resolved_to = query.to.unwrap_or(i64::MAX);
 
-    // Store resolved timestamp for response metadata
     let resolved_from_timestamp = Some(resolved_from);
+    let include_percentiles = query.include_percentiles.unwrap_or(false);
 
-    // Create resolved query for internal use
-    let resolved_query = ResolvedPingDataQuery {
-        target: query.target.clone(),
-        from: resolved_from,
-        to: resolved_to,
-        metric: query.metric.clone(),
-        limit: None, // No limit for aggregation
-    };
-
-    let points = query_ping_data_with_labels(storage, &resolved_query).map_err(|e| {
-        error!("Error querying ping data: {}", e);
+    let (bucket_data, data_time_range) = query_ping_aggregated_chunked(
+        storage,
+        query.target.as_deref(),
+        resolved_from,
+        resolved_to,
+        bucket_duration_seconds,
+        include_percentiles,
+    )
+    .map_err(|e| {
+        error!("Error querying aggregated ping data: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     })?;
-
-    // Aggregate into buckets
-    let include_percentiles = query.include_percentiles.unwrap_or(false);
-    let bucket_data = aggregate_into_buckets(&points, bucket_duration_seconds, include_percentiles);
-
-    let data_time_range = if !points.is_empty() {
-        Some(TimeRange {
-            earliest: points.first().unwrap().timestamp_unix,
-            latest: points.last().unwrap().timestamp_unix,
-        })
-    } else {
-        None
-    };
 
     let total_count = bucket_data.len();
 
