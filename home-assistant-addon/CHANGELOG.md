@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.1.58] - 2026-02-10
+
+### 🐛 Bug Fixes
+- Remove startup full-database scan that OOM-kills on low-memory devices
+- Chunked aggregation to prevent OOM on large time range queries
+
+
 ## [0.1.57] - 2026-01-06
 
 ### ✨ Features
@@ -31,16 +38,6 @@ to use this config for the home-assistant-addon changelog.
 ### 📝 Other
 - Reduce settings target list size
 - Add target sorting to start page
-
-
-## [0.1.52] - 2026-01-04
-
-### ✨ Features
-- Add GitHub release with changelog to addon-builder pipeline
-
-### 📝 Other
-- Improve aqara device detection
-- Device identification is now being handled by the backend
 
 
 

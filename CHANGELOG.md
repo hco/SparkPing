@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.58] - 2026-02-10
+
+### 🐛 Bug Fixes
+
+- Remove startup full-database scan that OOM-kills on low-memory devices
+- Chunked aggregation to prevent OOM on large time range queries
 ## [0.1.57] - 2026-01-06
 
 ### ✨ Features
