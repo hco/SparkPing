@@ -27,6 +27,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use tokio::signal;
 use tracing::{debug, error, info, warn};
+use tsink::wal::WalReader;
 use tsink::{StorageBuilder, TimestampPrecision};
 use uuid::Uuid;
 
@@ -41,6 +42,144 @@ struct Args {
     /// Initialize a new configuration file interactively
     #[arg(long)]
     init: bool,
+}
+
+/// Check if WAL needs chunked recovery to avoid OOM on startup.
+///
+/// If the WAL directory has more segments than the threshold, moves it to
+/// `wal-recovery/` and creates a fresh empty `wal/` so `StorageBuilder::build()`
+/// starts clean without loading everything into memory at once.
+///
+/// Returns `true` if chunked recovery is needed after build.
+/// Idempotent: if `wal-recovery/` already exists (interrupted previous run), resumes.
+fn prepare_wal_for_safe_recovery(data_path: &str) -> std::io::Result<bool> {
+    let base = std::path::Path::new(data_path);
+    let wal_dir = base.join("wal");
+    let recovery_dir = base.join("wal-recovery");
+
+    // Interrupted previous recovery — resume it
+    if recovery_dir.exists() {
+        info!("Found interrupted WAL recovery directory, will resume chunked recovery");
+        if !wal_dir.exists() {
+            std::fs::create_dir_all(&wal_dir)?;
+        }
+        return Ok(true);
+    }
+
+    if !wal_dir.exists() {
+        return Ok(false);
+    }
+
+    let segment_count = std::fs::read_dir(&wal_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "wal"))
+        .count();
+
+    const WAL_SEGMENT_THRESHOLD: usize = 50;
+
+    if segment_count > WAL_SEGMENT_THRESHOLD {
+        info!(
+            "WAL has {} segments (threshold: {}), using chunked recovery to avoid OOM",
+            segment_count, WAL_SEGMENT_THRESHOLD
+        );
+        std::fs::rename(&wal_dir, &recovery_dir)?;
+        std::fs::create_dir_all(&wal_dir)?;
+        Ok(true)
+    } else {
+        info!(
+            "WAL has {} segments, normal recovery is safe",
+            segment_count
+        );
+        Ok(false)
+    }
+}
+
+/// Recover WAL segments one at a time to keep memory bounded.
+///
+/// Each segment is copied into a temp directory, decoded via `WalReader`,
+/// and inserted into storage (which triggers partition rotation now that
+/// timestamp precision is correct). Processed segments are deleted as we go,
+/// so an interrupted recovery can be resumed.
+fn recover_wal_chunked(
+    storage: &dyn tsink::Storage,
+    data_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base = std::path::Path::new(data_path);
+    let recovery_dir = base.join("wal-recovery");
+
+    if !recovery_dir.exists() {
+        return Ok(());
+    }
+
+    let mut segments: Vec<_> = std::fs::read_dir(&recovery_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "wal"))
+        .collect();
+
+    // Sort by filename (segment index, e.g. 000000.wal, 000001.wal)
+    segments.sort_by_key(|e| e.file_name());
+
+    let total = segments.len();
+    info!(
+        "Starting chunked WAL recovery: {} segments to process",
+        total
+    );
+
+    let tmp_dir = base.join("wal-recovery-tmp");
+
+    for (i, entry) in segments.iter().enumerate() {
+        let segment_path = entry.path();
+
+        // Create temp dir with just this one segment
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        std::fs::create_dir_all(&tmp_dir)?;
+
+        let dest = tmp_dir.join(entry.file_name());
+        std::fs::copy(&segment_path, &dest)?;
+
+        // Decode and insert
+        match WalReader::new(&tmp_dir) {
+            Ok(reader) => match reader.read_all() {
+                Ok(rows) => {
+                    if !rows.is_empty() {
+                        storage.insert_rows(&rows)?;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to read WAL segment {}: {}, skipping",
+                        segment_path.display(),
+                        e
+                    );
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "Failed to open WAL reader for {}: {}, skipping",
+                    segment_path.display(),
+                    e
+                );
+            }
+        }
+
+        // Delete processed segment so recovery is resumable
+        std::fs::remove_file(&segment_path)?;
+
+        if (i + 1) % 100 == 0 || i + 1 == total {
+            info!("WAL recovery progress: {}/{} segments", i + 1, total);
+        }
+    }
+
+    // Clean up temp and recovery directories
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir)?;
+    }
+    std::fs::remove_dir_all(&recovery_dir)?;
+
+    info!("Chunked WAL recovery complete");
+    Ok(())
 }
 
 /// Reload config from file
@@ -386,52 +525,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Check if WAL needs chunked recovery before StorageBuilder loads it all at once
+    let needs_chunked_recovery =
+        prepare_wal_for_safe_recovery(&app_config.database.path).map_err(|e| {
+            eprintln!("ERROR: Failed to prepare WAL for recovery: {}", e);
+            e
+        })?;
+
     // Initialize tsink storage with configured path
-    // WAL is enabled by default, but let's make sure
-    let storage = Arc::new(
-        StorageBuilder::new()
-            .with_data_path(&app_config.database.path)
-            .with_wal_enabled(true)
-            .with_retention(Duration::from_secs(365 * 24 * 3600 * 20)) // 20 years
-            .with_timestamp_precision(TimestampPrecision::Milliseconds)
-            .with_max_writers(16)
-            .with_write_timeout(Duration::from_secs(60))
-            .with_partition_duration(Duration::from_secs(6 * 3600)) // 6 hours
-            .with_wal_buffer_size(16384) // 16KB
-            .build()
-            .map_err(|e| {
-                eprintln!(
-                    "ERROR: Failed to initialize storage at '{}': {}",
-                    app_config.database.path, e
-                );
-                e
-            })?,
-    );
+    // Timestamp precision must be Seconds to match what storage.rs writes,
+    // otherwise partition_duration math is wrong and partitions never rotate.
+    let storage: Arc<dyn tsink::Storage> = StorageBuilder::new()
+        .with_data_path(&app_config.database.path)
+        .with_wal_enabled(true)
+        .with_retention(Duration::from_secs(365 * 24 * 3600 * 20)) // 20 years
+        .with_timestamp_precision(TimestampPrecision::Seconds)
+        .with_max_writers(16)
+        .with_write_timeout(Duration::from_secs(60))
+        .with_partition_duration(Duration::from_secs(6 * 3600)) // 6 hours
+        .with_wal_buffer_size(16384) // 16KB
+        .build()
+        .map_err(|e| {
+            eprintln!(
+                "ERROR: Failed to initialize storage at '{}': {}",
+                app_config.database.path, e
+            );
+            e
+        })?;
 
     info!(
         "tsink database initialized at: {}",
         app_config.database.path
     );
 
-    // Check if WAL directory exists and has files
-    let wal_path = std::path::Path::new(&app_config.database.path).join("wal");
-    if wal_path.exists() {
-        let wal_files: Vec<_> = std::fs::read_dir(&wal_path)
-            .unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
-            .filter_map(|e| e.ok())
-            .collect();
-        info!("WAL directory found with {} files", wal_files.len());
-        for entry in wal_files.iter().take(5) {
-            if let Ok(metadata) = entry.metadata() {
-                info!(
-                    "  WAL file: {} ({} bytes)",
-                    entry.file_name().to_string_lossy(),
-                    metadata.len()
-                );
-            }
-        }
-    } else {
-        info!("WAL directory not found: {:?}", wal_path);
+    // Recover WAL segments one at a time if we moved them aside pre-build
+    if needs_chunked_recovery {
+        recover_wal_chunked(storage.as_ref(), &app_config.database.path).map_err(|e| {
+            eprintln!("ERROR: Chunked WAL recovery failed: {}", e);
+            e
+        })?;
     }
 
     info!("Starting ping loop (each target runs independently in parallel)...");
