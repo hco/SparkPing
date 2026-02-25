@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.59] - 2026-02-25
+
+### 🐛 Bug Fixes
+
+- Prevent OOM on startup from unbounded WAL growth
 ## [0.1.58] - 2026-02-10
 
 ### 🐛 Bug Fixes

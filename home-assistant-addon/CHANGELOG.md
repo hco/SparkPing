@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.59] - 2026-02-25
+
+### 🐛 Bug Fixes
+- Prevent OOM on startup from unbounded WAL growth
+
+
 ## [0.1.58] - 2026-02-10
 
 ### 🐛 Bug Fixes
@@ -31,13 +37,6 @@
 Add cliff-ha.toml config that uses Tera's slice filter in the header
 template to render only the 5 most recent releases. Update release-it
 to use this config for the home-assistant-addon changelog.
-
-
-## [0.1.54] - 2026-01-04
-
-### 📝 Other
-- Reduce settings target list size
-- Add target sorting to start page
 
 
 
