@@ -32,7 +32,7 @@ pub(crate) async fn get_ping_data(
     } else {
         0
     };
-    let resolved_to = query.to.unwrap_or(i64::MAX);
+    let resolved_to = query.to.unwrap_or_else(|| chrono::Utc::now().timestamp());
 
     // Store resolved timestamp for response metadata
     let resolved_from_timestamp = Some(resolved_from);
@@ -113,7 +113,7 @@ pub(crate) async fn get_ping_aggregated(
     } else {
         0
     };
-    let resolved_to = query.to.unwrap_or(i64::MAX);
+    let resolved_to = query.to.unwrap_or_else(|| chrono::Utc::now().timestamp());
 
     let resolved_from_timestamp = Some(resolved_from);
     let include_percentiles = query.include_percentiles.unwrap_or(false);
