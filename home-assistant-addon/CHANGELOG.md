@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.1.66] - 2026-03-09
+
+### 🐛 Bug Fixes
+- Increase ping timeout from 2s to 5s
+- Move blocking storage queries to spawn_blocking
+
+
 ## [0.1.65] - 2026-03-09
 
 ### 🐛 Bug Fixes
@@ -23,12 +30,6 @@
 
 ### 🐛 Bug Fixes
 - Switch HA addon from raw to dgram ICMP sockets
-
-
-## [0.1.61] - 2026-03-09
-
-### 🐛 Bug Fixes
-- Resolve EAGAIN errors on concurrent ping socket creation
 
 
 
