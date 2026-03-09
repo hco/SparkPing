@@ -27,8 +27,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use tokio::signal;
 use tracing::{debug, error, info, warn};
-use tsink::wal::WalReader;
-use tsink::{StorageBuilder, TimestampPrecision};
+use tsink::{DataPoint, Label, Row, StorageBuilder, TimestampPrecision};
 use uuid::Uuid;
 
 /// SparkPing - A Rust application with configurable settings
@@ -44,13 +43,81 @@ struct Args {
     init: bool,
 }
 
-/// Check if WAL needs chunked recovery to avoid OOM on startup.
+/// Log current RSS memory usage (Linux only, no-op elsewhere).
+fn log_memory_usage(label: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+            for line in status.lines() {
+                if line.starts_with("VmRSS:") {
+                    info!("[mem] {}: {}", label, line.trim());
+                    return;
+                }
+            }
+        }
+        info!("[mem] {}: unable to read /proc/self/status", label);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = label;
+    }
+}
+
+/// Log the contents of the data directory for diagnostics.
+fn log_data_directory(data_path: &str) {
+    let base = std::path::Path::new(data_path);
+    if !base.exists() {
+        info!("[diag] Data directory does not exist yet: {}", data_path);
+        return;
+    }
+
+    // List top-level entries
+    match std::fs::read_dir(base) {
+        Ok(entries) => {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                let name = entry.file_name();
+                if path.is_dir() {
+                    // Count files and total size in subdirectory
+                    let mut count = 0u64;
+                    let mut total_bytes = 0u64;
+                    if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                        for sub in sub_entries.filter_map(|e| e.ok()) {
+                            if let Ok(meta) = sub.metadata() {
+                                count += 1;
+                                total_bytes += meta.len();
+                            }
+                        }
+                    }
+                    info!(
+                        "[diag]   dir: {:?} — {} files, {:.1} MB",
+                        name,
+                        count,
+                        total_bytes as f64 / (1024.0 * 1024.0)
+                    );
+                } else if let Ok(meta) = entry.metadata() {
+                    info!(
+                        "[diag]   file: {:?} — {:.1} KB",
+                        name,
+                        meta.len() as f64 / 1024.0
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            warn!("[diag] Failed to read data directory: {}", e);
+        }
+    }
+}
+
+/// Check if WAL needs streaming recovery to avoid OOM on startup.
 ///
-/// If the WAL directory has more segments than the threshold, moves it to
-/// `wal-recovery/` and creates a fresh empty `wal/` so `StorageBuilder::build()`
-/// starts clean without loading everything into memory at once.
+/// If the total WAL size exceeds the threshold, moves it to `wal-recovery/`
+/// and creates a fresh empty `wal/` so `StorageBuilder::build()` starts clean.
+/// A single giant segment (from the partition rotation bug) can be hundreds of
+/// MB, so we check total size rather than segment count.
 ///
-/// Returns `true` if chunked recovery is needed after build.
+/// Returns `true` if streaming recovery is needed after build.
 /// Idempotent: if `wal-recovery/` already exists (interrupted previous run), resumes.
 fn prepare_wal_for_safe_recovery(data_path: &str) -> std::io::Result<bool> {
     let base = std::path::Path::new(data_path);
@@ -59,7 +126,7 @@ fn prepare_wal_for_safe_recovery(data_path: &str) -> std::io::Result<bool> {
 
     // Interrupted previous recovery — resume it
     if recovery_dir.exists() {
-        info!("Found interrupted WAL recovery directory, will resume chunked recovery");
+        info!("Found interrupted WAL recovery directory, will resume streaming recovery");
         if !wal_dir.exists() {
             std::fs::create_dir_all(&wal_dir)?;
         }
@@ -70,40 +137,117 @@ fn prepare_wal_for_safe_recovery(data_path: &str) -> std::io::Result<bool> {
         return Ok(false);
     }
 
-    let segment_count = std::fs::read_dir(&wal_dir)?
+    let total_wal_bytes: u64 = std::fs::read_dir(&wal_dir)?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().map_or(false, |ext| ext == "wal"))
-        .count();
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
 
-    const WAL_SEGMENT_THRESHOLD: usize = 50;
+    // 5 MB threshold — well under Pi's ~1 GB RAM even after Row object overhead
+    const WAL_SIZE_THRESHOLD: u64 = 5 * 1024 * 1024;
 
-    if segment_count > WAL_SEGMENT_THRESHOLD {
+    if total_wal_bytes > WAL_SIZE_THRESHOLD {
         info!(
-            "WAL has {} segments (threshold: {}), using chunked recovery to avoid OOM",
-            segment_count, WAL_SEGMENT_THRESHOLD
+            "WAL is {:.1} MB (threshold: {:.0} MB), using streaming recovery to avoid OOM",
+            total_wal_bytes as f64 / (1024.0 * 1024.0),
+            WAL_SIZE_THRESHOLD as f64 / (1024.0 * 1024.0),
         );
         std::fs::rename(&wal_dir, &recovery_dir)?;
         std::fs::create_dir_all(&wal_dir)?;
         Ok(true)
     } else {
         info!(
-            "WAL has {} segments, normal recovery is safe",
-            segment_count
+            "WAL is {:.1} KB, normal recovery is safe",
+            total_wal_bytes as f64 / 1024.0
         );
         Ok(false)
     }
 }
 
-/// Recover WAL segments one at a time to keep memory bounded.
+/// Decode an unsigned varint from a reader (standard protobuf encoding).
+fn decode_uvarint(reader: &mut impl std::io::Read) -> std::io::Result<u64> {
+    let mut result = 0u64;
+    let mut shift = 0u32;
+    loop {
+        let mut byte = [0u8; 1];
+        reader.read_exact(&mut byte)?;
+        result |= ((byte[0] & 0x7F) as u64) << shift;
+        if byte[0] & 0x80 == 0 {
+            return Ok(result);
+        }
+        shift += 7;
+        if shift >= 64 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "varint overflow",
+            ));
+        }
+    }
+}
+
+/// Decode a signed varint (zigzag encoding) from a reader.
+fn decode_varint(reader: &mut impl std::io::Read) -> std::io::Result<i64> {
+    let uvalue = decode_uvarint(reader)?;
+    Ok(((uvalue >> 1) as i64) ^ -((uvalue & 1) as i64))
+}
+
+/// Unmarshal a metric name and labels from the WAL binary format.
+/// Format: [metric_len: u16 LE][metric bytes][label_name_len: u16 LE][name bytes][label_value_len: u16 LE][value bytes]...
+/// If the buffer has no u16 length prefix (plain metric name without labels), returns it as-is.
+fn unmarshal_metric_name(data: &[u8]) -> (String, Vec<Label>) {
+    if data.len() < 2 {
+        return (String::from_utf8_lossy(data).into_owned(), Vec::new());
+    }
+
+    let metric_len = u16::from_le_bytes([data[0], data[1]]) as usize;
+    let mut pos = 2;
+
+    if pos + metric_len > data.len() {
+        return (String::from_utf8_lossy(data).into_owned(), Vec::new());
+    }
+
+    let metric = String::from_utf8_lossy(&data[pos..pos + metric_len]).into_owned();
+    pos += metric_len;
+
+    let mut labels = Vec::new();
+    while pos + 2 <= data.len() {
+        let name_len = u16::from_le_bytes([data[pos], data[pos + 1]]) as usize;
+        pos += 2;
+        if pos + name_len > data.len() {
+            break;
+        }
+        let name = String::from_utf8_lossy(&data[pos..pos + name_len]).into_owned();
+        pos += name_len;
+
+        if pos + 2 > data.len() {
+            break;
+        }
+        let value_len = u16::from_le_bytes([data[pos], data[pos + 1]]) as usize;
+        pos += 2;
+        if pos + value_len > data.len() {
+            break;
+        }
+        let value = String::from_utf8_lossy(&data[pos..pos + value_len]).into_owned();
+        pos += value_len;
+
+        labels.push(Label::new(name, value));
+    }
+
+    (metric, labels)
+}
+
+/// Stream-recover WAL segments without loading everything into memory.
 ///
-/// Each segment is copied into a temp directory, decoded via `WalReader`,
-/// and inserted into storage (which triggers partition rotation now that
-/// timestamp precision is correct). Processed segments are deleted as we go,
-/// so an interrupted recovery can be resumed.
-fn recover_wal_chunked(
+/// Reads the WAL binary format row by row, inserting in batches of 1000.
+/// This handles the case where a single WAL segment is hundreds of MB
+/// (from the partition rotation bug that caused unbounded WAL growth).
+fn recover_wal_streaming(
     storage: &dyn tsink::Storage,
     data_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufReader, Read};
+
     let base = std::path::Path::new(data_path);
     let recovery_dir = base.join("wal-recovery");
 
@@ -115,70 +259,118 @@ fn recover_wal_chunked(
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().map_or(false, |ext| ext == "wal"))
         .collect();
-
-    // Sort by filename (segment index, e.g. 000000.wal, 000001.wal)
     segments.sort_by_key(|e| e.file_name());
 
-    let total = segments.len();
+    let total_segments = segments.len();
+    let total_bytes: u64 = segments
+        .iter()
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
     info!(
-        "Starting chunked WAL recovery: {} segments to process",
-        total
+        "Starting streaming WAL recovery: {} segments, {:.1} MB",
+        total_segments,
+        total_bytes as f64 / (1024.0 * 1024.0)
     );
 
-    let tmp_dir = base.join("wal-recovery-tmp");
+    const BATCH_SIZE: usize = 1000;
+    let mut total_rows = 0u64;
 
-    for (i, entry) in segments.iter().enumerate() {
+    for (seg_idx, entry) in segments.iter().enumerate() {
         let segment_path = entry.path();
+        let file = std::fs::File::open(&segment_path)?;
+        let file_len = file.metadata()?.len();
 
-        // Create temp dir with just this one segment
-        if tmp_dir.exists() {
-            std::fs::remove_dir_all(&tmp_dir)?;
+        if file_len < 8 {
+            warn!(
+                "Skipping WAL segment {:?}: too small ({} bytes)",
+                segment_path, file_len
+            );
+            continue;
         }
-        std::fs::create_dir_all(&tmp_dir)?;
 
-        let dest = tmp_dir.join(entry.file_name());
-        std::fs::copy(&segment_path, &dest)?;
+        let mut reader = BufReader::new(file);
+        let mut batch = Vec::with_capacity(BATCH_SIZE);
 
-        // Decode and insert
-        match WalReader::new(&tmp_dir) {
-            Ok(reader) => match reader.read_all() {
-                Ok(rows) => {
-                    if !rows.is_empty() {
-                        storage.insert_rows(&rows)?;
-                    }
+        loop {
+            // Read operation type (1 byte)
+            let mut op_buf = [0u8; 1];
+            match reader.read_exact(&mut op_buf) {
+                Ok(_) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(_) => break,
+            }
+
+            // Only Insert operation (0 or 1 in tsink)
+            if op_buf[0] > 1 {
+                continue;
+            }
+
+            // Read metric name length (uvarint)
+            let metric_len = match decode_uvarint(&mut reader) {
+                Ok(len) => len as usize,
+                Err(_) => break,
+            };
+
+            // Read marshaled metric name + labels
+            let mut metric_buf = vec![0u8; metric_len];
+            if reader.read_exact(&mut metric_buf).is_err() {
+                break;
+            }
+            let (metric, labels) = unmarshal_metric_name(&metric_buf);
+
+            // Read timestamp (signed varint, zigzag)
+            let timestamp = match decode_varint(&mut reader) {
+                Ok(ts) => ts,
+                Err(_) => break,
+            };
+
+            // Read value (f64 bits as uvarint)
+            let value_bits = match decode_uvarint(&mut reader) {
+                Ok(bits) => bits,
+                Err(_) => break,
+            };
+            let value = f64::from_bits(value_bits);
+
+            batch.push(Row::with_labels(
+                metric,
+                labels,
+                DataPoint::new(timestamp, value),
+            ));
+
+            if batch.len() >= BATCH_SIZE {
+                total_rows += batch.len() as u64;
+                storage.insert_rows(&batch)?;
+                batch.clear();
+
+                if total_rows % 50_000 == 0 {
+                    info!("WAL streaming recovery: {} rows processed", total_rows);
                 }
-                Err(e) => {
-                    warn!(
-                        "Failed to read WAL segment {}: {}, skipping",
-                        segment_path.display(),
-                        e
-                    );
-                }
-            },
-            Err(e) => {
-                warn!(
-                    "Failed to open WAL reader for {}: {}, skipping",
-                    segment_path.display(),
-                    e
-                );
             }
         }
 
-        // Delete processed segment so recovery is resumable
+        // Flush remaining rows from this segment
+        if !batch.is_empty() {
+            total_rows += batch.len() as u64;
+            storage.insert_rows(&batch)?;
+        }
+
+        // Delete processed segment so recovery is resumable if interrupted
         std::fs::remove_file(&segment_path)?;
 
-        if (i + 1) % 100 == 0 || i + 1 == total {
-            info!("WAL recovery progress: {}/{} segments", i + 1, total);
-        }
+        info!(
+            "WAL recovery: segment {}/{} done ({} total rows so far)",
+            seg_idx + 1,
+            total_segments,
+            total_rows
+        );
     }
 
-    // Clean up temp and recovery directories
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)?;
-    }
     std::fs::remove_dir_all(&recovery_dir)?;
-
-    info!("Chunked WAL recovery complete");
+    info!(
+        "Streaming WAL recovery complete: {} rows recovered",
+        total_rows
+    );
     Ok(())
 }
 
@@ -525,16 +717,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Check if WAL needs chunked recovery before StorageBuilder loads it all at once
+    // Diagnostic: log data directory contents and memory before storage init
+    log_data_directory(&app_config.database.path);
+    log_memory_usage("before WAL preparation");
+
+    // Check if WAL needs streaming recovery before StorageBuilder loads it all at once
     let needs_chunked_recovery =
         prepare_wal_for_safe_recovery(&app_config.database.path).map_err(|e| {
             eprintln!("ERROR: Failed to prepare WAL for recovery: {}", e);
             e
         })?;
 
+    log_memory_usage("after WAL preparation");
+
     // Initialize tsink storage with configured path
     // Timestamp precision must be Seconds to match what storage.rs writes,
     // otherwise partition_duration math is wrong and partitions never rotate.
+    info!("Initializing tsink storage (this loads existing partitions + remaining WAL)...");
     let storage: Arc<dyn tsink::Storage> = StorageBuilder::new()
         .with_data_path(&app_config.database.path)
         .with_wal_enabled(true)
@@ -557,15 +756,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "tsink database initialized at: {}",
         app_config.database.path
     );
+    log_memory_usage("after StorageBuilder::build()");
 
-    // Recover WAL segments one at a time if we moved them aside pre-build
+    // Stream-recover WAL rows in batches if we moved the WAL aside pre-build
     if needs_chunked_recovery {
-        recover_wal_chunked(storage.as_ref(), &app_config.database.path).map_err(|e| {
-            eprintln!("ERROR: Chunked WAL recovery failed: {}", e);
+        recover_wal_streaming(storage.as_ref(), &app_config.database.path).map_err(|e| {
+            eprintln!("ERROR: WAL streaming recovery failed: {}", e);
             e
         })?;
     }
 
+    log_memory_usage("after WAL recovery");
     info!("Starting ping loop (each target runs independently in parallel)...");
     for target in &app_config.targets {
         info!(
