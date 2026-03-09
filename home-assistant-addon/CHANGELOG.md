@@ -1,35 +1,34 @@
 # Changelog
 
 
-## [0.1.60] - 2026-03-09
+## [0.1.65] - 2026-03-09
 
 ### 🐛 Bug Fixes
-- Streaming WAL recovery to handle single giant segment
+- Don't check ident on DGRAM ICMP replies
 
 
-## [0.1.59] - 2026-02-25
-
-### 🐛 Bug Fixes
-- Prevent OOM on startup from unbounded WAL growth
-
-
-## [0.1.58] - 2026-02-10
+## [0.1.64] - 2026-03-09
 
 ### 🐛 Bug Fixes
-- Remove startup full-database scan that OOM-kills on low-memory devices
-- Chunked aggregation to prevent OOM on large time range queries
+- Add diagnostic logging to dgram_native ping implementation
 
 
-## [0.1.57] - 2026-01-06
+## [0.1.63] - 2026-03-09
 
 ### ✨ Features
-- Add real histogram data (percentiles) to smoke charts
+- Add dgram_native ping implementation, expose socket type in HA config
 
 
-## [0.1.56] - 2026-01-05
+## [0.1.62] - 2026-03-09
 
-### 📝 Other
-- Add search to homepage/settings
+### 🐛 Bug Fixes
+- Switch HA addon from raw to dgram ICMP sockets
+
+
+## [0.1.61] - 2026-03-09
+
+### 🐛 Bug Fixes
+- Resolve EAGAIN errors on concurrent ping socket creation
 
 
 
