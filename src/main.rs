@@ -4,6 +4,7 @@ mod config_file;
 mod config_wizard;
 mod device_identification;
 mod discovery;
+mod icmp;
 mod ip_scan;
 mod logging;
 mod ping;

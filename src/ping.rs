@@ -1,11 +1,9 @@
 use crate::config::SocketType;
+use crate::icmp;
 use chrono::{DateTime, Utc};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
-
-const MAX_RETRIES: u32 = 3;
-const RETRY_DELAY_MS: u64 = 100;
 
 pub struct PingResult {
     pub timestamp: DateTime<Utc>,
@@ -43,56 +41,37 @@ pub async fn perform_ping(
         }
     };
 
-    // Convert our SocketType to ping crate's SocketType
-    let ping_socket_type = match socket_type {
-        SocketType::Dgram => ping::SocketType::DGRAM,
-        SocketType::Raw => ping::SocketType::RAW,
-    };
-
-    // Perform the ping with a 2 second timeout using the builder pattern
-    // Measure time manually since ping() doesn't return latency
-    // Use spawn_blocking since the ping crate does blocking I/O
     let start = Instant::now();
-    let mut ping_result = None;
-    for attempt in 0..MAX_RETRIES {
-        let result = tokio::task::spawn_blocking(move || {
-            ping::new(ip_addr)
-                .timeout(Duration::from_secs(2))
-                .ttl(64)
-                .seq_cnt(sequence)
-                .socket_type(ping_socket_type)
-                .send()
-        })
-        .await
-        .unwrap_or_else(|e| Err(ping::Error::IoError {
-            error: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-        }));
-
-        match &result {
-            Err(ping::Error::IoError { error })
-                if error.kind() == std::io::ErrorKind::WouldBlock && attempt < MAX_RETRIES - 1 =>
-            {
-                debug!(
-                    target = %address,
-                    attempt = attempt + 1,
-                    "Transient error (EAGAIN), retrying..."
-                );
-                tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS * (attempt as u64 + 1))).await;
-                continue;
-            }
-            _ => {
-                ping_result = Some(result);
-                break;
-            }
+    let ping_result = tokio::task::spawn_blocking(move || match socket_type {
+        SocketType::DgramNative => {
+            let ident = (std::process::id() as u16).wrapping_add(sequence);
+            icmp::ping_dgram(ip_addr, Duration::from_secs(2), ident, sequence)
+                .map(|rtt| rtt.as_secs_f64() * 1000.0)
         }
-    }
-    let ping_result = ping_result.unwrap();
+        SocketType::Dgram => ping::new(ip_addr)
+            .timeout(Duration::from_secs(2))
+            .ttl(64)
+            .seq_cnt(sequence)
+            .socket_type(ping::SocketType::DGRAM)
+            .send()
+            .map(|_| start.elapsed().as_secs_f64() * 1000.0)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        SocketType::Raw => ping::new(ip_addr)
+            .timeout(Duration::from_secs(2))
+            .ttl(64)
+            .seq_cnt(sequence)
+            .socket_type(ping::SocketType::RAW)
+            .send()
+            .map(|_| start.elapsed().as_secs_f64() * 1000.0)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+    })
+    .await
+    .unwrap_or_else(|e| Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
     let elapsed = start.elapsed();
 
     match ping_result {
-        Ok(_) => {
-            let latency_ms = elapsed.as_secs_f64() * 1000.0;
-            let latency_rounded = (latency_ms * 100.0).round() / 100.0; // Round to 2 decimal places
+        Ok(latency_ms) => {
+            let latency_rounded = (latency_ms * 100.0).round() / 100.0;
             let target_name = name.as_ref().map(|s| s.as_str()).unwrap_or(address);
             debug!(
                 target = %address,
@@ -112,11 +91,12 @@ pub async fn perform_ping(
         }
         Err(e) => {
             let target_name = name.as_ref().map(|s| s.as_str()).unwrap_or(address);
+            let latency_ms = elapsed.as_secs_f64() * 1000.0;
             warn!(
                 target = %address,
                 seq = sequence,
                 error = %e,
-                "✗ {} (seq {}) - Failed: {}", target_name, sequence, e
+                "✗ {} (seq {}) - Failed after {:.0}ms: {}", target_name, sequence, latency_ms, e
             );
             PingResult {
                 timestamp,

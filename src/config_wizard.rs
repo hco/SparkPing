@@ -18,26 +18,37 @@ fn test_socket_type(socket_type: SocketType) -> SocketTestResult {
     // Use a well-known address that should always be reachable (localhost)
     let test_addr: IpAddr = "127.0.0.1".parse().unwrap();
 
-    let ping_socket_type = match socket_type {
-        SocketType::Dgram => ping::SocketType::DGRAM,
-        SocketType::Raw => ping::SocketType::RAW,
+    let result: Result<(), String> = match socket_type {
+        SocketType::DgramNative => {
+            crate::icmp::ping_dgram(test_addr, Duration::from_secs(2), 1, 1)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }
+        _ => {
+            let ping_socket_type = match socket_type {
+                SocketType::Dgram => ping::SocketType::DGRAM,
+                SocketType::Raw => ping::SocketType::RAW,
+                SocketType::DgramNative => unreachable!(),
+            };
+            ping::new(test_addr)
+                .timeout(Duration::from_secs(2))
+                .ttl(64)
+                .seq_cnt(1)
+                .socket_type(ping_socket_type)
+                .send()
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }
     };
 
-    let result = ping::new(test_addr)
-        .timeout(Duration::from_secs(2))
-        .ttl(64)
-        .seq_cnt(1)
-        .socket_type(ping_socket_type)
-        .send();
-
     match result {
-        Ok(_) => SocketTestResult {
+        Ok(()) => SocketTestResult {
             works: true,
             error: None,
         },
         Err(e) => SocketTestResult {
             works: false,
-            error: Some(e.to_string()),
+            error: Some(e),
         },
     }
 }
@@ -326,6 +337,7 @@ fn select_socket_type(term: &Term) -> Result<SocketType, Box<dyn std::error::Err
 /// Generate the config file content
 fn generate_config(db_path: &str, host: &str, socket_type: SocketType) -> String {
     let socket_type_str = match socket_type {
+        SocketType::DgramNative => "dgram_native",
         SocketType::Dgram => "dgram",
         SocketType::Raw => "raw",
     };

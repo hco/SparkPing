@@ -28,12 +28,14 @@ impl Default for PingConfig {
 
 /// Socket type for ICMP ping operations
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum SocketType {
-    /// DGRAM socket - unprivileged, works without root on modern systems (default)
+    /// Native DGRAM implementation - handles DGRAM reply format correctly (default)
     #[default]
+    DgramNative,
+    /// DGRAM socket via ping crate - unprivileged, works without root on modern systems
     Dgram,
-    /// RAW socket - requires elevated privileges (root/sudo)
+    /// RAW socket via ping crate - requires elevated privileges (root/sudo)
     Raw,
 }
 

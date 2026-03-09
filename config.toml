@@ -10,4 +10,4 @@ file = "sparkping.log"
 path = "./tsink-data"
 
 # [ping]
-# socket_type = "dgram"  # "dgram" (default, unprivileged) or "raw" (requires root)
+# socket_type = "dgram_native"  # "dgram_native" (default), "dgram", or "raw"
