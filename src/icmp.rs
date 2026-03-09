@@ -52,17 +52,18 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
         match (&socket).read(&mut buf) {
             Ok(n) if n < ICMP_HEADER_SIZE => continue,
             Ok(n) => {
-                // DGRAM socket: buffer starts with ICMP header directly (no IP header)
+                // DGRAM socket: buffer starts with ICMP header directly (no IP header).
+                // The kernel handles ident matching for DGRAM sockets — any reply
+                // delivered to our socket is already ours, so just check the type.
                 let reply_type = buf[0];
-                let reply_ident = (u16::from(buf[4]) << 8) | u16::from(buf[5]);
 
-                if reply_type == ICMP_ECHO_REPLY && reply_ident == ident {
+                if reply_type == ICMP_ECHO_REPLY {
                     return Ok(start.elapsed());
                 }
                 debug!(
                     target = %addr,
-                    "got ICMP packet: type={}, ident={}, our_ident={}, len={}",
-                    reply_type, reply_ident, ident, n
+                    "got non-reply ICMP packet: type={}, len={}",
+                    reply_type, n
                 );
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
