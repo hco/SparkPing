@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.67] - 2026-03-09
+
+### 🐛 Bug Fixes
+- Default query `to` to current time instead of i64::MAX
+
+
 ## [0.1.66] - 2026-03-09
 
 ### 🐛 Bug Fixes
@@ -24,12 +30,6 @@
 
 ### ✨ Features
 - Add dgram_native ping implementation, expose socket type in HA config
-
-
-## [0.1.62] - 2026-03-09
-
-### 🐛 Bug Fixes
-- Switch HA addon from raw to dgram ICMP sockets
 
 
 
