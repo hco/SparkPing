@@ -12,9 +12,8 @@ file = "/data/sparkping.log"
 path = "/data/tsink-data"
 
 [ping]
-# Use raw sockets (requires NET_RAW capability, which is granted in config.yaml)
-# This is more reliable in containerized environments than dgram sockets
-socket_type = "raw"
+# Use dgram sockets (unprivileged ICMP) - more reliable in containers
+socket_type = "dgram"
 
 # Add ping targets through the web UI or edit this file
 # Example:

@@ -8,21 +8,22 @@ if [ ! -f "$CONFIG_PATH" ]; then
     cp /app/config.toml.template "$CONFIG_PATH"
 fi
 
-# Ensure [ping] section exists and always uses raw sockets in the HA addon
-# (NET_RAW capability is granted in config.yaml)
+# Allow unprivileged ICMP (dgram sockets) for all groups.
+# This is more reliable than raw sockets in containerized environments.
+sysctl -w net.ipv4.ping_group_range="0 2147483647" 2>/dev/null || true
+
+# Ensure [ping] section exists and uses dgram sockets
 if ! grep -q '^\[ping\]' "$CONFIG_PATH"; then
-    bashio::log.info "Adding [ping] section for raw socket support..."
+    bashio::log.info "Adding [ping] section..."
     if grep -q '# Add ping targets' "$CONFIG_PATH"; then
-        sed -i '/# Add ping targets/i\[ping]\nsocket_type = "raw"\n' "$CONFIG_PATH"
+        sed -i '/# Add ping targets/i\[ping]\nsocket_type = "dgram"\n' "$CONFIG_PATH"
     else
-        echo -e '\n[ping]\nsocket_type = "raw"' >> "$CONFIG_PATH"
+        echo -e '\n[ping]\nsocket_type = "dgram"' >> "$CONFIG_PATH"
     fi
 elif grep -q '^socket_type' "$CONFIG_PATH"; then
-    # Force raw sockets regardless of current value
-    sed -i 's/^socket_type = .*/socket_type = "raw"/' "$CONFIG_PATH"
+    sed -i 's/^socket_type = .*/socket_type = "dgram"/' "$CONFIG_PATH"
 else
-    # [ping] section exists but no socket_type line — add it
-    sed -i '/^\[ping\]/a socket_type = "raw"' "$CONFIG_PATH"
+    sed -i '/^\[ping\]/a socket_type = "dgram"' "$CONFIG_PATH"
 fi
 
 # Read user options
