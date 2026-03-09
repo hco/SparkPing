@@ -116,7 +116,7 @@ pub(crate) async fn create_target(
                 "Failed to access task handles".to_string(),
             )
         })?;
-        let handle = start_ping_task(&new_target, Arc::clone(&state.storage), socket_type);
+        let handle = start_ping_task(&new_target, Arc::clone(&state.storage), socket_type, 0);
         handles.insert(new_target.id.clone(), handle);
     }
 
@@ -214,7 +214,7 @@ pub(crate) async fn update_target(
         if let Some(old_handle) = handles.remove(&id) {
             old_handle.abort();
         }
-        let handle = start_ping_task(&updated_target, Arc::clone(&state.storage), socket_type);
+        let handle = start_ping_task(&updated_target, Arc::clone(&state.storage), socket_type, 0);
         handles.insert(updated_target.id.clone(), handle);
     }
 

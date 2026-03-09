@@ -8,16 +8,21 @@ if [ ! -f "$CONFIG_PATH" ]; then
     cp /app/config.toml.template "$CONFIG_PATH"
 fi
 
-# Migration: Ensure [ping] section exists with raw socket type
-# This is needed for existing installations that were created without this section
+# Ensure [ping] section exists and always uses raw sockets in the HA addon
+# (NET_RAW capability is granted in config.yaml)
 if ! grep -q '^\[ping\]' "$CONFIG_PATH"; then
     bashio::log.info "Adding [ping] section for raw socket support..."
-    # Insert [ping] section before the targets comment or at the end
     if grep -q '# Add ping targets' "$CONFIG_PATH"; then
-        sed -i '/# Add ping targets/i\[ping]\n# Use raw sockets (requires NET_RAW capability)\nsocket_type = "raw"\n' "$CONFIG_PATH"
+        sed -i '/# Add ping targets/i\[ping]\nsocket_type = "raw"\n' "$CONFIG_PATH"
     else
-        echo -e '\n[ping]\n# Use raw sockets (requires NET_RAW capability)\nsocket_type = "raw"' >> "$CONFIG_PATH"
+        echo -e '\n[ping]\nsocket_type = "raw"' >> "$CONFIG_PATH"
     fi
+elif grep -q '^socket_type' "$CONFIG_PATH"; then
+    # Force raw sockets regardless of current value
+    sed -i 's/^socket_type = .*/socket_type = "raw"/' "$CONFIG_PATH"
+else
+    # [ping] section exists but no socket_type line — add it
+    sed -i '/^\[ping\]/a socket_type = "raw"' "$CONFIG_PATH"
 fi
 
 # Read user options
@@ -81,6 +86,8 @@ bashio::log.info "Binary version:"
 /app/sparkping --version 2>&1
 /app/sparkping --version
 
+SOCKET_TYPE=$(grep '^socket_type' "$CONFIG_PATH" || echo "not set")
+bashio::log.info "Ping socket type: $SOCKET_TYPE"
 bashio::log.info "Launching SparkPing..."
 
 # Launch SparkPing with stderr redirected to stdout so errors are visible

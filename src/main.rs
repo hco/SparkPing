@@ -461,6 +461,7 @@ async fn reload_targets(
                 new_target,
                 Arc::clone(&storage),
                 new_config.ping.socket_type,
+                0,
             );
             handles.insert(id.clone(), handle);
         }
@@ -792,8 +793,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let config = config_state.read().unwrap();
         let mut handles = task_handles.write().unwrap();
         let socket_type = config.ping.socket_type;
-        for target in config.targets.iter() {
-            let handle = start_ping_task(target, Arc::clone(&storage), socket_type);
+        for (i, target) in config.targets.iter().enumerate() {
+            let stagger_ms = (i as u64) * 200; // 200ms between each target start
+            let handle = start_ping_task(target, Arc::clone(&storage), socket_type, stagger_ms);
             handles.insert(target.id.clone(), handle);
         }
     }

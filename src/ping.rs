@@ -4,6 +4,9 @@ use std::net::IpAddr;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
 
+const MAX_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 100;
+
 pub struct PingResult {
     pub timestamp: DateTime<Utc>,
     pub target_id: String,
@@ -48,13 +51,42 @@ pub async fn perform_ping(
 
     // Perform the ping with a 2 second timeout using the builder pattern
     // Measure time manually since ping() doesn't return latency
+    // Use spawn_blocking since the ping crate does blocking I/O
     let start = Instant::now();
-    let ping_result = ping::new(ip_addr)
-        .timeout(Duration::from_secs(2))
-        .ttl(64)
-        .seq_cnt(sequence)
-        .socket_type(ping_socket_type)
-        .send();
+    let mut ping_result = None;
+    for attempt in 0..MAX_RETRIES {
+        let result = tokio::task::spawn_blocking(move || {
+            ping::new(ip_addr)
+                .timeout(Duration::from_secs(2))
+                .ttl(64)
+                .seq_cnt(sequence)
+                .socket_type(ping_socket_type)
+                .send()
+        })
+        .await
+        .unwrap_or_else(|e| Err(ping::Error::IoError {
+            error: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+        }));
+
+        match &result {
+            Err(ping::Error::IoError { error })
+                if error.kind() == std::io::ErrorKind::WouldBlock && attempt < MAX_RETRIES - 1 =>
+            {
+                debug!(
+                    target = %address,
+                    attempt = attempt + 1,
+                    "Transient error (EAGAIN), retrying..."
+                );
+                tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS * (attempt as u64 + 1))).await;
+                continue;
+            }
+            _ => {
+                ping_result = Some(result);
+                break;
+            }
+        }
+    }
+    let ping_result = ping_result.unwrap();
     let elapsed = start.elapsed();
 
     match ping_result {

@@ -6,11 +6,13 @@ use tokio::task::AbortHandle;
 use tracing::error;
 use tsink::Storage;
 
-/// Start a ping task for a target and return its abort handle
+/// Start a ping task for a target and return its abort handle.
+/// `stagger_ms` adds an initial delay to avoid all targets pinging simultaneously.
 pub fn start_ping_task(
     target: &Target,
     storage: Arc<dyn Storage>,
     socket_type: SocketType,
+    stagger_ms: u64,
 ) -> AbortHandle {
     let target_id = target.id.clone();
     let target_address = target.address.clone();
@@ -19,6 +21,10 @@ pub fn start_ping_task(
     let ping_interval = target.ping_interval;
 
     let handle = tokio::spawn(async move {
+        // Stagger start to avoid thundering herd on sockets
+        if stagger_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(stagger_ms)).await;
+        }
         loop {
             // Perform ping_count pings back-to-back (no delay between them)
             for sequence in 1..=ping_count {
