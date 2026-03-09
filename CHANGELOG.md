@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.60] - 2026-03-09
+
+### 🐛 Bug Fixes
+
+- Streaming WAL recovery to handle single giant segment
 ## [0.1.59] - 2026-02-25
 
 ### 🐛 Bug Fixes

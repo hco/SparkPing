@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.60] - 2026-03-09
+
+### 🐛 Bug Fixes
+- Streaming WAL recovery to handle single giant segment
+
+
 ## [0.1.59] - 2026-02-25
 
 ### 🐛 Bug Fixes
@@ -24,19 +30,6 @@
 
 ### 📝 Other
 - Add search to homepage/settings
-
-
-## [0.1.55] - 2026-01-04
-
-### ✨ Features
-- Add brush-to-zoom functionality to smoke chart
-
-### 📝 Other
-- Limit HA addon changelog to last 5 releases
-
-Add cliff-ha.toml config that uses Tera's slice filter in the header
-template to render only the 5 most recent releases. Update release-it
-to use this config for the home-assistant-addon changelog.
 
 
 
