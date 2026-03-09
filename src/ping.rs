@@ -45,11 +45,11 @@ pub async fn perform_ping(
     let ping_result = tokio::task::spawn_blocking(move || match socket_type {
         SocketType::DgramNative => {
             let ident = (std::process::id() as u16).wrapping_add(sequence);
-            icmp::ping_dgram(ip_addr, Duration::from_secs(2), ident, sequence)
+            icmp::ping_dgram(ip_addr, Duration::from_secs(5), ident, sequence)
                 .map(|rtt| rtt.as_secs_f64() * 1000.0)
         }
         SocketType::Dgram => ping::new(ip_addr)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
             .ttl(64)
             .seq_cnt(sequence)
             .socket_type(ping::SocketType::DGRAM)
@@ -57,7 +57,7 @@ pub async fn perform_ping(
             .map(|_| start.elapsed().as_secs_f64() * 1000.0)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
         SocketType::Raw => ping::new(ip_addr)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
             .ttl(64)
             .seq_cnt(sequence)
             .socket_type(ping::SocketType::RAW)
