@@ -2,6 +2,7 @@ use socket2::{Domain, Protocol, Socket, Type};
 use std::io::{self, Read};
 use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, Instant};
+use tracing::debug;
 
 const ICMP_ECHO_REQUEST: u8 = 8;
 const ICMP_ECHO_REPLY: u8 = 0;
@@ -13,7 +14,9 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
     let start = Instant::now();
     let dest = SocketAddr::new(addr, 0);
 
-    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4))?;
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4))
+        .map_err(|e| io::Error::new(e.kind(), format!("socket create failed: {}", e)))?;
+    socket.set_ttl_v4(64)?;
     socket.set_write_timeout(Some(timeout))?;
 
     // Build ICMP echo request
@@ -31,28 +34,46 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
     }
     write_checksum(&mut packet);
 
-    socket.send_to(&packet, &dest.into())?;
+    socket
+        .send_to(&packet, &dest.into())
+        .map_err(|e| io::Error::new(e.kind(), format!("send failed: {}", e)))?;
+
+    debug!(target = %addr, "send_to succeeded, waiting for reply");
 
     // Read replies until we find ours or timeout
     loop {
         let elapsed = start.elapsed();
         if elapsed >= timeout {
-            return Err(io::Error::new(io::ErrorKind::TimedOut, "ping timed out"));
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "ping timed out (no reply received)"));
         }
         socket.set_read_timeout(Some(timeout - elapsed))?;
 
         let mut buf = [0u8; 2048];
-        let n = (&socket).read(&mut buf)?;
-        if n < ICMP_HEADER_SIZE {
-            continue;
-        }
+        match (&socket).read(&mut buf) {
+            Ok(n) if n < ICMP_HEADER_SIZE => continue,
+            Ok(n) => {
+                // DGRAM socket: buffer starts with ICMP header directly (no IP header)
+                let reply_type = buf[0];
+                let reply_ident = (u16::from(buf[4]) << 8) | u16::from(buf[5]);
 
-        // DGRAM socket: buffer starts with ICMP header directly (no IP header)
-        let reply_type = buf[0];
-        let reply_ident = (u16::from(buf[4]) << 8) | u16::from(buf[5]);
-
-        if reply_type == ICMP_ECHO_REPLY && reply_ident == ident {
-            return Ok(start.elapsed());
+                if reply_type == ICMP_ECHO_REPLY && reply_ident == ident {
+                    return Ok(start.elapsed());
+                }
+                debug!(
+                    target = %addr,
+                    "got ICMP packet: type={}, ident={}, our_ident={}, len={}",
+                    reply_type, reply_ident, ident, n
+                );
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "read timed out waiting for reply (send succeeded)",
+                ));
+            }
+            Err(e) => {
+                return Err(io::Error::new(e.kind(), format!("read failed: {}", e)));
+            }
         }
     }
 }
