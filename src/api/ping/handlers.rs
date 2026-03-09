@@ -13,6 +13,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use std::sync::Arc;
 use tracing::{error, info};
 
 /// HTTP handler for GET /api/ping/data
@@ -20,7 +21,6 @@ pub(crate) async fn get_ping_data(
     State(state): State<AppState>,
     Query(query): Query<PingDataQuery>,
 ) -> Result<Json<PingDataResponse>, (StatusCode, String)> {
-    let storage = &*state.storage;
     info!("Querying ping data: {:?}", query);
 
     // Resolve relative time range to absolute timestamp
@@ -46,7 +46,17 @@ pub(crate) async fn get_ping_data(
         limit: query.limit,
     };
 
-    let points = query_ping_data_with_labels(storage, &resolved_query).map_err(|e| {
+    // Run blocking storage query on a dedicated thread to avoid blocking the async runtime
+    let storage = Arc::clone(&state.storage);
+    let points = tokio::task::spawn_blocking(move || {
+        query_ping_data_with_labels(&*storage, &resolved_query)
+    })
+    .await
+    .map_err(|e| {
+        error!("Task join error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?
+    .map_err(|e| {
         error!("Error querying ping data: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     })?;
@@ -62,6 +72,8 @@ pub(crate) async fn get_ping_data(
         None
     };
 
+    let total_count = points.len();
+
     let response = PingDataResponse {
         query: QueryMetadata {
             target_filter: query.target.clone(),
@@ -73,13 +85,8 @@ pub(crate) async fn get_ping_data(
         },
         data: points,
         statistics,
-        total_count: 0, // Will be set below
+        total_count,
     };
-
-    // Set total_count after creating response
-    let total_count = response.data.len();
-    let mut response = response;
-    response.total_count = total_count;
 
     Ok(Json(response))
 }
@@ -89,7 +96,6 @@ pub(crate) async fn get_ping_aggregated(
     State(state): State<AppState>,
     Query(query): Query<PingAggregatedQuery>,
 ) -> Result<Json<PingAggregatedResponse>, (StatusCode, String)> {
-    let storage = &*state.storage;
     info!("Querying aggregated ping data: {:?}", query);
 
     // Parse bucket duration
@@ -112,14 +118,24 @@ pub(crate) async fn get_ping_aggregated(
     let resolved_from_timestamp = Some(resolved_from);
     let include_percentiles = query.include_percentiles.unwrap_or(false);
 
-    let (bucket_data, data_time_range) = query_ping_aggregated_chunked(
-        storage,
-        query.target.as_deref(),
-        resolved_from,
-        resolved_to,
-        bucket_duration_seconds,
-        include_percentiles,
-    )
+    // Run blocking storage query on a dedicated thread to avoid blocking the async runtime
+    let storage = Arc::clone(&state.storage);
+    let target_filter = query.target.clone();
+    let (bucket_data, data_time_range) = tokio::task::spawn_blocking(move || {
+        query_ping_aggregated_chunked(
+            &*storage,
+            target_filter.as_deref(),
+            resolved_from,
+            resolved_to,
+            bucket_duration_seconds,
+            include_percentiles,
+        )
+    })
+    .await
+    .map_err(|e| {
+        error!("Task join error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?
     .map_err(|e| {
         error!("Error querying aggregated ping data: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())

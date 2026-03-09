@@ -21,7 +21,7 @@ pub(super) struct ResolvedPingDataQuery {
 pub(super) fn query_ping_data_with_labels(
     storage: &dyn Storage,
     query: &ResolvedPingDataQuery,
-) -> Result<Vec<PingDataPoint>, Box<dyn std::error::Error>> {
+) -> Result<Vec<PingDataPoint>, Box<dyn std::error::Error + Send + Sync>> {
     let from_ts = query.from;
     let to_ts = query.to;
 
@@ -299,7 +299,7 @@ pub(super) fn query_ping_aggregated_chunked(
     to: i64,
     bucket_duration_seconds: i64,
     include_percentiles: bool,
-) -> Result<(Vec<BucketDataPoint>, Option<super::dto::TimeRange>), Box<dyn std::error::Error>> {
+) -> Result<(Vec<BucketDataPoint>, Option<super::dto::TimeRange>), Box<dyn std::error::Error + Send + Sync>> {
     // Key: (target, bucket_start)
     let mut accumulators: HashMap<(String, i64), BucketAccumulator> = HashMap::new();
     let mut earliest_ts: Option<i64> = None;
@@ -570,7 +570,7 @@ fn extract_target_id_from_metric_name(hex_name: &str) -> Option<String> {
 /// Calculate storage statistics per target by reading tsink partition metadata
 pub(super) fn calculate_storage_stats(
     data_path: &str,
-) -> Result<super::dto::StorageStatsResponse, Box<dyn std::error::Error>> {
+) -> Result<super::dto::StorageStatsResponse, Box<dyn std::error::Error + Send + Sync>> {
     use super::dto::StorageStatsResponse;
 
     let data_dir = std::path::Path::new(data_path);
