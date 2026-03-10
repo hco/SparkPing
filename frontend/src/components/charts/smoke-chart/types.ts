@@ -59,6 +59,8 @@ export interface ChartVisibilityOptions {
   showMinLine: boolean;
   showMaxLine: boolean;
   showAvgLine: boolean;
+  showP95Line: boolean;
+  showP99Line: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
   showStatsPanel: boolean;

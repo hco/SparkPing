@@ -52,6 +52,12 @@ export function renderLegend({
   if (visibility.showAvgLine) {
     legendColors.push({ label: 'Avg', color: chartColors.avg, type: 'line' });
   }
+  if (visibility.showP95Line) {
+    legendColors.push({ label: 'P95', color: chartColors.p95, type: 'line' });
+  }
+  if (visibility.showP99Line) {
+    legendColors.push({ label: 'P99', color: chartColors.p99, type: 'line' });
+  }
 
   if (legendColors.length === 0) return;
 

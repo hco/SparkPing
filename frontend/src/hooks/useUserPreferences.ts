@@ -8,6 +8,8 @@ export interface UserPreferences {
   showMinLine: boolean;
   showMaxLine: boolean;
   showAvgLine: boolean;
+  showP95Line: boolean;
+  showP99Line: boolean;
   showSmokeBars: boolean;
   showPacketLoss: boolean;
   showStatsPanel: boolean;
@@ -24,6 +26,8 @@ const defaultPreferences: UserPreferences = {
   showMinLine: false,
   showMaxLine: false,
   showAvgLine: false,
+  showP95Line: false,
+  showP99Line: false,
   showSmokeBars: true,
   showPacketLoss: true,
   showStatsPanel: false,
@@ -57,6 +61,12 @@ function loadPreferences(): UserPreferences {
       showAvgLine: typeof parsed.showAvgLine === 'boolean'
         ? parsed.showAvgLine
         : defaultPreferences.showAvgLine,
+      showP95Line: typeof parsed.showP95Line === 'boolean'
+        ? parsed.showP95Line
+        : defaultPreferences.showP95Line,
+      showP99Line: typeof parsed.showP99Line === 'boolean'
+        ? parsed.showP99Line
+        : defaultPreferences.showP99Line,
       showSmokeBars: typeof parsed.showSmokeBars === 'boolean'
         ? parsed.showSmokeBars
         : defaultPreferences.showSmokeBars,

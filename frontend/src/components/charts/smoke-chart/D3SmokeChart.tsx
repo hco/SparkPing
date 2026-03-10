@@ -75,6 +75,8 @@ export function D3SmokeChart({
     showMinLine: preferences.showMinLine,
     showMaxLine: preferences.showMaxLine,
     showAvgLine: preferences.showAvgLine,
+    showP95Line: preferences.showP95Line,
+    showP99Line: preferences.showP99Line,
     showSmokeBars: preferences.showSmokeBars,
     showPacketLoss: preferences.showPacketLoss,
     showStatsPanel: preferences.showStatsPanel,
@@ -85,6 +87,8 @@ export function D3SmokeChart({
     preferences.showMinLine,
     preferences.showMaxLine,
     preferences.showAvgLine,
+    preferences.showP95Line,
+    preferences.showP99Line,
     preferences.showSmokeBars,
     preferences.showPacketLoss,
     preferences.showStatsPanel,
@@ -253,6 +257,30 @@ export function D3SmokeChart({
         getValue: (d) => d.avg,
         color: chartColors.avg,
         className: 'avg-line',
+        bucketInterval,
+      });
+    }
+
+    if (visibility.showP95Line && validLatencyData.length > 0) {
+      renderStatLine({
+        g,
+        scales,
+        dataPoints: validLatencyData,
+        getValue: (d) => d.percentiles?.p95 ?? null,
+        color: chartColors.p95,
+        className: 'p95-line',
+        bucketInterval,
+      });
+    }
+
+    if (visibility.showP99Line && validLatencyData.length > 0) {
+      renderStatLine({
+        g,
+        scales,
+        dataPoints: validLatencyData,
+        getValue: (d) => d.percentiles?.p99 ?? null,
+        color: chartColors.p99,
+        className: 'p99-line',
         bucketInterval,
       });
     }

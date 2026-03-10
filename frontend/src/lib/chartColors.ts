@@ -14,7 +14,7 @@ export const chartColors = {
   // Percentiles
   p50: '#22c55e', // green-500 (same as median)
   p95: '#8b5cf6', // violet-500
-  p99: '#8b5cf6', // violet-500
+  p99: '#ec4899', // pink-500
 
   // Status colors
   success: '#22c55e', // green-500
@@ -105,7 +105,7 @@ export const chartColorClasses = {
   // Percentiles
   p50: 'text-green-500',
   p95: 'text-violet-500',
-  p99: 'text-violet-500',
+  p99: 'text-pink-500',
 
   // Status colors
   success: 'text-green-500',
