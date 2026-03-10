@@ -51,9 +51,13 @@ export function D3SmokeChart({
   width,
   height = 500,
   onApplyZoomAsTimeRange,
+  crosshairTimestamp,
+  onHoverTimestamp,
 }: D3SmokeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const crosshairLineRef = useRef<SVGLineElement | null>(null);
+  const scalesRef = useRef<{ xScale: d3.ScaleTime<number, number> } | null>(null);
   const [dimensions, setDimensions] = useState({ width: width || 800, height });
   const [zoomedDomain, setZoomedDomain] = useState<[number, number] | null>(null);
   const { preferences, setPreference } = useUserPreferences();
@@ -318,10 +322,44 @@ export function D3SmokeChart({
       themeColors,
       visibility,
       overlayElement: brushOverlay,
+      onHoverTimestamp,
     });
 
+    // Store scales for external crosshair rendering
+    scalesRef.current = { xScale };
+
+    // Create crosshair line element (hidden by default)
+    const crosshairLine = g
+      .append('line')
+      .attr('class', 'cross-chart-hover-line')
+      .attr('y1', 0)
+      .attr('y2', chartHeight)
+      .attr('stroke', themeColors.textMuted)
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '6,4')
+      .style('opacity', 0)
+      .style('pointer-events', 'none');
+    crosshairLineRef.current = crosshairLine.node();
+
     return cleanup;
-  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors, zoomedDomain]);
+  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors, zoomedDomain, onHoverTimestamp]);
+
+  // Update external crosshair line position
+  useEffect(() => {
+    const line = crosshairLineRef.current;
+    const scales = scalesRef.current;
+    if (!line || !scales) return;
+
+    if (crosshairTimestamp != null) {
+      const xPos = scales.xScale(crosshairTimestamp);
+      d3.select(line)
+        .attr('x1', xPos)
+        .attr('x2', xPos)
+        .style('opacity', 0.7);
+    } else {
+      d3.select(line).style('opacity', 0);
+    }
+  }, [crosshairTimestamp]);
 
   // Type for boolean-only visibility keys (excludes smokeBarStyle)
   type BooleanVisibilityKey = Exclude<keyof ChartVisibilityOptions, 'smokeBarStyle'>;

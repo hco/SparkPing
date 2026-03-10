@@ -14,6 +14,8 @@ interface SetupTooltipOptions {
   visibility: ChartVisibilityOptions;
   /** Optional external overlay element to attach events to (e.g., brush overlay) */
   overlayElement?: d3.Selection<SVGRectElement, unknown, null, undefined>;
+  /** Called with hovered data point timestamp, or null on mouse leave */
+  onHoverTimestamp?: (timestamp: number | null) => void;
 }
 
 interface TooltipRefs {
@@ -30,6 +32,7 @@ export function setupTooltip({
   themeColors,
   visibility,
   overlayElement,
+  onHoverTimestamp,
 }: SetupTooltipOptions): TooltipRefs {
   const { xScale, yScale } = scales;
 
@@ -107,6 +110,9 @@ export function setupTooltip({
     if (d) {
       const xPos = xScale(d.timestamp);
 
+      // Emit hover timestamp for cross-chart synchronization
+      onHoverTimestamp?.(d.timestamp);
+
       // Update hover line position
       hoverLine.attr('x1', xPos).attr('x2', xPos).style('opacity', 1);
 
@@ -174,6 +180,7 @@ export function setupTooltip({
       handleMouseMove(event);
     })
     .on('mouseleave', () => {
+      onHoverTimestamp?.(null);
       tooltip.style('opacity', 0);
       hoverLine.style('opacity', 0);
       hoverPoints.median.style('opacity', 0);

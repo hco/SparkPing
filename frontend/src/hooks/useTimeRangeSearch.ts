@@ -19,7 +19,7 @@ type UpdateSearchOptions = {
  * Routes that support TimeRangeSearchParams.
  * This type is validated against the generated route tree.
  */
-type TimeRangeRoutes = Extract<FileRouteTypes['fullPaths'], '/targets/$targetId'>;
+type TimeRangeRoutes = Extract<FileRouteTypes['fullPaths'], '/targets/$targetId' | '/compare'>;
 
 /**
  * Hook for managing time range search parameters in the URL.

@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as CompareRouteImport } from './routes/compare'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TargetsTargetIdRouteImport } from './routes/targets/$targetId'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,30 +37,34 @@ const TargetsTargetIdRoute = TargetsTargetIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/compare': typeof CompareRoute
   '/settings': typeof SettingsRoute
   '/targets/$targetId': typeof TargetsTargetIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/compare': typeof CompareRoute
   '/settings': typeof SettingsRoute
   '/targets/$targetId': typeof TargetsTargetIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/compare': typeof CompareRoute
   '/settings': typeof SettingsRoute
   '/targets/$targetId': typeof TargetsTargetIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings' | '/targets/$targetId'
+  fullPaths: '/' | '/compare' | '/settings' | '/targets/$targetId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/targets/$targetId'
-  id: '__root__' | '/' | '/settings' | '/targets/$targetId'
+  to: '/' | '/compare' | '/settings' | '/targets/$targetId'
+  id: '__root__' | '/' | '/compare' | '/settings' | '/targets/$targetId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CompareRoute: typeof CompareRoute
   SettingsRoute: typeof SettingsRoute
   TargetsTargetIdRoute: typeof TargetsTargetIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CompareRoute: CompareRoute,
   SettingsRoute: SettingsRoute,
   TargetsTargetIdRoute: TargetsTargetIdRoute,
 }

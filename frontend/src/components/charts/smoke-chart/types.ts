@@ -16,6 +16,10 @@ export interface D3SmokeChartProps {
   margin?: ChartMargin;
   /** Called when user wants to apply the zoomed range as a time filter */
   onApplyZoomAsTimeRange?: (from: Date, to: Date) => void;
+  /** External crosshair timestamp from another chart's hover (renders a vertical dashed line) */
+  crosshairTimestamp?: number | null;
+  /** Called with the hovered data point timestamp, or null on mouse leave */
+  onHoverTimestamp?: (timestamp: number | null) => void;
 }
 
 export interface ChartMargin {
