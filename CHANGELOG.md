@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.68] - 2026-03-10
+
+### ✨ Features
+
+- Add P95/P99 percentile lines to chart
 ## [0.1.67] - 2026-03-09
 
 ### 🐛 Bug Fixes

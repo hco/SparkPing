@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.68] - 2026-03-10
+
+### ✨ Features
+- Add P95/P99 percentile lines to chart
+
+
 ## [0.1.67] - 2026-03-09
 
 ### 🐛 Bug Fixes
@@ -24,12 +30,6 @@
 
 ### 🐛 Bug Fixes
 - Add diagnostic logging to dgram_native ping implementation
-
-
-## [0.1.63] - 2026-03-09
-
-### ✨ Features
-- Add dgram_native ping implementation, expose socket type in HA config
 
 
 
