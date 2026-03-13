@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.70] - 2026-03-13
+
+### ✨ Features
+- Streamline compare view with shared controls and compact layout
+
+
 ## [0.1.69] - 2026-03-10
 
 ### ✨ Features
@@ -24,12 +30,6 @@
 ### 🐛 Bug Fixes
 - Increase ping timeout from 2s to 5s
 - Move blocking storage queries to spawn_blocking
-
-
-## [0.1.65] - 2026-03-09
-
-### 🐛 Bug Fixes
-- Don't check ident on DGRAM ICMP replies
 
 
 
