@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.71] - 2026-03-13
+
+### 🐛 Bug Fixes
+- Compact compare view with per-chart tooltips and flicker-free hover
+
+
 ## [0.1.70] - 2026-03-13
 
 ### ✨ Features
@@ -23,13 +29,6 @@
 
 ### 🐛 Bug Fixes
 - Default query `to` to current time instead of i64::MAX
-
-
-## [0.1.66] - 2026-03-09
-
-### 🐛 Bug Fixes
-- Increase ping timeout from 2s to 5s
-- Move blocking storage queries to spawn_blocking
 
 
 

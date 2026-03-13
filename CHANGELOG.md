@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.71] - 2026-03-13
+
+### 🐛 Bug Fixes
+
+- Compact compare view with per-chart tooltips and flicker-free hover
 ## [0.1.70] - 2026-03-13
 
 ### ✨ Features
