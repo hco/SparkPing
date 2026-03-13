@@ -53,6 +53,7 @@ export function D3SmokeChart({
   onApplyZoomAsTimeRange,
   crosshairTimestamp,
   onHoverTimestamp,
+  hideControls,
 }: D3SmokeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -393,16 +394,18 @@ export function D3SmokeChart({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
-        {zoomedDomain && (
-          <ZoomControls
-            zoomedDomain={zoomedDomain}
-            onReset={handleResetZoom}
-            onApply={onApplyZoomAsTimeRange ? handleApplyZoom : undefined}
-          />
-        )}
-      </div>
+      {!hideControls && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
+          {zoomedDomain && (
+            <ZoomControls
+              zoomedDomain={zoomedDomain}
+              onReset={handleResetZoom}
+              onApply={onApplyZoomAsTimeRange ? handleApplyZoom : undefined}
+            />
+          )}
+        </div>
+      )}
       <svg
         ref={svgRef}
         className="w-full h-auto"

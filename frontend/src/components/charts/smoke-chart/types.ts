@@ -20,6 +20,8 @@ export interface D3SmokeChartProps {
   crosshairTimestamp?: number | null;
   /** Called with the hovered data point timestamp, or null on mouse leave */
   onHoverTimestamp?: (timestamp: number | null) => void;
+  /** Hide the built-in chart controls (useful when controls are rendered externally) */
+  hideControls?: boolean;
 }
 
 export interface ChartMargin {

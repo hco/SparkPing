@@ -2,11 +2,11 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { D3SmokeChart } from '@/components/charts/smoke-chart/D3SmokeChart';
+import { ChartControls } from '@/components/charts/smoke-chart/ChartControls';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
-import { TargetStatsBar } from '@/components/TargetStatsBar';
 import { useTargetPingData } from '@/hooks/useTargetPingData';
-import { useTargetStats } from '@/hooks/useTargetStats';
 import { useTimeRangeSearch } from '@/hooks/useTimeRangeSearch';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorDisplay } from '@/components/ErrorDisplay';
 import { type TimeRangeSearchParams, validateTimeRangeSearch } from '@/utils/timeRangeUtils';
@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Target } from '@/types';
+import type { ChartVisibilityOptions, SmokeBarStyle } from '@/components/charts/smoke-chart/types';
 
 interface CompareSearchParams extends TimeRangeSearchParams {
   targets?: string;
@@ -169,22 +170,92 @@ function CompareView() {
         </div>
       ) : (
         <CrossChartHoverProvider>
-          <div className="space-y-6">
-            {selectedTargets.map((target) => (
-              <CompareChartCard
-                key={target}
-                target={target}
-                bucket={bucket!}
-                timeQuery={timeQuery}
-                refresh={refresh}
-                interval={interval}
-                setTimeRange={setTimeRange}
-              />
-            ))}
-          </div>
+          <CompareCharts
+            selectedTargets={selectedTargets}
+            bucket={bucket!}
+            timeQuery={timeQuery}
+            refresh={refresh}
+            interval={interval}
+            setTimeRange={setTimeRange}
+          />
         </CrossChartHoverProvider>
       )}
     </PageLayout>
+  );
+}
+
+interface CompareChartsProps {
+  selectedTargets: string[];
+  bucket: string;
+  timeQuery: { from?: number | string; to?: number };
+  refresh?: boolean;
+  interval?: number;
+  setTimeRange: (range: import('@/utils/timeRangeUtils').TimeRange) => void;
+}
+
+function CompareCharts({
+  selectedTargets,
+  bucket,
+  timeQuery,
+  refresh,
+  interval,
+  setTimeRange,
+}: CompareChartsProps) {
+  const { preferences, setPreference } = useUserPreferences();
+
+  const visibility: ChartVisibilityOptions = useMemo(() => ({
+    showMedianLine: preferences.showMedianLine,
+    showMinLine: preferences.showMinLine,
+    showMaxLine: preferences.showMaxLine,
+    showAvgLine: preferences.showAvgLine,
+    showP95Line: preferences.showP95Line,
+    showP99Line: preferences.showP99Line,
+    showSmokeBars: preferences.showSmokeBars,
+    showPacketLoss: preferences.showPacketLoss,
+    showStatsPanel: preferences.showStatsPanel,
+    clipToP99: preferences.clipToP99,
+    smokeBarStyle: preferences.smokeBarStyle,
+  }), [
+    preferences.showMedianLine,
+    preferences.showMinLine,
+    preferences.showMaxLine,
+    preferences.showAvgLine,
+    preferences.showP95Line,
+    preferences.showP99Line,
+    preferences.showSmokeBars,
+    preferences.showPacketLoss,
+    preferences.showStatsPanel,
+    preferences.clipToP99,
+    preferences.smokeBarStyle,
+  ]);
+
+  type BooleanVisibilityKey = Exclude<keyof ChartVisibilityOptions, 'smokeBarStyle'>;
+
+  const handleToggle = (key: BooleanVisibilityKey, value: boolean) => {
+    setPreference(key, value);
+  };
+
+  const handleStyleChange = (style: SmokeBarStyle) => {
+    setPreference('smokeBarStyle', style);
+  };
+
+  return (
+    <div>
+      <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
+      <div className="space-y-2">
+        {selectedTargets.map((target) => (
+          <CompareChartCard
+            key={target}
+            target={target}
+            bucket={bucket}
+            timeQuery={timeQuery}
+            refresh={refresh}
+            interval={interval}
+            setTimeRange={setTimeRange}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -223,8 +294,6 @@ function CompareChartCard({
     refetchInterval: refresh ? (interval ?? 30) * 1000 : false,
   });
 
-  const stats = useTargetStats(targetData);
-
   const handleHoverTimestamp = useCallback(
     (timestamp: number | null) => {
       setHover(timestamp, timestamp != null ? target : null);
@@ -237,19 +306,19 @@ function CompareChartCard({
     hoverSourceId !== target ? hoverTimestamp : null;
 
   return (
-    <Card>
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg flex items-center gap-2">
+    <Card className="shadow-none">
+      <CardHeader className="py-2 px-4">
+        <CardTitle className="text-sm flex items-center gap-2">
           {targetName}
           {targetName !== target && (
-            <span className="text-sm font-normal text-muted-foreground">({target})</span>
+            <span className="text-xs font-normal text-muted-foreground">({target})</span>
           )}
           {isFetching && (
             <span className="text-xs text-muted-foreground animate-pulse">loading...</span>
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 px-2 pb-2">
         {error && (
           <ErrorDisplay
             error={error instanceof Error ? error.message : 'Failed to fetch data'}
@@ -258,24 +327,17 @@ function CompareChartCard({
         {isLoading && !aggregatedData ? (
           <LoadingState />
         ) : targetData.length > 0 ? (
-          <div className="space-y-4">
-            <div className="w-full" style={{ height: '400px' }}>
-              <D3SmokeChart
-                data={targetData}
-                height={400}
-                crosshairTimestamp={crosshairTimestamp}
-                onHoverTimestamp={handleHoverTimestamp}
-                onApplyZoomAsTimeRange={(from, to) => {
-                  setTimeRange({ type: 'custom', from, to });
-                }}
-              />
-            </div>
-            {stats && (
-              <TargetStatsBar
-                stats={stats}
-                dataTimeRange={aggregatedData?.query.data_time_range || undefined}
-              />
-            )}
+          <div className="w-full" style={{ height: '300px' }}>
+            <D3SmokeChart
+              data={targetData}
+              height={300}
+              hideControls
+              crosshairTimestamp={crosshairTimestamp}
+              onHoverTimestamp={handleHoverTimestamp}
+              onApplyZoomAsTimeRange={(from, to) => {
+                setTimeRange({ type: 'custom', from, to });
+              }}
+            />
           </div>
         ) : (
           <div className="flex items-center justify-center h-24">
