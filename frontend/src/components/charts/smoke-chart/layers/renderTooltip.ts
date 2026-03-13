@@ -23,6 +23,8 @@ interface TooltipRefs {
   cleanup: () => void;
 }
 
+let tooltipCounter = 0;
+
 export function setupTooltip({
   g,
   scales,
@@ -36,12 +38,20 @@ export function setupTooltip({
 }: SetupTooltipOptions): TooltipRefs {
   const { xScale, yScale } = scales;
 
-  // Remove any existing tooltip first
-  d3.select('body').selectAll('.d3-smoke-tooltip').remove();
+  // Each chart instance gets a unique tooltip ID
+  const tooltipId = `d3-smoke-tooltip-${++tooltipCounter}`;
+
+  // Store the ID on the SVG group so we can clean up the right tooltip on re-render
+  const prevTooltipId = g.attr('data-tooltip-id');
+  if (prevTooltipId) {
+    d3.select('body').selectAll(`#${prevTooltipId}`).remove();
+  }
+  g.attr('data-tooltip-id', tooltipId);
 
   const tooltip = d3
     .select('body')
     .append('div')
+    .attr('id', tooltipId)
     .attr('class', 'd3-smoke-tooltip')
     .style('opacity', 0)
     .style('position', 'absolute')
@@ -192,7 +202,7 @@ export function setupTooltip({
   return {
     tooltip,
     cleanup: () => {
-      d3.select('body').selectAll('.d3-smoke-tooltip').remove();
+      d3.select('body').selectAll(`#${tooltipId}`).remove();
     },
   };
 }

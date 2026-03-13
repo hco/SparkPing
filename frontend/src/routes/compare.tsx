@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { D3SmokeChart } from '@/components/charts/smoke-chart/D3SmokeChart';
 import { ChartControls } from '@/components/charts/smoke-chart/ChartControls';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
@@ -240,43 +240,52 @@ function CompareCharts({
   };
 
   return (
-    <div>
-      <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
-      <div className="space-y-2">
-        {selectedTargets.map((target) => (
-          <CompareChartCard
-            key={target}
-            target={target}
-            bucket={bucket}
-            timeQuery={timeQuery}
-            refresh={refresh}
-            interval={interval}
-            setTimeRange={setTimeRange}
-          />
-        ))}
-      </div>
-    </div>
+    <Card>
+      <CardContent className="pt-4">
+        <ChartControls visibility={visibility} onToggle={handleToggle} onStyleChange={handleStyleChange} />
+        <div>
+          {selectedTargets.map((target) => (
+            <CompareChartEntry
+              key={target}
+              target={target}
+              bucket={bucket}
+              timeQuery={timeQuery}
+              refresh={refresh}
+              interval={interval}
+              setTimeRange={setTimeRange}
+              visibility={visibility}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-interface CompareChartCardProps {
+interface CompareChartEntryProps {
   target: string;
   bucket: string;
   timeQuery: { from?: number | string; to?: number };
   refresh?: boolean;
   interval?: number;
   setTimeRange: (range: import('@/utils/timeRangeUtils').TimeRange) => void;
+  visibility: ChartVisibilityOptions;
 }
 
-function CompareChartCard({
+function CompareChartEntry({
   target,
   bucket,
   timeQuery,
   refresh,
   interval,
   setTimeRange,
-}: CompareChartCardProps) {
-  const { hoverTimestamp, hoverSourceId, setHover } = useCrossChartHover();
+  visibility,
+}: CompareChartEntryProps) {
+  const crosshairRef = useRef<((ts: number | null) => void) | null>(null);
+
+  const setHover = useCrossChartHover(target, (timestamp) => {
+    crosshairRef.current?.(timestamp);
+  });
 
   const {
     data: aggregatedData,
@@ -301,50 +310,44 @@ function CompareChartCard({
     [setHover, target]
   );
 
-  // Show crosshair from other charts, not from this one
-  const crosshairTimestamp =
-    hoverSourceId !== target ? hoverTimestamp : null;
-
   return (
-    <Card className="shadow-none">
-      <CardHeader className="py-2 px-4">
-        <CardTitle className="text-sm flex items-center gap-2">
-          {targetName}
-          {targetName !== target && (
-            <span className="text-xs font-normal text-muted-foreground">({target})</span>
-          )}
-          {isFetching && (
-            <span className="text-xs text-muted-foreground animate-pulse">loading...</span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-0 px-2 pb-2">
-        {error && (
-          <ErrorDisplay
-            error={error instanceof Error ? error.message : 'Failed to fetch data'}
+    <div className="py-2">
+      <div className="flex items-center gap-2 px-2 mb-1">
+        <span className="text-sm font-medium">{targetName}</span>
+        {targetName !== target && (
+          <span className="text-xs text-muted-foreground">({target})</span>
+        )}
+        {isFetching && (
+          <span className="text-xs text-muted-foreground animate-pulse">loading...</span>
+        )}
+      </div>
+      {error && (
+        <ErrorDisplay
+          error={error instanceof Error ? error.message : 'Failed to fetch data'}
+        />
+      )}
+      {isLoading && !aggregatedData ? (
+        <LoadingState />
+      ) : targetData.length > 0 ? (
+        <div className="w-full" style={{ height: '250px' }}>
+          <D3SmokeChart
+            data={targetData}
+            height={250}
+            hideControls
+            compact
+            visibility={visibility}
+            onHoverTimestamp={handleHoverTimestamp}
+            onCrosshairRef={crosshairRef}
+            onApplyZoomAsTimeRange={(from, to) => {
+              setTimeRange({ type: 'custom', from, to });
+            }}
           />
-        )}
-        {isLoading && !aggregatedData ? (
-          <LoadingState />
-        ) : targetData.length > 0 ? (
-          <div className="w-full" style={{ height: '300px' }}>
-            <D3SmokeChart
-              data={targetData}
-              height={300}
-              hideControls
-              crosshairTimestamp={crosshairTimestamp}
-              onHoverTimestamp={handleHoverTimestamp}
-              onApplyZoomAsTimeRange={(from, to) => {
-                setTimeRange({ type: 'custom', from, to });
-              }}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-24">
-            <p className="text-muted-foreground text-sm">No data for this time range</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-24">
+          <p className="text-muted-foreground text-sm">No data for this time range</p>
+        </div>
+      )}
+    </div>
   );
 }

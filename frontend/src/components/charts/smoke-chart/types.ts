@@ -22,6 +22,12 @@ export interface D3SmokeChartProps {
   onHoverTimestamp?: (timestamp: number | null) => void;
   /** Hide the built-in chart controls (useful when controls are rendered externally) */
   hideControls?: boolean;
+  /** Compact mode: smaller margins, no legend (for compare view) */
+  compact?: boolean;
+  /** External visibility options (overrides internal preferences when provided) */
+  visibility?: ChartVisibilityOptions;
+  /** Ref-based crosshair callback (avoids React re-renders for cross-chart hover sync) */
+  onCrosshairRef?: React.RefObject<((timestamp: number | null) => void) | null>;
 }
 
 export interface ChartMargin {

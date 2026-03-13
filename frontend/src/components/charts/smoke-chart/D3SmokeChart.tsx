@@ -26,9 +26,18 @@ const STATS_PANEL_WIDTH = 150;
 const MOBILE_BREAKPOINT = 480;
 
 // Get responsive margins based on screen width
-function getMargins(width: number, showStatsPanel: boolean): ChartMargin {
+function getMargins(width: number, showStatsPanel: boolean, compact?: boolean): ChartMargin {
   const isMobile = width < MOBILE_BREAKPOINT;
-  
+
+  if (compact) {
+    return {
+      top: 10,
+      right: showStatsPanel ? STATS_PANEL_WIDTH : 10,
+      bottom: isMobile ? 30 : 40,
+      left: isMobile ? 40 : 55,
+    };
+  }
+
   if (showStatsPanel) {
     return {
       top: isMobile ? 20 : 40,
@@ -37,7 +46,7 @@ function getMargins(width: number, showStatsPanel: boolean): ChartMargin {
       left: isMobile ? 45 : 80,
     };
   }
-  
+
   return {
     top: isMobile ? 20 : 40,
     right: isMobile ? 10 : 20,
@@ -54,6 +63,9 @@ export function D3SmokeChart({
   crosshairTimestamp,
   onHoverTimestamp,
   hideControls,
+  compact,
+  visibility: externalVisibility,
+  onCrosshairRef,
 }: D3SmokeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -75,7 +87,7 @@ export function D3SmokeChart({
     setZoomedDomain(null);
   }, [dataFingerprint]);
 
-  const visibility: ChartVisibilityOptions = useMemo(() => ({
+  const internalVisibility: ChartVisibilityOptions = useMemo(() => ({
     showMedianLine: preferences.showMedianLine,
     showMinLine: preferences.showMinLine,
     showMaxLine: preferences.showMaxLine,
@@ -101,10 +113,12 @@ export function D3SmokeChart({
     preferences.smokeBarStyle,
   ]);
 
+  const visibility = externalVisibility ?? internalVisibility;
+
   // Use dynamic margin based on stats panel visibility and screen width
-  const effectiveMargin = useMemo(() => 
-    getMargins(dimensions.width, visibility.showStatsPanel),
-    [dimensions.width, visibility.showStatsPanel]
+  const effectiveMargin = useMemo(() =>
+    getMargins(dimensions.width, visibility.showStatsPanel, compact),
+    [dimensions.width, visibility.showStatsPanel, compact]
   );
   
   const isMobile = dimensions.width < MOBILE_BREAKPOINT;
@@ -299,7 +313,9 @@ export function D3SmokeChart({
       renderStatsPanel({ g, stats, innerWidth, themeColors });
     }
 
-    renderLegend({ g, chartHeight, innerWidth, visibility, themeColors });
+    if (!compact) {
+      renderLegend({ g, chartHeight, innerWidth, visibility, themeColors });
+    }
 
     // Setup brush for zoom first (creates the overlay)
     const brushGroup = renderBrush({
@@ -343,9 +359,9 @@ export function D3SmokeChart({
     crosshairLineRef.current = crosshairLine.node();
 
     return cleanup;
-  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors, zoomedDomain, onHoverTimestamp]);
+  }, [data, dimensions.width, dimensions.height, effectiveMargin, visibility, themeColors, zoomedDomain, onHoverTimestamp, compact]);
 
-  // Update external crosshair line position
+  // Update external crosshair line position (prop-based, for non-compare views)
   useEffect(() => {
     const line = crosshairLineRef.current;
     const scales = scalesRef.current;
@@ -361,6 +377,29 @@ export function D3SmokeChart({
       d3.select(line).style('opacity', 0);
     }
   }, [crosshairTimestamp]);
+
+  // Register ref-based crosshair callback (for compare view — avoids React re-renders)
+  useEffect(() => {
+    if (!onCrosshairRef) return;
+    onCrosshairRef.current = (timestamp: number | null) => {
+      const line = crosshairLineRef.current;
+      const scales = scalesRef.current;
+      if (!line || !scales) return;
+
+      if (timestamp != null) {
+        const xPos = scales.xScale(timestamp);
+        d3.select(line)
+          .attr('x1', xPos)
+          .attr('x2', xPos)
+          .style('opacity', 0.7);
+      } else {
+        d3.select(line).style('opacity', 0);
+      }
+    };
+    return () => {
+      onCrosshairRef.current = null;
+    };
+  }, [onCrosshairRef]);
 
   // Type for boolean-only visibility keys (excludes smokeBarStyle)
   type BooleanVisibilityKey = Exclude<keyof ChartVisibilityOptions, 'smokeBarStyle'>;
