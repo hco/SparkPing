@@ -7,6 +7,7 @@ mod discovery;
 mod icmp;
 mod ip_scan;
 mod logging;
+mod memory;
 mod ping;
 mod storage;
 mod tasks;
@@ -644,6 +645,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("ERROR: Failed to initialize logging: {}", e);
         e
     })?;
+
+    // Start background memory monitor (logs peak RSS every 60s)
+    memory::start_memory_monitor();
 
     info!("Configuration loaded successfully from: {:?}", args.config);
 
