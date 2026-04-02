@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.72] - 2026-04-02
+
+### ✨ Features
+
+- Log peak memory usage every minute
 ## [0.1.71] - 2026-03-13
 
 ### 🐛 Bug Fixes

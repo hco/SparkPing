@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.72] - 2026-04-02
+
+### ✨ Features
+- Log peak memory usage every minute
+
+
 ## [0.1.71] - 2026-03-13
 
 ### 🐛 Bug Fixes
@@ -23,12 +29,6 @@
 
 ### ✨ Features
 - Add P95/P99 percentile lines to chart
-
-
-## [0.1.67] - 2026-03-09
-
-### 🐛 Bug Fixes
-- Default query `to` to current time instead of i64::MAX
 
 
 
