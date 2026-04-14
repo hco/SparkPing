@@ -2,19 +2,50 @@ use super::dto::{
     BucketDataPoint, PartitionMetadata, Percentiles, PingDataPoint, PingStatistics,
     TargetStorageStats, TimeRangeValue,
 };
+use crate::config::Target;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::fs;
-use tracing::warn;
-use tsink::Storage;
+use tracing::{debug, warn};
+use tsink::{DataPoint, Label, Storage};
 
 /// Internal query structure with resolved timestamps
 pub(super) struct ResolvedPingDataQuery {
     pub target: Option<String>,
+    pub target_config: Option<Target>,
     pub from: i64,
     pub to: i64,
     pub metric: Option<String>,
     pub limit: Option<usize>,
+}
+
+/// Query a specific target's data using exact label matching (fast path).
+/// Constructs the full label set from the target config and queries each
+/// sequence separately via storage.select(), which does a direct hash lookup
+/// instead of scanning all series.
+fn select_target_data(
+    storage: &dyn Storage,
+    metric: &str,
+    target_config: &Target,
+    from: i64,
+    to: i64,
+) -> Result<Vec<DataPoint>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut all_points = Vec::new();
+
+    for seq in 0..target_config.ping_count {
+        let mut labels = vec![
+            Label::new("target_id", &target_config.id),
+            Label::new("target", &target_config.address),
+            Label::new("sequence", seq.to_string()),
+        ];
+        if let Some(ref name) = target_config.name {
+            labels.push(Label::new("target_name", name));
+        }
+        let points = storage.select(metric, &labels, from, to)?;
+        all_points.extend(points);
+    }
+
+    Ok(all_points)
 }
 
 /// Query ping data with labels properly extracted
@@ -36,41 +67,68 @@ pub(super) fn query_ping_data_with_labels(
 
     for metric_name in metrics_to_query {
         if let Some(ref target) = &query.target {
-            // Query all label combinations and filter by target
-            let all_results = storage.select_all(metric_name, from_ts, to_ts)?;
-            for (labels, points) in all_results {
-                // Check if this matches our target filter
-                let matches_target = labels
-                    .iter()
-                    .any(|l| l.name == "target" && &l.value == target);
+            let success = metric_name == "ping_latency";
+            let target_name = query.target_config.as_ref().and_then(|tc| tc.name.clone());
 
-                if matches_target {
-                    let target_name = labels
+            // Try fast path with exact label matching
+            let mut fast_path_points = Vec::new();
+            if let Some(ref tc) = query.target_config {
+                fast_path_points = select_target_data(storage, metric_name, tc, from_ts, to_ts)?;
+            }
+
+            if !fast_path_points.is_empty() {
+                for point in fast_path_points {
+                    all_points.push(PingDataPoint {
+                        timestamp: DateTime::from_timestamp(point.timestamp, 0)
+                            .unwrap_or_else(|| Utc::now())
+                            .to_rfc3339(),
+                        timestamp_unix: point.timestamp,
+                        target: target.clone(),
+                        target_name: target_name.clone(),
+                        sequence: 0,
+                        success,
+                        latency_ms: if success { Some(point.value) } else { None },
+                        metric_type: metric_name.to_string(),
+                    });
+                }
+            } else {
+                // Fallback: select_all and filter by target
+                debug!(
+                    "Fast path empty for target {}, falling back to select_all",
+                    target
+                );
+                let all_results = storage.select_all(metric_name, from_ts, to_ts)?;
+                for (labels, points) in all_results {
+                    let matches_target = labels
                         .iter()
-                        .find(|l| l.name == "target_name")
-                        .map(|l| l.value.clone());
+                        .any(|l| l.name == "target" && &l.value == target);
 
-                    let sequence = labels
-                        .iter()
-                        .find(|l| l.name == "sequence")
-                        .and_then(|l| l.value.parse::<u16>().ok())
-                        .unwrap_or(0);
+                    if matches_target {
+                        let label_target_name = labels
+                            .iter()
+                            .find(|l| l.name == "target_name")
+                            .map(|l| l.value.clone());
 
-                    let success = metric_name == "ping_latency";
+                        let sequence = labels
+                            .iter()
+                            .find(|l| l.name == "sequence")
+                            .and_then(|l| l.value.parse::<u16>().ok())
+                            .unwrap_or(0);
 
-                    for point in points {
-                        all_points.push(PingDataPoint {
-                            timestamp: DateTime::from_timestamp(point.timestamp, 0)
-                                .unwrap_or_else(|| Utc::now())
-                                .to_rfc3339(),
-                            timestamp_unix: point.timestamp,
-                            target: target.clone(),
-                            target_name: target_name.clone(),
-                            sequence,
-                            success,
-                            latency_ms: if success { Some(point.value) } else { None },
-                            metric_type: metric_name.to_string(),
-                        });
+                        for point in points {
+                            all_points.push(PingDataPoint {
+                                timestamp: DateTime::from_timestamp(point.timestamp, 0)
+                                    .unwrap_or_else(|| Utc::now())
+                                    .to_rfc3339(),
+                                timestamp_unix: point.timestamp,
+                                target: target.clone(),
+                                target_name: label_target_name.clone(),
+                                sequence,
+                                success,
+                                latency_ms: if success { Some(point.value) } else { None },
+                                metric_type: metric_name.to_string(),
+                            });
+                        }
                     }
                 }
             }
@@ -292,14 +350,19 @@ impl BucketAccumulator {
 /// 2. For each chunk, loads only that slice via select_all
 /// 3. Directly aggregates raw DataPoints into per-bucket accumulators
 /// 4. Discards raw data between chunks
+#[allow(clippy::too_many_arguments)]
 pub(super) fn query_ping_aggregated_chunked(
     storage: &dyn Storage,
     target_filter: Option<&str>,
+    target_config: Option<&Target>,
     from: i64,
     to: i64,
     bucket_duration_seconds: i64,
     include_percentiles: bool,
-) -> Result<(Vec<BucketDataPoint>, Option<super::dto::TimeRange>), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    (Vec<BucketDataPoint>, Option<super::dto::TimeRange>),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     // Key: (target, bucket_start)
     let mut accumulators: HashMap<(String, i64), BucketAccumulator> = HashMap::new();
     let mut earliest_ts: Option<i64> = None;
@@ -307,63 +370,122 @@ pub(super) fn query_ping_aggregated_chunked(
 
     let metrics = ["ping_latency", "ping_failed"];
 
-    let mut chunk_start = from;
-    while chunk_start < to {
-        let chunk_end = (chunk_start + CHUNK_DURATION_SECS).min(to);
+    // Fast path: when we have a target config, use select() for direct label lookup
+    // instead of select_all() which scans every series
+    let mut used_fast_path = false;
+    if let (Some(filter), Some(tc)) = (target_filter, target_config) {
+        let target_name = tc.name.clone();
 
         for metric_name in &metrics {
             let is_latency = *metric_name == "ping_latency";
+            let points = select_target_data(storage, metric_name, tc, from, to)?;
 
-            let results = storage.select_all(metric_name, chunk_start, chunk_end)?;
+            if points.is_empty() && is_latency {
+                debug!(
+                    "Fast path empty for target {}, falling back to select_all",
+                    filter
+                );
+                break;
+            }
 
-            for (labels, points) in results {
-                // Extract target from labels
-                let target = match labels.iter().find(|l| l.name == "target") {
-                    Some(l) => &l.value,
-                    None => continue,
-                };
+            for point in &points {
+                earliest_ts =
+                    Some(earliest_ts.map_or(point.timestamp, |e: i64| e.min(point.timestamp)));
+                latest_ts =
+                    Some(latest_ts.map_or(point.timestamp, |l: i64| l.max(point.timestamp)));
 
-                // Apply target filter
-                if let Some(filter) = target_filter {
-                    if target != filter {
-                        continue;
-                    }
-                }
+                let bucket_start_ts =
+                    (point.timestamp / bucket_duration_seconds) * bucket_duration_seconds;
+                let key = (filter.to_string(), bucket_start_ts);
 
-                let target_name = labels
-                    .iter()
-                    .find(|l| l.name == "target_name")
-                    .map(|l| l.value.clone());
+                let acc = accumulators.entry(key).or_insert_with(|| {
+                    BucketAccumulator::new(
+                        filter.to_string(),
+                        target_name.clone(),
+                        bucket_start_ts,
+                        bucket_duration_seconds,
+                        include_percentiles,
+                    )
+                });
 
-                for point in &points {
-                    // Track time range
-                    earliest_ts = Some(earliest_ts.map_or(point.timestamp, |e: i64| e.min(point.timestamp)));
-                    latest_ts = Some(latest_ts.map_or(point.timestamp, |l: i64| l.max(point.timestamp)));
-
-                    let bucket_start_ts =
-                        (point.timestamp / bucket_duration_seconds) * bucket_duration_seconds;
-                    let key = (target.clone(), bucket_start_ts);
-
-                    let acc = accumulators.entry(key).or_insert_with(|| {
-                        BucketAccumulator::new(
-                            target.clone(),
-                            target_name.clone(),
-                            bucket_start_ts,
-                            bucket_duration_seconds,
-                            include_percentiles,
-                        )
-                    });
-
-                    if is_latency {
-                        acc.add_latency(point.value);
-                    } else {
-                        acc.add_failure();
-                    }
+                if is_latency {
+                    acc.add_latency(point.value);
+                } else {
+                    acc.add_failure();
                 }
             }
         }
 
-        chunk_start = chunk_end;
+        used_fast_path = !accumulators.is_empty();
+    }
+
+    // Fallback / no-target-filter path: use select_all with time chunking
+    if !used_fast_path {
+        accumulators.clear();
+        earliest_ts = None;
+        latest_ts = None;
+
+        let mut chunk_start = from;
+        while chunk_start < to {
+            let chunk_end = (chunk_start + CHUNK_DURATION_SECS).min(to);
+
+            for metric_name in &metrics {
+                let is_latency = *metric_name == "ping_latency";
+
+                let results = storage.select_all(metric_name, chunk_start, chunk_end)?;
+
+                for (labels, points) in results {
+                    // Extract target from labels
+                    let target = match labels.iter().find(|l| l.name == "target") {
+                        Some(l) => &l.value,
+                        None => continue,
+                    };
+
+                    // Apply target filter
+                    if let Some(filter) = target_filter {
+                        if target != filter {
+                            continue;
+                        }
+                    }
+
+                    let target_name = labels
+                        .iter()
+                        .find(|l| l.name == "target_name")
+                        .map(|l| l.value.clone());
+
+                    for point in &points {
+                        earliest_ts = Some(
+                            earliest_ts.map_or(point.timestamp, |e: i64| e.min(point.timestamp)),
+                        );
+                        latest_ts = Some(
+                            latest_ts.map_or(point.timestamp, |l: i64| l.max(point.timestamp)),
+                        );
+
+                        let bucket_start_ts =
+                            (point.timestamp / bucket_duration_seconds) * bucket_duration_seconds;
+                        let key = (target.clone(), bucket_start_ts);
+
+                        let acc = accumulators.entry(key).or_insert_with(|| {
+                            BucketAccumulator::new(
+                                target.clone(),
+                                target_name.clone(),
+                                bucket_start_ts,
+                                bucket_duration_seconds,
+                                include_percentiles,
+                            )
+                        });
+
+                        if is_latency {
+                            acc.add_latency(point.value);
+                        } else {
+                            acc.add_failure();
+                        }
+                    }
+                }
+            }
+
+            chunk_start = chunk_end;
+        }
     }
 
     let data_time_range = match (earliest_ts, latest_ts) {

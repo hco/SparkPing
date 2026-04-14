@@ -8,6 +8,7 @@ use super::query::{
     ResolvedPingDataQuery,
 };
 use crate::api::AppState;
+use crate::config::Target;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -15,6 +16,16 @@ use axum::{
 };
 use std::sync::Arc;
 use tracing::{error, info};
+
+/// Look up a target's config by address (or id).
+fn find_target_config(state: &AppState, target_addr: &str) -> Option<Target> {
+    let config = state.config.read().ok()?;
+    config
+        .targets
+        .iter()
+        .find(|t| t.address == target_addr || t.id == target_addr)
+        .cloned()
+}
 
 /// HTTP handler for GET /api/ping/data
 pub(crate) async fn get_ping_data(
@@ -37,9 +48,16 @@ pub(crate) async fn get_ping_data(
     // Store resolved timestamp for response metadata
     let resolved_from_timestamp = Some(resolved_from);
 
+    // Look up target config for fast-path label matching
+    let target_config = query
+        .target
+        .as_ref()
+        .and_then(|t| find_target_config(&state, t));
+
     // Create resolved query for internal use
     let resolved_query = ResolvedPingDataQuery {
         target: query.target.clone(),
+        target_config,
         from: resolved_from,
         to: resolved_to,
         metric: query.metric.clone(),
@@ -118,6 +136,12 @@ pub(crate) async fn get_ping_aggregated(
     let resolved_from_timestamp = Some(resolved_from);
     let include_percentiles = query.include_percentiles.unwrap_or(false);
 
+    // Look up target config for fast-path label matching
+    let target_config = query
+        .target
+        .as_ref()
+        .and_then(|t| find_target_config(&state, t));
+
     // Run blocking storage query on a dedicated thread to avoid blocking the async runtime
     let storage = Arc::clone(&state.storage);
     let target_filter = query.target.clone();
@@ -125,6 +149,7 @@ pub(crate) async fn get_ping_aggregated(
         query_ping_aggregated_chunked(
             &*storage,
             target_filter.as_deref(),
+            target_config.as_ref(),
             resolved_from,
             resolved_to,
             bucket_duration_seconds,
