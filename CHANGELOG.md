@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.73] - 2026-04-14
+
+### ⚡ Performance
+
+- Use tsink label-filtered queries for single-target data fetching
 ## [0.1.72] - 2026-04-02
 
 ### ✨ Features
