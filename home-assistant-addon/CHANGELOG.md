@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.2.0] - 2026-07-14
+
+### ✨ Features
+- Make low packet loss visible with log-spaced severity colors
+
+
 ## [0.1.73] - 2026-04-14
 
 ### ⚡ Performance
@@ -23,12 +29,6 @@
 
 ### ✨ Features
 - Streamline compare view with shared controls and compact layout
-
-
-## [0.1.69] - 2026-03-10
-
-### ✨ Features
-- Add multi-device compare view with cross-chart hover sync
 
 
 

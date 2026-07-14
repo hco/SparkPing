@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.0] - 2026-07-14
+
+### ✨ Features
+
+- Make low packet loss visible with log-spaced severity colors
 ## [0.1.73] - 2026-04-14
 
 ### ⚡ Performance
