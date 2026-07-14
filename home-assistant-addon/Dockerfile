@@ -10,8 +10,8 @@ RUN npm install -g pnpm
 
 WORKDIR /app/frontend
 
-# Copy package files
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# Copy package files (pnpm-workspace.yaml carries the allowBuilds approval)
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
