@@ -174,7 +174,7 @@ export function setupTooltip({
             </div>
           </div>
           <div style="border-top: 1px solid ${themeColors.divider}; padding-top: 6px;">
-            <div style="color: ${d.packetLossPercent > 0 ? getPacketLossColor(d.packetLossPercent) : chartColors.success}; font-weight: 500;">
+            <div style="color: ${getPacketLossColor(d.packetLossPercent)}; font-weight: 500;">
               Packet Loss: ${d.packetLossPercent.toFixed(2)}%
             </div>
             <div style="color: ${themeColors.textMuted}; font-size: 11px; margin-top: 2px;">

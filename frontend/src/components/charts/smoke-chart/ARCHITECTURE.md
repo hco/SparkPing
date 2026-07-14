@@ -268,7 +268,7 @@ chartColors.median  // #22c55e - green for median line
 chartColors.avg     // #f59e0b - amber for average
 chartColors.min     // #3b82f6 - blue for minimum
 chartColors.max     // #ef4444 - red for maximum
-chartColors.packetLoss.none/low/medium/high // Severity colors
+packetLossBuckets // Log-spaced loss severity buckets (fill, opacity, text color); 0% draws no tint
 ```
 
 Theme colors (`ThemeColors`) adapt to light/dark mode and are passed to layers.

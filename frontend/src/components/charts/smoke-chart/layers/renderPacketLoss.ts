@@ -1,6 +1,6 @@
 import type * as d3 from 'd3';
 import type { ChartDataPoint, ChartScales } from '../types';
-import { getPacketLossColor } from '@/lib/chartColors';
+import { getPacketLossBucket, type PacketLossBucket } from '@/lib/chartColors';
 
 interface RenderPacketLossOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -14,7 +14,7 @@ interface RenderPacketLossOptions {
 interface PacketLossRegion {
   startX: number;
   endX: number;
-  color: string;
+  bucket: PacketLossBucket;
 }
 
 export function renderPacketLoss({
@@ -43,7 +43,7 @@ export function renderPacketLoss({
 
   chartData.forEach((point, i) => {
     const hasData = point.count > 0;
-    const color = hasData ? getPacketLossColor(point.packetLossPercent) : null;
+    const bucket = hasData ? getPacketLossBucket(point.packetLossPercent) : null;
     const x = xScale(point.timestamp);
 
     const prevPoint = chartData[i - 1];
@@ -65,9 +65,9 @@ export function renderPacketLoss({
       ? x + halfBucketWidth
       : (x + xScale(nextPoint!.timestamp)) / 2;
 
-    if (hasData && color) {
+    if (bucket) {
       const canExtend = currentRegion
-        && currentRegion.color === color
+        && currentRegion.bucket === bucket
         && !hasGapBefore;
 
       if (canExtend) {
@@ -79,7 +79,7 @@ export function renderPacketLoss({
         currentRegion = {
           startX: bucketStartX,
           endX: bucketEndX,
-          color,
+          bucket,
         };
       }
     } else {
@@ -103,8 +103,8 @@ export function renderPacketLoss({
       .attr('y', 0)
       .attr('width', Math.max(1, region.endX - region.startX))
       .attr('height', chartHeight)
-      .attr('fill', region.color)
-      .attr('opacity', 0.15);
+      .attr('fill', region.bucket.fill)
+      .attr('opacity', region.bucket.fillOpacity);
   });
 }
 

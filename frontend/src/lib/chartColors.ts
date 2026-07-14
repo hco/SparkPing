@@ -21,14 +21,6 @@ export const chartColors = {
   warning: '#eab308', // yellow-500
   error: '#ef4444', // red-500
 
-  // Packet loss severity
-  packetLoss: {
-    none: '#22c55e', // green-500 (0%)
-    low: '#60a5fa', // blue-400 (≤5%)
-    medium: '#8b5cf6', // violet-500 (5-20%)
-    high: '#ef4444', // red-500 (>20%)
-  },
-
   // Text colors (light mode)
   text: {
     primary: '#111827', // gray-900
@@ -114,22 +106,53 @@ export const chartColorClasses = {
 } as const;
 
 /**
- * Get packet loss color based on percentage
+ * Packet loss severity buckets. Loss distributions are heavily skewed toward
+ * tiny values, so thresholds are log-spaced to keep the low end distinguishable.
+ * 0% intentionally has no bucket: it renders without any tint so that even
+ * faint loss stands out against a clean background.
+ */
+export interface PacketLossBucket {
+  /** Upper bound in percent (inclusive) */
+  max: number;
+  label: string;
+  /** Chart background fill */
+  fill: string;
+  fillOpacity: number;
+  /** Readable text color for stats/tooltips */
+  text: string;
+  /** Tailwind class equivalent of `text` */
+  textClass: string;
+}
+
+export const packetLossBuckets: PacketLossBucket[] = [
+  { max: 0.5, label: '<0.5%', fill: '#eab308', fillOpacity: 0.12, text: '#eab308', textClass: 'text-yellow-500' }, // yellow-500
+  { max: 2, label: '0.5–2%', fill: '#f59e0b', fillOpacity: 0.15, text: '#f59e0b', textClass: 'text-amber-500' }, // amber-500
+  { max: 5, label: '2–5%', fill: '#f97316', fillOpacity: 0.18, text: '#f97316', textClass: 'text-orange-500' }, // orange-500
+  { max: 20, label: '5–20%', fill: '#ef4444', fillOpacity: 0.22, text: '#ef4444', textClass: 'text-red-500' }, // red-500
+  { max: Infinity, label: '>20%', fill: '#b91c1c', fillOpacity: 0.3, text: '#b91c1c', textClass: 'text-red-700' }, // red-700
+];
+
+/**
+ * Get the severity bucket for a packet loss percentage, or null when there is
+ * no loss (0% draws no tint on charts).
+ */
+export function getPacketLossBucket(percent: number): PacketLossBucket | null {
+  if (percent <= 0) return null;
+  return packetLossBuckets.find((bucket) => percent <= bucket.max) ?? null;
+}
+
+/**
+ * Get packet loss text color based on percentage
  */
 export function getPacketLossColor(percent: number): string {
-  if (percent === 0) return chartColors.packetLoss.none;
-  if (percent <= 5) return chartColors.packetLoss.low;
-  if (percent <= 20) return chartColors.packetLoss.medium;
-  return chartColors.packetLoss.high;
+  return getPacketLossBucket(percent)?.text ?? chartColors.success;
 }
 
 /**
  * Get packet loss Tailwind class based on percentage
  */
 export function getPacketLossClass(percent: number): string {
-  if (percent === 0) return 'text-green-500';
-  if (percent <= 1) return 'text-yellow-500';
-  return 'text-red-500';
+  return getPacketLossBucket(percent)?.textClass ?? 'text-green-500';
 }
 
 /**

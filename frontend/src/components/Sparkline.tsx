@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect } from 'react';
 import * as d3 from 'd3';
+import { getPacketLossColor } from '@/lib/chartColors';
 
 interface SparklineProps {
   data: number[];
@@ -146,13 +147,6 @@ export function PacketLossSparkline({
 }: PacketLossSparklineProps) {
   const barWidth = Math.max(1, (width - 4) / data.length - 0.5);
 
-  const getColor = (value: number): string => {
-    if (value === 0) return '#22c55e'; // green
-    if (value <= 5) return '#eab308'; // yellow
-    if (value <= 20) return '#f97316'; // orange
-    return '#ef4444'; // red
-  };
-
   if (data.length === 0) {
     return (
       <div 
@@ -182,7 +176,7 @@ export function PacketLossSparkline({
             y={value === 0 ? height - 4 : y}
             width={barWidth}
             height={value === 0 ? 2 : barHeight}
-            fill={getColor(value)}
+            fill={getPacketLossColor(value)}
             rx={0.5}
           />
         );

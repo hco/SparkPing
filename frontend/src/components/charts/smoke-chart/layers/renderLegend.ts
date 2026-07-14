@@ -1,6 +1,6 @@
 import type * as d3 from 'd3';
 import type { ChartVisibilityOptions } from '../types';
-import { chartColors, type ThemeColors } from '../../../../lib/chartColors';
+import { chartColors, packetLossBuckets, type ThemeColors } from '../../../../lib/chartColors';
 
 interface RenderLegendOptions {
   g: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -29,13 +29,10 @@ export function renderLegend({
 
   const legendColors: LegendItem[] = [];
 
-  // Add packet loss colors if enabled
+  // Add packet loss colors if enabled (0% draws no tint, so it has no entry)
   if (visibility.showPacketLoss) {
     legendColors.push(
-      { label: '0%', color: chartColors.packetLoss.none },
-      { label: '≤5%', color: chartColors.packetLoss.low },
-      { label: '5-20%', color: chartColors.packetLoss.medium },
-      { label: '>20%', color: chartColors.packetLoss.high },
+      ...packetLossBuckets.map((bucket) => ({ label: bucket.label, color: bucket.fill })),
     );
   }
 
