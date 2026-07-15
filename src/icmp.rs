@@ -52,10 +52,20 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
         match (&socket).read(&mut buf) {
             Ok(n) if n < ICMP_HEADER_SIZE => continue,
             Ok(n) => {
-                // DGRAM socket: buffer starts with ICMP header directly (no IP header).
-                // The kernel handles ident matching for DGRAM sockets — any reply
-                // delivered to our socket is already ours, so just check the type.
-                let reply_type = buf[0];
+                // Linux strips the IP header on DGRAM ICMP sockets, so the ICMP
+                // header sits at offset 0. macOS/BSD deliver the IP header too, so
+                // skip it (using its IHL) when present. The kernel handles ident
+                // matching for DGRAM sockets — any reply delivered to our socket is
+                // already ours, so we only check the type.
+                let icmp_off = if (buf[0] & 0xf0) == 0x40 {
+                    ((buf[0] & 0x0f) as usize) * 4 // IHL is in 32-bit words
+                } else {
+                    0
+                };
+                if n < icmp_off + ICMP_HEADER_SIZE {
+                    continue;
+                }
+                let reply_type = buf[icmp_off];
 
                 if reply_type == ICMP_ECHO_REPLY {
                     return Ok(start.elapsed());
