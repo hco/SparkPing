@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+  # push:
+  #   branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MISE_EXPERIMENTAL: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - name: Locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - run: mise run frontend:install
+      - run: mise run frontend:lint
+      - run: mise run frontend:type-check
+      - run: mise run frontend:test
+      - run: mise run frontend:knip
+
+  server:
+    name: Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+      - run: mise run server:install
+      - run: mise run server:fmt-check
+      - run: mise run server:clippy
+      - run: mise run server:test
