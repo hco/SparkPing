@@ -23,7 +23,7 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
     let mut packet = [0u8; PACKET_SIZE];
     packet[0] = ICMP_ECHO_REQUEST;
     packet[1] = 0; // code
-    // checksum at [2..4], filled below
+                   // checksum at [2..4], filled below
     packet[4] = (ident >> 8) as u8;
     packet[5] = ident as u8;
     packet[6] = (seq >> 8) as u8;
@@ -44,7 +44,10 @@ pub fn ping_dgram(addr: IpAddr, timeout: Duration, ident: u16, seq: u16) -> io::
     loop {
         let elapsed = start.elapsed();
         if elapsed >= timeout {
-            return Err(io::Error::new(io::ErrorKind::TimedOut, "ping timed out (no reply received)"));
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "ping timed out (no reply received)",
+            ));
         }
         socket.set_read_timeout(Some(timeout - elapsed))?;
 

@@ -87,7 +87,11 @@ pub fn start_memory_monitor() {
             // Log every 12 ticks (60 seconds)
             if samples >= 12 {
                 if peak_rss > 0 {
-                    info!(peak_rss_bytes = peak_rss, "Peak memory usage (last 60s): {}", format_bytes(peak_rss));
+                    info!(
+                        peak_rss_bytes = peak_rss,
+                        "Peak memory usage (last 60s): {}",
+                        format_bytes(peak_rss)
+                    );
                 }
                 peak_rss = 0;
                 samples = 0;

@@ -66,7 +66,12 @@ pub async fn perform_ping(
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
     })
     .await
-    .unwrap_or_else(|e| Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
+    .unwrap_or_else(|e| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    });
     let elapsed = start.elapsed();
 
     match ping_result {
