@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { BUCKET_DURATION_OPTIONS, type BucketDuration } from '@/components/DurationPicker';
+import { BUCKET_DURATION_OPTIONS, type BucketDuration } from '@/components/durationOptions';
 
 /**
  * Maps bucket duration string values to their equivalent in seconds.

@@ -77,15 +77,19 @@ export function D3SmokeChart({
   const { isDark } = useTheme();
   const themeColors = useMemo(() => getThemeColors(isDark), [isDark]);
 
-  // Reset zoom when data changes significantly (e.g., new time range selected)
+  // Reset zoom when data changes significantly (e.g., new time range selected).
+  // Adjusting state during render (per React docs) rather than in an effect
+  // avoids an extra render pass and the cascading-render lint warning.
   const dataFingerprint = useMemo(() => {
     if (data.length === 0) return '';
     return `${data[0].timestamp_unix}-${data[data.length - 1].timestamp_unix}-${data.length}`;
   }, [data]);
 
-  useEffect(() => {
+  const [prevDataFingerprint, setPrevDataFingerprint] = useState(dataFingerprint);
+  if (prevDataFingerprint !== dataFingerprint) {
+    setPrevDataFingerprint(dataFingerprint);
     setZoomedDomain(null);
-  }, [dataFingerprint]);
+  }
 
   const internalVisibility: ChartVisibilityOptions = useMemo(() => ({
     showMedianLine: preferences.showMedianLine,

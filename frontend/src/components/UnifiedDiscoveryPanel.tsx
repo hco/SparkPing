@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, createElement, useEffect } from 'react';
+import { useState, useMemo, createElement } from 'react';
 import { useUnifiedDiscovery, type UnifiedDiscoveryConfig } from '@/hooks/useUnifiedDiscovery';
 import { createTarget, fetchSubnets } from '@/api';
 import type { TargetRequest, IdentifiedDevice, SubnetSuggestion, DeviceInfo } from '@/types';
@@ -201,13 +201,14 @@ export function UnifiedDiscoveryPanel({ existingAddresses }: UnifiedDiscoveryPan
   const [groupByManufacturer, setGroupByManufacturer] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // Auto-select first local subnet when subnets load
-  useEffect(() => {
-    if (subnets.length > 0 && !selectedSubnet) {
-      const localSubnet = subnets.find(s => s.source === 'local') || subnets[0];
-      setSelectedSubnet(localSubnet);
-    }
-  }, [subnets, selectedSubnet]);
+  // Auto-select first local subnet when subnets load. Adjusting state during
+  // render (per React docs) rather than in an effect avoids an extra render
+  // pass and the cascading-render lint warning; the `!selectedSubnet` guard
+  // prevents a render loop.
+  if (subnets.length > 0 && !selectedSubnet) {
+    const localSubnet = subnets.find(s => s.source === 'local') || subnets[0];
+    setSelectedSubnet(localSubnet);
+  }
 
   // Create FlexSearch index
   const searchIndex = useMemo(() => {

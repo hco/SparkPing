@@ -19,7 +19,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { PageLayout } from '@/components/PageLayout';
-import { CrossChartHoverProvider, useCrossChartHover } from '@/contexts/CrossChartHoverContext';
+import { CrossChartHoverProvider } from '@/contexts/CrossChartHoverContext';
+import { useCrossChartHover } from '@/contexts/crossChartHover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';

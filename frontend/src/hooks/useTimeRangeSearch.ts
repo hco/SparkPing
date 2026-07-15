@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { getRouteApi } from '@tanstack/react-router';
 import type { FileRouteTypes } from '@/routeTree.gen';
-import type { BucketDuration } from '@/components/DurationPicker';
+import type { BucketDuration } from '@/components/durationOptions';
 import {
   type TimeRange,
   type TimeRangeSearchParams,
