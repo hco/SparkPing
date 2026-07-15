@@ -54,10 +54,3 @@ export function useIsMdScreen(): boolean {
 export function useIsLgScreen(): boolean {
   return useMediaQuery('(min-width: 1024px)');
 }
-
-/**
- * Convenience hook for checking if device prefers touch input
- */
-export function useIsTouchDevice(): boolean {
-  return useMediaQuery('(pointer: coarse)');
-}

@@ -154,6 +154,12 @@ run = "pnpm exec tsc --noEmit"
 description = "Verify frontend code (type check + lint)"
 depends = ["frontend:type-check", "frontend:lint"]
 
+[tasks."frontend:knip"]
+description = "Check for unused dependencies and exports"
+depends = ["install"]
+dir = "frontend"
+run = "pnpm knip"
+
 [tasks."frontend:test"]
 description = "Run frontend tests"
 depends = ["install"]
@@ -183,10 +189,18 @@ depends = ["server:dev", "frontend:dev"]
 description = "Alias for develop"
 depends = ["develop"]
 
-# CI task
+# CI task — mirrors the checks run by the CI workflow (.github/workflows/ci.yml)
 [tasks.ci]
-description = "Run all CI checks (linting, type checking, and tests)"
-depends = ["server:lint", "frontend:verify", "server:check", "server:clippy", "server:fmt-check"]
+description = "Run all CI checks (linting, type checking, tests, unused-code)"
+depends = [
+  "frontend:lint",
+  "frontend:type-check",
+  "frontend:test",
+  "frontend:knip",
+  "server:fmt-check",
+  "server:clippy",
+  "server:test",
+]
 
 
 [tasks.git-pull-rebase]

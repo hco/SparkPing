@@ -19,11 +19,9 @@ fn test_socket_type(socket_type: SocketType) -> SocketTestResult {
     let test_addr: IpAddr = "127.0.0.1".parse().unwrap();
 
     let result: Result<(), String> = match socket_type {
-        SocketType::DgramNative => {
-            crate::icmp::ping_dgram(test_addr, Duration::from_secs(2), 1, 1)
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-        }
+        SocketType::DgramNative => crate::icmp::ping_dgram(test_addr, Duration::from_secs(2), 1, 1)
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
         _ => {
             let ping_socket_type = match socket_type {
                 SocketType::Dgram => ping::SocketType::DGRAM,
