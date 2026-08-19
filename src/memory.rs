@@ -55,6 +55,50 @@ fn get_current_rss() -> Option<u64> {
     None
 }
 
+#[cfg(target_os = "linux")]
+fn parse_status_kb(value: &str) -> Option<u64> {
+    value
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()
+        .map(|kb| kb * 1024)
+}
+
+/// Reads VmRSS/VmSize/VmData/VmSwap (in bytes) from /proc/self/status.
+///
+/// VmRSS alone can look flat and healthy while VmSize/VmData/VmSwap grow
+/// unbounded, because pages that leak and go cold get pushed to swap and drop
+/// out of RSS. Watch all four together, not just RSS.
+#[cfg(target_os = "linux")]
+fn get_proc_status() -> Option<(u64, u64, u64, u64)> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+
+    let mut vm_rss = 0u64;
+    let mut vm_size = 0u64;
+    let mut vm_data = 0u64;
+    let mut vm_swap = 0u64;
+
+    for line in status.lines() {
+        if let Some(v) = line.strip_prefix("VmRSS:") {
+            vm_rss = parse_status_kb(v).unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("VmSize:") {
+            vm_size = parse_status_kb(v).unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("VmData:") {
+            vm_data = parse_status_kb(v).unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("VmSwap:") {
+            vm_swap = parse_status_kb(v).unwrap_or(0);
+        }
+    }
+
+    Some((vm_rss, vm_size, vm_data, vm_swap))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_proc_status() -> Option<(u64, u64, u64, u64)> {
+    None
+}
+
 fn format_bytes(bytes: u64) -> String {
     const MB: u64 = 1024 * 1024;
     if bytes >= MB {
@@ -87,7 +131,24 @@ pub fn start_memory_monitor() {
             // Log every 12 ticks (60 seconds)
             if samples >= 12 {
                 if peak_rss > 0 {
-                    info!(peak_rss_bytes = peak_rss, "Peak memory usage (last 60s): {}", format_bytes(peak_rss));
+                    info!(
+                        peak_rss_bytes = peak_rss,
+                        "Peak memory usage (last 60s): {}",
+                        format_bytes(peak_rss)
+                    );
+                }
+                if let Some((vm_rss, vm_size, vm_data, vm_swap)) = get_proc_status() {
+                    info!(
+                        vm_rss_bytes = vm_rss,
+                        vm_size_bytes = vm_size,
+                        vm_data_bytes = vm_data,
+                        vm_swap_bytes = vm_swap,
+                        "Memory footprint: VmRSS={} VmSize={} VmData={} VmSwap={}",
+                        format_bytes(vm_rss),
+                        format_bytes(vm_size),
+                        format_bytes(vm_data),
+                        format_bytes(vm_swap)
+                    );
                 }
                 peak_rss = 0;
                 samples = 0;

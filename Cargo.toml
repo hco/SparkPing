@@ -7,7 +7,10 @@ edition = "2021"
 config = "0.15"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
-tsink = "0.4.1"
+# Pinned: 0.6.1+ changed the Gorilla codec's leading-zero-count sentinel and
+# cannot decode partitions written by this version or earlier. Do not bump
+# past 0.5.x without a data migration.
+tsink = "=0.5.0"
 ping = "0.7"
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -34,3 +37,6 @@ console = "0.15"
 reqwest = "0.13.1"
 quick-xml = { version = "0.38.4", features = ["serde", "serialize"] }
 socket2 = "0.6.3"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.7"

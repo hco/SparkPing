@@ -32,6 +32,14 @@ use tracing::{debug, error, info, warn};
 use tsink::{DataPoint, Label, Row, StorageBuilder, TimestampPrecision};
 use uuid::Uuid;
 
+// glibc's malloc doesn't return freed pages to the OS aggressively under the
+// long-lived-allocation/small-transient-allocation churn this process produces,
+// which fragments the heap and drives up VmData/VmSwap over multi-week uptimes.
+// jemalloc reclaims far more eagerly.
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 /// SparkPing - A Rust application with configurable settings
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
