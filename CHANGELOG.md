@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.2] - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- Skip jemalloc on musl targets to unbreak Home Assistant add-on build
 ## [0.2.1] - 2026-08-19
 
 ### 🐛 Bug Fixes

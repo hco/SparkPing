@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.2.2] - 2026-08-19
+
+### 🐛 Bug Fixes
+- Skip jemalloc on musl targets to unbreak Home Assistant add-on build
+
+
 ## [0.2.1] - 2026-08-19
 
 ### 🐛 Bug Fixes
@@ -33,12 +39,6 @@ fix: parse ICMP replies correctly on macOS/BSD
 
 ### ✨ Features
 - Log peak memory usage every minute
-
-
-## [0.1.71] - 2026-03-13
-
-### 🐛 Bug Fixes
-- Compact compare view with per-chart tooltips and flicker-free hover
 
 
 
