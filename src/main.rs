@@ -35,8 +35,10 @@ use uuid::Uuid;
 // glibc's malloc doesn't return freed pages to the OS aggressively under the
 // long-lived-allocation/small-transient-allocation churn this process produces,
 // which fragments the heap and drives up VmData/VmSwap over multi-week uptimes.
-// jemalloc reclaims far more eagerly.
-#[cfg(not(target_env = "msvc"))]
+// jemalloc reclaims far more eagerly. musl's allocator doesn't have this
+// problem, and tikv-jemalloc-sys's C build can't cross-compile in the HA
+// add-on's musl toolchain, so skip it there.
+#[cfg(not(any(target_env = "msvc", target_env = "musl")))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
