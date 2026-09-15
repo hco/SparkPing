@@ -1,10 +1,5 @@
 # Changelog
 
-## [1.0.1] - 2026-09-15
-
-### 📝 Other
-
-- Build the add-on image on PRs and main to catch musl breaks before tagging
 ## [0.2.2] - 2026-08-19
 
 ### 🐛 Bug Fixes
