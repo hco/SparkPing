@@ -3,3 +3,5 @@
 /tsink-data
 .tanstack
 .cargo-fetched
+/node_modules
+/.pnpm-store
