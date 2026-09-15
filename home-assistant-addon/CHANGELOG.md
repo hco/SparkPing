@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [1.0.1] - 2026-09-15
+
+### 📝 Other
+- Build the add-on image on PRs and main to catch musl breaks before tagging
+
+
 ## [0.2.2] - 2026-08-19
 
 ### 🐛 Bug Fixes
@@ -33,12 +39,6 @@ fix: parse ICMP replies correctly on macOS/BSD
 
 ### ⚡ Performance
 - Use tsink label-filtered queries for single-target data fetching
-
-
-## [0.1.72] - 2026-04-02
-
-### ✨ Features
-- Log peak memory usage every minute
 
 
 
