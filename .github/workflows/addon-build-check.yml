@@ -1,0 +1,51 @@
+name: Add-on Build Check
+
+# The add-on cross-compiles to *-unknown-linux-musl, which nothing else in CI
+# does: `mise run ci` builds against the glibc host. Until this existed, musl
+# was compiled for the first time by the tag-triggered release build, so a
+# musl-only break (v0.2.1: tikv-jemalloc-sys failing to cross-compile) only
+# surfaced once the tag already existed. This builds the real add-on image on
+# every PR and every push to main, without pushing anything.
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build add-on (amd64, no push)
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.0
+
+      # Mirrors the release workflow's context preparation; the Dockerfile
+      # expects frontend/, src/ and the Cargo manifests inside the add-on dir.
+      - name: Prepare build context
+        run: |
+          cp -r frontend home-assistant-addon/
+          cp Cargo.toml Cargo.lock home-assistant-addon/
+          cp -r src home-assistant-addon/
+
+      # --test sets DOCKER_PUSH=false in builder.sh, so nothing reaches ghcr
+      # and no registry login is needed (works for fork PRs too). amd64 alone
+      # is enough: musl cross-compilation breaks identically on both arches.
+      - name: Build add-on
+        uses: home-assistant/builder@2025.11.0
+        with:
+          args: |
+            --test \
+            --amd64 \
+            --target /data/home-assistant-addon \
+            --docker-hub "ghcr.io/${{ github.repository_owner }}" \
+            --addon
