@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3] - 2026-09-15
+
+### 📝 Other
+
+- Build the add-on image on PRs and main to catch musl breaks before tagging
+- Revert "Release 1.0.1"
+
+This reverts commit 9c2d8f9fcb953c1745e0f216157cbae49f968822.
 ## [0.2.2] - 2026-08-19
 
 ### 🐛 Bug Fixes
