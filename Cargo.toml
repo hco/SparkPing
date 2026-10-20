@@ -45,9 +45,12 @@ tikv-jemallocator = "0.7"
 [dev-dependencies]
 tempfile = "3.27.0"
 
-# tsink 0.10.2 with three fixes, drop once fixed upstream: a WAL reset race
-# that trips background fail-fast and makes the storage reject all operations,
-# compaction loading a whole level into memory (OOM during large imports), and
-# compaction during startup failing the open with ENOENT.
+# tsink 0.10.2 with fixes, drop once fixed upstream: a WAL reset race that
+# trips background fail-fast and makes the storage reject all operations,
+# compaction loading a whole level into memory (OOM during large imports),
+# compaction during startup failing the open with ENOENT, and segments piling
+# up under steady writes (configurable flush interval, compaction that catches
+# up, merging of small last-level segments), and a flush failing with ENOENT
+# when it raced a catalog refresh.
 [patch.crates-io]
-tsink = { git = "https://github.com/hco/tsink", rev = "101a87096fdb935fb0552504fe3c0c0ff3588e87" }
+tsink = { git = "https://github.com/hco/tsink", rev = "ad98d282b824f15067efd092252ed621bcf6d056" }

@@ -17,6 +17,10 @@ pub fn open_storage(config: &DatabaseConfig) -> tsink::Result<Arc<dyn Storage>> 
         // fsync once per second instead of per insert; a crash loses at most
         // the last second of pings.
         .with_wal_sync_mode(WalSyncMode::Periodic(Duration::from_secs(1)))
+        // Every flush writes a new segment. The 250 ms default created about
+        // four per second from pings alone; unflushed points stay queryable
+        // and are covered by the WAL.
+        .with_flush_interval(Duration::from_secs(30))
         // Larger chunks keep the in-memory index of persisted data small
         // (about 0.3 MB per day of data instead of 0.9 MB with the default).
         .with_chunk_points(8192)
