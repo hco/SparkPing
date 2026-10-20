@@ -1,6 +1,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use tracing::info;
 
 /// Directory inside the data path that holds tsink 0.5 data awaiting migration.
@@ -92,25 +93,32 @@ fn unused_path(dir: &Path, source: &Path) -> PathBuf {
 
 /// Returns tsink 0.5 WAL segments (`NNNNNN.wal`) in `dir`, oldest first.
 /// tsink 0.10 names its segments `wal-*.log`, so they are never matched.
+///
+/// Ordered by modification time, which `rename` keeps: if tsink 0.5 ran again
+/// after an upgrade, it numbered its segments from 1 again, and `unused_path`
+/// gave colliding ones a suffix, so the names alone do not tell which run is
+/// newer.
 pub fn legacy_wal_segments(dir: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut segments: Vec<((u64, u64), PathBuf)> = Vec::new();
+    let mut segments: Vec<(Option<SystemTime>, (u64, u64), PathBuf)> = Vec::new();
     for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
+        let entry = entry?;
+        let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "wal") {
+            let modified = entry.metadata()?.modified().ok();
             let order = path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
                 .map(segment_order)
                 .unwrap_or((u64::MAX, 0));
-            segments.push((order, path));
+            segments.push((modified, order, path));
         }
     }
     segments.sort();
-    Ok(segments.into_iter().map(|(_, path)| path).collect())
+    Ok(segments.into_iter().map(|(_, _, path)| path).collect())
 }
 
-/// Sort key for a segment stem: `000002` is (2, 0), and `000002-1`, renamed by
-/// `unused_path` because it was moved later, is (2, 1).
+/// Order of segments with the same modification time: `000002` is (2, 0),
+/// `000002-1` is (2, 1).
 fn segment_order(stem: &str) -> (u64, u64) {
     let (index, suffix) = stem.split_once('-').unwrap_or((stem, "0"));
     (
@@ -181,22 +189,41 @@ mod tests {
         assert_eq!(move_legacy_data_aside(data).unwrap(), Some(legacy));
     }
 
+    fn touch_at(path: &Path, secs_ago: u64) {
+        touch(path);
+        let time = SystemTime::now() - std::time::Duration::from_secs(secs_ago);
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    }
+
     #[test]
-    fn repeated_segment_names_are_kept_and_ordered_by_move() {
+    fn segments_of_a_later_run_come_after_the_earlier_run() {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path();
-        touch(&data.join(LEGACY_DIR).join("wal/000002.wal"));
-        touch(&data.join(LEGACY_DIR).join("wal/000003.wal"));
-        touch(&data.join("wal/000002.wal"));
+        // First run, moved aside by an earlier upgrade
+        touch_at(&data.join(LEGACY_DIR).join("wal/000001.wal"), 600);
+        touch_at(&data.join(LEGACY_DIR).join("wal/000002.wal"), 500);
+        touch_at(&data.join(LEGACY_DIR).join("wal/000003.wal"), 400);
+        // tsink 0.5 ran again and numbered from 1
+        touch_at(&data.join("wal/000001.wal"), 300);
+        touch_at(&data.join("wal/000002.wal"), 200);
+        touch_at(&data.join("wal/000004.wal"), 100);
 
         let legacy = move_legacy_data_aside(data).unwrap().unwrap();
 
         assert_eq!(
             legacy_wal_segments(&legacy.join("wal")).unwrap(),
             vec![
+                legacy.join("wal/000001.wal"),
                 legacy.join("wal/000002.wal"),
-                legacy.join("wal/000002-1.wal"),
                 legacy.join("wal/000003.wal"),
+                legacy.join("wal/000001-1.wal"),
+                legacy.join("wal/000002-1.wal"),
+                legacy.join("wal/000004.wal"),
             ]
         );
     }
