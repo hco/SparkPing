@@ -4,6 +4,7 @@ mod config_file;
 mod config_wizard;
 mod device_identification;
 mod discovery;
+mod failure_streak;
 mod fd_limit;
 mod icmp;
 mod ip_scan;

@@ -3,7 +3,7 @@ use crate::icmp;
 use chrono::{DateTime, Utc};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 pub struct PingResult {
     pub timestamp: DateTime<Utc>,
@@ -13,6 +13,7 @@ pub struct PingResult {
     pub sequence: u16,
     pub success: bool,
     pub latency_ms: Option<f64>,
+    pub error: Option<String>,
 }
 
 pub async fn perform_ping(
@@ -37,6 +38,7 @@ pub async fn perform_ping(
                 sequence,
                 success: false,
                 latency_ms: None,
+                error: Some(format!("invalid IP address: {}", e)),
             };
         }
     };
@@ -66,7 +68,12 @@ pub async fn perform_ping(
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
     })
     .await
-    .unwrap_or_else(|e| Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
+    .unwrap_or_else(|e| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    });
     let elapsed = start.elapsed();
 
     match ping_result {
@@ -87,12 +94,14 @@ pub async fn perform_ping(
                 sequence,
                 success: true,
                 latency_ms: Some(latency_ms),
+                error: None,
             }
         }
         Err(e) => {
             let target_name = name.as_ref().map(|s| s.as_str()).unwrap_or(address);
             let latency_ms = elapsed.as_secs_f64() * 1000.0;
-            warn!(
+            // Per-sequence failures are noisy; the ping task logs state changes.
+            debug!(
                 target = %address,
                 seq = sequence,
                 error = %e,
@@ -106,6 +115,7 @@ pub async fn perform_ping(
                 sequence,
                 success: false,
                 latency_ms: None,
+                error: Some(e.to_string()),
             }
         }
     }
