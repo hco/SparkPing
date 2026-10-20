@@ -1,10 +1,7 @@
 use crate::ping::PingResult;
 use tsink::{DataPoint, Label, Row};
 
-pub fn write_ping_result(
-    storage: &dyn tsink::Storage,
-    result: &PingResult,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn write_ping_result(storage: &dyn tsink::Storage, result: &PingResult) -> tsink::Result<()> {
     // Convert timestamp to Unix timestamp (seconds)
     let timestamp = result.timestamp.timestamp();
 

@@ -3,10 +3,10 @@ use super::dto::{
     TimeRange,
 };
 use super::query::{
-    calculate_statistics, calculate_storage_stats, parse_bucket_duration,
-    query_ping_aggregated_chunked, query_ping_data_with_labels, resolve_time_range_value,
-    ResolvedPingDataQuery,
+    calculate_statistics, parse_bucket_duration, query_ping_aggregated_chunked,
+    query_ping_data_with_labels, resolve_time_range_value, ResolvedPingDataQuery,
 };
+use super::storage_stats::calculate_storage_stats;
 use crate::api::AppState;
 use crate::config::Target;
 use axum::{
@@ -189,24 +189,36 @@ pub(crate) async fn get_ping_aggregated(
 pub(crate) async fn get_storage_stats(
     State(state): State<AppState>,
 ) -> Result<Json<super::dto::StorageStatsResponse>, (StatusCode, String)> {
-    let config = state.config.read().map_err(|e| {
-        error!("Failed to read config: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to read configuration".to_string(),
-        )
-    })?;
+    let data_path = state
+        .config
+        .read()
+        .map(|config| std::path::PathBuf::from(&config.database.path))
+        .map_err(|e| {
+            error!("Failed to read config: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to read configuration".to_string(),
+            )
+        })?;
 
-    let data_path = config.database.path.clone();
-    drop(config);
-
-    let stats = calculate_storage_stats(&data_path).map_err(|e| {
-        error!("Failed to calculate storage stats: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to calculate storage stats: {}", e),
-        )
-    })?;
+    let storage = Arc::clone(&state.storage);
+    let stats =
+        tokio::task::spawn_blocking(move || calculate_storage_stats(storage.as_ref(), &data_path))
+            .await
+            .map_err(|e| {
+                error!("Storage stats task failed: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Storage stats task failed".to_string(),
+                )
+            })?
+            .map_err(|e| {
+                error!("Failed to calculate storage stats: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to calculate storage stats: {}", e),
+                )
+            })?;
 
     Ok(Json(stats))
 }

@@ -1,7 +1,7 @@
 use crate::config::{SocketType, Target};
 use crate::failure_streak::{FailureStreak, Transition};
 use crate::ping::perform_ping;
-use crate::storage::write_ping_result;
+use crate::storage::write::write_ping_result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::AbortHandle;
@@ -54,8 +54,13 @@ pub fn start_ping_task(
                     last_error = result.error.clone();
                 }
 
-                // Write result to tsink
-                let write_result = write_ping_result(&*storage, &result);
+                // Inserts can block on WAL I/O and shard locks shared with the
+                // migration, so keep them off the async runtime threads.
+                let storage = Arc::clone(&storage);
+                let write_result =
+                    tokio::task::spawn_blocking(move || write_ping_result(&*storage, &result))
+                        .await
+                        .unwrap_or_else(|e| Err(tsink::TsinkError::Other(e.to_string())));
                 match write_errors.record(Instant::now(), write_result.is_ok()) {
                     Transition::Unchanged => {}
                     Transition::Started => {

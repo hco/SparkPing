@@ -42,6 +42,25 @@ function formatTimestamp(timestamp: number): string {
   })
 }
 
+/**
+ * Time range of stored data for a target. The latest point is only looked up
+ * in the past week, so long-silent targets show just their first point.
+ */
+function TargetDataRange({ stats }: { stats: TargetStorageStats | undefined }) {
+  if (stats?.earliest_timestamp == null) return null
+  const latest = stats.latest_timestamp
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+      <Calendar className="size-3" />
+      <span className="truncate">
+        {latest == null
+          ? `Since ${formatTimestamp(stats.earliest_timestamp)}`
+          : `${formatTimestamp(stats.earliest_timestamp)} — ${formatTimestamp(latest)}`}
+      </span>
+    </div>
+  )
+}
+
 function Settings() {
   const queryClient = useQueryClient()
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -172,6 +191,12 @@ function Settings() {
       <header className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your ping targets</p>
+          {storageStats && (
+            <p className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+              <HardDrive className="size-3.5" />
+              Database size: {formatBytes(storageStats.total_size_bytes)}
+            </p>
+          )}
         </header>
 
         {error && (
@@ -291,21 +316,8 @@ function Settings() {
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>{target.ping_count} pings</span>
                         <span>{target.ping_interval}s interval</span>
-                        {storageByTarget.get(target.id) && (
-                          <span className="flex items-center gap-1">
-                            <HardDrive className="size-3" />
-                            {formatBytes(storageByTarget.get(target.id)!.size_bytes)}
-                          </span>
-                        )}
                       </div>
-                      {storageByTarget.get(target.id)?.earliest_timestamp && storageByTarget.get(target.id)?.latest_timestamp && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="size-3" />
-                          <span className="truncate">
-                            {formatTimestamp(storageByTarget.get(target.id)!.earliest_timestamp!)} — {formatTimestamp(storageByTarget.get(target.id)!.latest_timestamp!)}
-                          </span>
-                        </div>
-                      )}
+                      <TargetDataRange stats={storageByTarget.get(target.id)} />
                     </CardContent>
                   )}
                 </Card>

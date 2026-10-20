@@ -106,8 +106,6 @@ export interface TargetRequest {
 
 export interface TargetStorageStats {
   target_id: string;
-  size_bytes: number;
-  data_point_count: number;
   earliest_timestamp: number | null;
   latest_timestamp: number | null;
 }

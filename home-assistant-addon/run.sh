@@ -59,6 +59,16 @@ fi
 
 bashio::log.info "Ingress only: $INGRESS_ONLY"
 
+# Data retention: unset keeps all data
+sed -i '/^retention_days = /d' "$CONFIG_PATH"
+if bashio::config.has_value 'retention_days'; then
+    RETENTION_DAYS=$(bashio::config 'retention_days')
+    sed -i "/^path = /a retention_days = $RETENTION_DAYS" "$CONFIG_PATH"
+    bashio::log.info "Retention: $RETENTION_DAYS days"
+else
+    bashio::log.info "Retention: unlimited"
+fi
+
 # Ensure required directories exist
 mkdir -p /data/tsink-data
 mkdir -p "$(dirname "$(grep '^file = ' "$CONFIG_PATH" | cut -d'"' -f2)")" 2>/dev/null || true

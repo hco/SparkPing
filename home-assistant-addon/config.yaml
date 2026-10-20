@@ -22,3 +22,4 @@ schema:
   log_level: list(trace|debug|info|warn|error)
   ingress_only: bool
   ping_socket_type: list(dgram_native|dgram|raw)
+  retention_days: int(1,)?

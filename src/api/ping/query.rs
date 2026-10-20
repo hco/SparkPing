@@ -1,12 +1,8 @@
-use super::dto::{
-    BucketDataPoint, PartitionMetadata, Percentiles, PingDataPoint, PingStatistics,
-    TargetStorageStats, TimeRangeValue,
-};
+use super::dto::{BucketDataPoint, Percentiles, PingDataPoint, PingStatistics, TimeRangeValue};
 use crate::config::Target;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use std::fs;
-use tracing::{debug, warn};
+use tracing::debug;
 use tsink::{DataPoint, Label, Storage};
 
 /// Internal query structure with resolved timestamps
@@ -87,7 +83,7 @@ pub(super) fn query_ping_data_with_labels(
                         target_name: target_name.clone(),
                         sequence: 0,
                         success,
-                        latency_ms: if success { Some(point.value) } else { None },
+                        latency_ms: if success { point.value.as_f64() } else { None },
                         metric_type: metric_name.to_string(),
                     });
                 }
@@ -125,7 +121,7 @@ pub(super) fn query_ping_data_with_labels(
                                 target_name: label_target_name.clone(),
                                 sequence,
                                 success,
-                                latency_ms: if success { Some(point.value) } else { None },
+                                latency_ms: if success { point.value.as_f64() } else { None },
                                 metric_type: metric_name.to_string(),
                             });
                         }
@@ -165,7 +161,7 @@ pub(super) fn query_ping_data_with_labels(
                         target_name: target_name.clone(),
                         sequence,
                         success,
-                        latency_ms: if success { Some(point.value) } else { None },
+                        latency_ms: if success { point.value.as_f64() } else { None },
                         metric_type: metric_name.to_string(),
                     });
                 }
@@ -409,7 +405,9 @@ pub(super) fn query_ping_aggregated_chunked(
                 });
 
                 if is_latency {
-                    acc.add_latency(point.value);
+                    if let Some(latency) = point.value.as_f64() {
+                        acc.add_latency(latency);
+                    }
                 } else {
                     acc.add_failure();
                 }
@@ -476,7 +474,9 @@ pub(super) fn query_ping_aggregated_chunked(
                         });
 
                         if is_latency {
-                            acc.add_latency(point.value);
+                            if let Some(latency) = point.value.as_f64() {
+                                acc.add_latency(latency);
+                            }
                         } else {
                             acc.add_failure();
                         }
@@ -647,162 +647,6 @@ pub(super) fn calculate_statistics(points: &[PingDataPoint]) -> PingStatistics {
         max_latency_ms,
         success_rate,
     }
-}
-
-/// Extract target_id from a hex-encoded metric name
-/// The format is: 2-byte LE length + metric_name, then pairs of (2-byte LE length + label_name, 2-byte LE length + label_value)
-fn extract_target_id_from_metric_name(hex_name: &str) -> Option<String> {
-    // Decode hex to bytes
-    let bytes = hex::decode(hex_name).ok()?;
-
-    let mut pos = 0;
-
-    // Helper to read a 2-byte little-endian length and the following string
-    let read_string = |bytes: &[u8], pos: &mut usize| -> Option<String> {
-        if *pos + 2 > bytes.len() {
-            return None;
-        }
-        let len = (bytes[*pos] as usize) | ((bytes[*pos + 1] as usize) << 8);
-        *pos += 2;
-
-        if *pos + len > bytes.len() {
-            return None;
-        }
-        let s = String::from_utf8_lossy(&bytes[*pos..*pos + len]).to_string();
-        *pos += len;
-        Some(s)
-    };
-
-    // Skip the metric name (first string)
-    read_string(&bytes, &mut pos)?;
-
-    // Read label pairs
-    while pos < bytes.len() {
-        let label_name = read_string(&bytes, &mut pos)?;
-        let label_value = read_string(&bytes, &mut pos)?;
-
-        if label_name == "target_id" {
-            return Some(label_value);
-        }
-    }
-
-    None
-}
-
-/// Calculate storage statistics per target by reading tsink partition metadata
-pub(super) fn calculate_storage_stats(
-    data_path: &str,
-) -> Result<super::dto::StorageStatsResponse, Box<dyn std::error::Error + Send + Sync>> {
-    use super::dto::StorageStatsResponse;
-
-    let data_dir = std::path::Path::new(data_path);
-    let mut target_stats: HashMap<String, TargetStorageStats> = HashMap::new();
-    let mut total_size: u64 = 0;
-
-    // Read all partition directories
-    if data_dir.exists() {
-        for entry in fs::read_dir(data_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            // Skip non-directories and the wal directory
-            if !path.is_dir() {
-                continue;
-            }
-
-            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if dir_name == "wal" || !dir_name.starts_with("p-") {
-                continue;
-            }
-
-            // Read meta.json
-            let meta_path = path.join("meta.json");
-            if !meta_path.exists() {
-                continue;
-            }
-
-            // Also add the data file size
-            let data_path = path.join("data");
-            if data_path.exists() {
-                if let Ok(metadata) = fs::metadata(&data_path) {
-                    total_size += metadata.len();
-                }
-            }
-
-            let meta_content = match fs::read_to_string(&meta_path) {
-                Ok(content) => content,
-                Err(e) => {
-                    warn!("Failed to read meta.json at {:?}: {}", meta_path, e);
-                    continue;
-                }
-            };
-
-            let partition_meta: PartitionMetadata = match serde_json::from_str(&meta_content) {
-                Ok(meta) => meta,
-                Err(e) => {
-                    warn!("Failed to parse meta.json at {:?}: {}", meta_path, e);
-                    continue;
-                }
-            };
-
-            // Process each metric in the partition
-            for (_metric_key, metric_meta) in partition_meta.metrics {
-                // Extract target_id from the metric name (which is hex-encoded)
-                if let Some(target_id) = extract_target_id_from_metric_name(&metric_meta.name) {
-                    let stats =
-                        target_stats
-                            .entry(target_id.clone())
-                            .or_insert(TargetStorageStats {
-                                target_id,
-                                size_bytes: 0,
-                                data_point_count: 0,
-                                earliest_timestamp: None,
-                                latest_timestamp: None,
-                            });
-                    stats.size_bytes += metric_meta.encoded_size;
-                    stats.data_point_count += metric_meta.num_data_points;
-
-                    // Update earliest timestamp
-                    stats.earliest_timestamp = Some(match stats.earliest_timestamp {
-                        Some(current) => current.min(metric_meta.min_timestamp),
-                        None => metric_meta.min_timestamp,
-                    });
-
-                    // Update latest timestamp
-                    stats.latest_timestamp = Some(match stats.latest_timestamp {
-                        Some(current) => current.max(metric_meta.max_timestamp),
-                        None => metric_meta.max_timestamp,
-                    });
-                }
-            }
-        }
-    }
-
-    // Add WAL size to total
-    let wal_dir = data_dir.join("wal");
-    if wal_dir.exists() {
-        for entry in fs::read_dir(&wal_dir)? {
-            let entry = entry?;
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.is_file() {
-                    total_size += metadata.len();
-                }
-            }
-        }
-    }
-
-    // If we don't have partition data contributing to total, sum up target sizes
-    if total_size == 0 {
-        total_size = target_stats.values().map(|s| s.size_bytes).sum();
-    }
-
-    let mut targets: Vec<TargetStorageStats> = target_stats.into_values().collect();
-    targets.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
-
-    Ok(StorageStatsResponse {
-        total_size_bytes: total_size,
-        targets,
-    })
 }
 
 #[cfg(test)]

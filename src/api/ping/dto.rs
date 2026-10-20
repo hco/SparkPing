@@ -1,5 +1,4 @@
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::HashMap;
 
 /// Query parameters for the ping data API
 #[derive(Debug)]
@@ -327,10 +326,6 @@ pub struct PingAggregatedResponse {
 pub struct TargetStorageStats {
     /// Target ID
     pub target_id: String,
-    /// Total storage size in bytes
-    pub size_bytes: u64,
-    /// Total number of data points
-    pub data_point_count: u64,
     /// Earliest data point timestamp (Unix seconds)
     pub earliest_timestamp: Option<i64>,
     /// Latest data point timestamp (Unix seconds)
@@ -340,34 +335,8 @@ pub struct TargetStorageStats {
 /// API response for storage statistics
 #[derive(Debug, Serialize)]
 pub struct StorageStatsResponse {
-    /// Total storage size in bytes (all targets)
+    /// Size of the data directory on disk in bytes
     pub total_size_bytes: u64,
     /// Storage stats per target
     pub targets: Vec<TargetStorageStats>,
-}
-
-/// Metadata structure for tsink partition files
-#[derive(Debug, Deserialize)]
-pub struct PartitionMetadata {
-    #[allow(dead_code)]
-    pub min_timestamp: i64,
-    #[allow(dead_code)]
-    pub max_timestamp: i64,
-    #[allow(dead_code)]
-    pub num_data_points: u64,
-    pub metrics: HashMap<String, MetricMetadata>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct MetricMetadata {
-    #[allow(dead_code)]
-    pub name: String,
-    #[allow(dead_code)]
-    pub offset: u64,
-    pub encoded_size: u64,
-    #[allow(dead_code)]
-    pub min_timestamp: i64,
-    #[allow(dead_code)]
-    pub max_timestamp: i64,
-    pub num_data_points: u64,
 }

@@ -71,6 +71,9 @@ fn default_log_max_files() -> usize {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DatabaseConfig {
     pub path: String,
+    /// Delete data older than this many days. Unset keeps data forever.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_days: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

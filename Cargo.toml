@@ -10,7 +10,7 @@ serde = { version = "1.0", features = ["derive"] }
 # Pinned: 0.6.1+ changed the Gorilla codec's leading-zero-count sentinel and
 # cannot decode partitions written by this version or earlier. Do not bump
 # past 0.5.x without a data migration.
-tsink = "=0.5.0"
+tsink = "=0.10.2"
 ping = "0.7"
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -25,7 +25,6 @@ toml_edit = "0.22"
 notify = "7.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 libc = "0.2"
-hex = "0.4"
 mdns-sd = "0.11"
 flume = "0.11"
 axum-extra = { version = "0.9", features = ["typed-header"] }
@@ -41,3 +40,6 @@ file-rotate = "0.8.0"
 
 [target.'cfg(not(any(target_env = "msvc", target_env = "musl")))'.dependencies]
 tikv-jemallocator = "0.7"
+
+[dev-dependencies]
+tempfile = "3.27.0"
