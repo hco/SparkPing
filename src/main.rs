@@ -20,6 +20,8 @@ use crate::api::create_router;
 use crate::config::AppConfig;
 use crate::logging::init_logging;
 use crate::storage::legacy_layout::move_legacy_data_aside;
+use crate::storage::migration::spawn_migration;
+use crate::storage::migration::status::{MigrationState, MigrationStatus};
 use crate::storage::open::open_storage;
 use crate::tasks::start_ping_task;
 use clap::Parser;
@@ -514,6 +516,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     );
     log_memory_usage("after storage open");
+
+    // Migrate old data in the background so pings and the UI start right away.
+    let migration_status = Arc::new(MigrationStatus::new(MigrationState::NotNeeded));
+    let migration = match legacy_dir {
+        Some(dir) => {
+            migration_status.set(MigrationState::Running {
+                percent: 0,
+                points_migrated: 0,
+            });
+            Some(spawn_migration(
+                Arc::clone(&storage),
+                dir,
+                app_config.database.retention_days,
+                Arc::clone(&migration_status),
+            )?)
+        }
+        None => None,
+    };
     info!("Starting ping loop (each target runs independently in parallel)...");
     for target in &app_config.targets {
         info!(
@@ -752,6 +772,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ = shutdown_task => {
             info!("Shutdown handler completed");
+        }
+    }
+
+    if let Some(migration) = migration {
+        info!("Stopping migration...");
+        if let Err(e) = tokio::task::spawn_blocking(move || migration.stop_and_wait()).await {
+            error!("Failed to stop migration: {}", e);
         }
     }
 

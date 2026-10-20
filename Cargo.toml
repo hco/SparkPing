@@ -36,6 +36,8 @@ reqwest = "0.13.1"
 quick-xml = { version = "0.38.4", features = ["serde", "serialize"] }
 socket2 = "0.6.3"
 file-rotate = "0.8.0"
+# Only reads tsink 0.5 data during the migration to 0.10 (see ADR 0003).
+tsink_legacy = { version = "=0.5.0", package = "tsink" }
 
 [target.'cfg(not(any(target_env = "msvc", target_env = "musl")))'.dependencies]
 tikv-jemallocator = "0.7"

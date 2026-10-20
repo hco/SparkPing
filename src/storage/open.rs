@@ -20,6 +20,10 @@ pub fn open_storage(config: &DatabaseConfig) -> tsink::Result<Arc<dyn Storage>> 
         // Larger chunks keep the in-memory index of persisted data small
         // (about 0.3 MB per day of data instead of 0.9 MB with the default).
         .with_chunk_points(8192)
+        // Day-long partitions keep the chunk count low (a chunk never spans
+        // partitions) and let late writes reach back 8 days, the default
+        // number of open partitions per series.
+        .with_partition_duration(Duration::from_secs(24 * 3600))
         .with_max_writers(16)
         .with_write_timeout(Duration::from_secs(60));
 
