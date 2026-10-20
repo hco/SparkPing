@@ -79,6 +79,9 @@ impl std::fmt::Display for ReadError {
 /// Reads all series of a legacy partition. Opens only this partition, so it
 /// holds a single file descriptor.
 pub fn read_partition(path: &Path) -> Result<Vec<LegacySeries>, ReadError> {
+    if is_failed_flush_leftover(path).map_err(|e| ReadError::Legacy(e.into()))? {
+        return Err(ReadError::Empty);
+    }
     // A zero retention disables tsink 0.5's expiry check.
     let partition = match DiskPartition::open(path, Duration::ZERO) {
         Ok(partition) => partition,
@@ -116,6 +119,21 @@ pub fn read_partition(path: &Path) -> Result<Vec<LegacySeries>, ReadError> {
     Ok(series)
 }
 
+/// tsink 0.5 writes the data file before meta.json, so a flush that failed
+/// (for example on the open-files limit) leaves only empty files behind.
+fn is_failed_flush_leftover(path: &Path) -> io::Result<bool> {
+    if path.join("meta.json").exists() {
+        return Ok(false);
+    }
+    for entry in std::fs::read_dir(path)? {
+        let metadata = entry?.metadata()?;
+        if !metadata.is_file() || metadata.len() > 0 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +144,21 @@ mod tests {
         assert_eq!(parse_partition_name("p-100"), None);
         assert_eq!(parse_partition_name("wal"), None);
         assert_eq!(parse_partition_name("p-a-b"), None);
+    }
+
+    #[test]
+    fn empty_files_without_metadata_are_a_failed_flush() {
+        let dir = tempfile::tempdir().unwrap();
+        let partition = dir.path().join("p-100-100");
+        std::fs::create_dir(&partition).unwrap();
+        std::fs::write(partition.join("data"), b"").unwrap();
+        assert!(matches!(read_partition(&partition), Err(ReadError::Empty)));
+
+        // Data without metadata may still be worth a look; keep it.
+        std::fs::write(partition.join("data"), b"x").unwrap();
+        assert!(matches!(
+            read_partition(&partition),
+            Err(ReadError::Legacy(_))
+        ));
     }
 }
