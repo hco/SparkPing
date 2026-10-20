@@ -28,7 +28,8 @@ fn select_target_data(
 ) -> Result<Vec<DataPoint>, Box<dyn std::error::Error + Send + Sync>> {
     let mut all_points = Vec::new();
 
-    for seq in 0..target_config.ping_count {
+    // Sequences are numbered from 1, matching start_ping_task
+    for seq in 1..=target_config.ping_count {
         let mut labels = vec![
             Label::new("target_id", &target_config.id),
             Label::new("target", &target_config.address),
