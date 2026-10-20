@@ -1,4 +1,5 @@
 use crate::config::AppConfig;
+use crate::health::HealthMonitor;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -14,4 +15,5 @@ pub struct AppState {
     pub task_handles: Arc<RwLock<HashMap<String, tokio::task::AbortHandle>>>,
     pub write_flag: Arc<AtomicBool>,
     pub config_path: PathBuf,
+    pub health: Arc<HealthMonitor>,
 }

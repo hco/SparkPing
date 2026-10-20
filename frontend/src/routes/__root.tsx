@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { HealthBanner } from '@/components/HealthBanner'
 import LogoLight from '@/assets/logo/sparkping_logo.svg'
 import LogoDark from '@/assets/logo/sparkping_logo_dark.svg'
 import { type TimeRangeSearchParams, validateTimeRangeSearch } from '@/utils/timeRangeUtils'
@@ -23,6 +24,7 @@ function RootComponent() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navigation />
+      <HealthBanner />
       <main>
         <Outlet />
       </main>

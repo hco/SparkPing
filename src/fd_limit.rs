@@ -55,6 +55,31 @@ fn max_settable_soft_limit(hard: libc::rlim_t) -> libc::rlim_t {
     hard
 }
 
+/// Current soft open-files limit, or None if it cannot be read.
+pub fn current_soft_limit() -> Option<u64> {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+        return None;
+    }
+    Some(limit.rlim_cur)
+}
+
+/// Number of file descriptors currently open by this process.
+pub fn open_fd_count() -> Option<usize> {
+    #[cfg(target_os = "linux")]
+    let dir = "/proc/self/fd";
+    #[cfg(not(target_os = "linux"))]
+    let dir = "/dev/fd";
+
+    // read_dir itself holds one descriptor while iterating
+    std::fs::read_dir(dir)
+        .ok()
+        .map(|entries| entries.count().saturating_sub(1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

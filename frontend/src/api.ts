@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest, StorageStatsResponse, SubnetSuggestion } from './types';
+import type { PingAggregatedResponse, PingAggregatedQuery, Target, TargetRequest, StorageStatsResponse, SubnetSuggestion, HealthReport } from './types';
 import { getBasePath } from './lib/basePath';
 
 // Use dynamic base path for Home Assistant ingress support
@@ -61,6 +61,11 @@ export async function deleteTarget(id: string): Promise<void> {
 
 export async function fetchStorageStats(): Promise<StorageStatsResponse> {
   const response = await apiClient.get<StorageStatsResponse>('/api/storage/stats');
+  return response.data;
+}
+
+export async function fetchHealth(): Promise<HealthReport> {
+  const response = await apiClient.get<HealthReport>('/api/health');
   return response.data;
 }
 

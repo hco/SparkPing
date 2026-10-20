@@ -115,6 +115,33 @@ export interface StorageStatsResponse {
   targets: TargetStorageStats[];
 }
 
+// Health types (GET /api/health)
+
+export type HealthStatus = 'ok' | 'degraded' | 'error';
+
+export interface HealthIssue {
+  kind: 'storage' | 'open_files' | 'writes' | 'migration';
+  severity: HealthStatus;
+  message: string;
+}
+
+/** Progress of the one-time migration of data written by SparkPing 0.2.x */
+export type MigrationState =
+  | { state: 'not_needed' }
+  | { state: 'running'; percent: number; points_migrated: number }
+  | { state: 'completed'; failed_partitions: number; points_migrated: number }
+  | { state: 'failed'; error: string };
+
+export interface HealthReport {
+  status: HealthStatus;
+  issues: HealthIssue[];
+  open_files: number | null;
+  open_files_limit: number | null;
+  /** Unix time (seconds) of the last stored ping result */
+  last_write_at: number | null;
+  migration: MigrationState;
+}
+
 // Device discovery types
 
 /** Sonos vendor-specific information */

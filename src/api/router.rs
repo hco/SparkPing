@@ -1,11 +1,13 @@
 use crate::api::{
     discovery::{get_subnets, start_unified_discovery},
+    health::handlers as health_handlers,
     middleware::ingress_ip_filter_middleware,
     ping::handlers as ping_handlers,
     targets::handlers as target_handlers,
     AppState,
 };
 use crate::config::AppConfig;
+use crate::health::HealthMonitor;
 use axum::http::{header, HeaderValue};
 use axum::{
     routing::{get, put},
@@ -30,6 +32,7 @@ pub fn create_router(
     write_flag: Arc<AtomicBool>,
     config_path: PathBuf,
     static_dir: Option<PathBuf>,
+    health: Arc<HealthMonitor>,
 ) -> Router {
     // Convert config_path to actual file path (config crate uses path without extension)
     // The API needs the full path with .toml extension to read/write the file
@@ -45,6 +48,7 @@ pub fn create_router(
         task_handles,
         write_flag,
         config_path: config_file_path,
+        health,
     };
 
     // Check if ingress-only filtering is enabled
@@ -70,6 +74,7 @@ pub fn create_router(
             put(target_handlers::update_target).delete(target_handlers::delete_target),
         )
         .route("/api/storage/stats", get(ping_handlers::get_storage_stats))
+        .route("/api/health", get(health_handlers::get_health))
         .route("/api/discovery/subnets", get(get_subnets))
         .route("/api/discovery/unified", get(start_unified_discovery))
         .with_state(state);

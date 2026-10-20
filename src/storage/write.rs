@@ -1,5 +1,14 @@
 use crate::ping::PingResult;
+use std::sync::atomic::{AtomicI64, Ordering};
 use tsink::{DataPoint, Label, Row};
+
+/// Unix time of the last successful write, 0 if none yet.
+static LAST_SUCCESSFUL_WRITE: AtomicI64 = AtomicI64::new(0);
+
+/// Unix time of the last ping result written successfully by this process.
+pub fn last_successful_write() -> Option<i64> {
+    Some(LAST_SUCCESSFUL_WRITE.load(Ordering::Relaxed)).filter(|ts| *ts > 0)
+}
 
 pub fn write_ping_result(storage: &dyn tsink::Storage, result: &PingResult) -> tsink::Result<()> {
     // Convert timestamp to Unix timestamp (seconds)
@@ -29,6 +38,7 @@ pub fn write_ping_result(storage: &dyn tsink::Storage, result: &PingResult) -> t
 
     // Insert the row into tsink
     storage.insert_rows(&[row])?;
+    LAST_SUCCESSFUL_WRITE.store(chrono::Utc::now().timestamp(), Ordering::Relaxed);
 
     Ok(())
 }

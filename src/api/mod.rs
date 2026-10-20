@@ -1,4 +1,5 @@
 mod discovery;
+mod health;
 mod middleware;
 pub mod ping;
 mod router;

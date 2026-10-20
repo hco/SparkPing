@@ -6,6 +6,7 @@ mod device_identification;
 mod discovery;
 mod failure_streak;
 mod fd_limit;
+mod health;
 mod icmp;
 mod ip_scan;
 mod logging;
@@ -18,6 +19,7 @@ mod vendor_discovery;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
+use crate::health::{spawn_health_log, HealthMonitor};
 use crate::logging::init_logging;
 use crate::storage::legacy_layout::move_legacy_data_aside;
 use crate::storage::migration::spawn_migration;
@@ -586,6 +588,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Static file serving disabled (no static directory found)");
     }
 
+    let health = Arc::new(HealthMonitor::new(
+        Arc::clone(&storage),
+        Arc::clone(&config_state),
+        Arc::clone(&migration_status),
+    ));
+    let health_log = spawn_health_log(Arc::clone(&health));
+
     // Create HTTP API router with shared state
     let app = create_router(
         Arc::clone(&storage),
@@ -594,6 +603,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&write_flag),
         config_path.clone(),
         static_dir,
+        health,
     );
     let addr: SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
@@ -775,6 +785,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    health_log.abort();
     if let Some(migration) = migration {
         info!("Stopping migration...");
         if let Err(e) = tokio::task::spawn_blocking(move || migration.stop_and_wait()).await {
