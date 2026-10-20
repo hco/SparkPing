@@ -41,21 +41,42 @@ The backend follows Rust best practices with a clear separation of concerns.
 - Logging initialization and setup
 - Custom time formatters
 - Tracing subscriber configuration (console + file output)
+- Size-based log file rotation (`logging.max_size_mb`, `logging.max_files`)
+
+#### `src/fd_limit.rs`
+- Raises the open-files soft limit to the hard limit at startup
+- Current soft limit and open descriptor count for the health report
+
+#### `src/memory.rs`
+- Periodic memory logging (RSS, split into anonymous and file-backed on Linux)
+
+#### `src/health.rs`
+- `HealthMonitor` builds the health report: storage stopped or degraded, open files near the limit, stalled ping writes, migration state
+- Background task that logs health changes and reminds while unhealthy
 
 #### `src/ping.rs`
 - `PingResult` struct definition
 - `perform_ping()` function - executes ICMP ping operations
 - Support for both dgram (unprivileged) and raw (privileged) sockets
 
-#### `src/storage.rs`
-- `write_ping_result()` function - writes ping results to tsink
-- Data point creation with labels and metrics
-- Stores `ping_latency` and `ping_failed` metrics
+#### `src/storage/`
+tsink 0.10 storage and the migration of tsink 0.5 data (see ADR 0003).
+- `open.rs` - `open_storage()` with SparkPing's tsink settings (WAL, chunk size, partitions, retention)
+- `write.rs` - `write_ping_result()` stores `ping_latency` and `ping_failed`, tracks the last successful write
+- `legacy_layout.rs` - Moves tsink 0.5 partitions and WAL segments to `legacy-v05/` before tsink 0.10 opens the directory
+- `migration/` - Background migration of `legacy-v05/` into the new storage
+  - `mod.rs` - `spawn_migration()`, oldest-first merge of partitions and WAL, verification, deletion
+  - `partitions.rs` - Lists and reads tsink 0.5 partitions one at a time
+  - `legacy_wal.rs` - Streams rows from tsink 0.5 WAL segments
+  - `status.rs` - `MigrationStatus` shared with the health report
 
 #### `src/tasks.rs`
 - `start_ping_task()` - spawns async ping tasks for targets
 - Returns `AbortHandle` for task lifecycle management
 - Configurable ping count and interval per target
+
+#### `src/failure_streak.rs`
+- Tracks runs of ping and write failures so only state changes (and hourly reminders) are logged
 
 #### `src/discovery.rs`
 - Network device discovery via mDNS (multicast DNS)
@@ -98,7 +119,7 @@ REST API built with Axum.
 
 #### `src/api/state.rs`
 - `AppState` struct - shared state for API handlers
-- Contains storage, config, task handles, config path
+- Contains storage, config, task handles, config path, health monitor
 
 #### `src/api/middleware.rs`
 - Home Assistant ingress IP filtering
@@ -108,6 +129,9 @@ REST API built with Axum.
 - `handlers.rs` - GET `/api/ping/data`, `/api/ping/aggregated`, `/api/storage/stats`
 - `dto.rs` - Data transfer objects for ping responses
 - `query.rs` - Query parameter structures
+
+#### `src/api/health/`
+- `handlers.rs` - GET `/api/health`
 
 #### `src/api/targets/`
 - `handlers.rs` - CRUD handlers for targets
@@ -133,7 +157,7 @@ Single-page application built with Vite, React, and TanStack Router.
 ### Routes (`src/routes/`)
 
 #### `__root.tsx`
-- Root layout with navigation
+- Root layout with navigation and health banner
 - Theme provider setup
 
 #### `index.tsx`
@@ -160,6 +184,7 @@ Single-page application built with Vite, React, and TanStack Router.
 - `smoke-chart/` - Smoke ping visualization (see `smoke-chart/ARCHITECTURE.md` for detailed component documentation)
 
 #### Feature Components
+- `HealthBanner.tsx` - Shows problems from `/api/health` and the data migration progress
 - `UnifiedDiscoveryPanel.tsx` - Unified device discovery UI (mDNS + IP scan)
 - `TimeRangePicker.tsx` - Time range selection with presets
 - `DurationPicker.tsx` - Duration input component
@@ -227,6 +252,7 @@ Integration for running SparkPing as a Home Assistant add-on.
 | `/api/targets/:id` | PUT | Update target |
 | `/api/targets/:id` | DELETE | Delete target |
 | `/api/storage/stats` | GET | Storage statistics |
+| `/api/health` | GET | Health report and migration progress |
 | `/api/discovery/subnets` | GET | Get suggested subnets for IP scanning |
 | `/api/discovery/unified` | GET (SSE) | Stream unified discovery events (mDNS + IP scan, merged) |
 
