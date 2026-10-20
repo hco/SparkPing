@@ -2928,7 +2928,7 @@ dependencies = [
 [[package]]
 name = "tsink"
 version = "0.10.2"
-source = "git+https://github.com/hco/tsink?rev=d358b7516d701f38a229175657ad112ae1d90a42#d358b7516d701f38a229175657ad112ae1d90a42"
+source = "git+https://github.com/hco/tsink?rev=101a87096fdb935fb0552504fe3c0c0ff3588e87#101a87096fdb935fb0552504fe3c0c0ff3588e87"
 dependencies = [
  "async-channel",
  "bincode",
