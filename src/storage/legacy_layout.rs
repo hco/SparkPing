@@ -93,20 +93,30 @@ fn unused_path(dir: &Path, source: &Path) -> PathBuf {
 /// Returns tsink 0.5 WAL segments (`NNNNNN.wal`) in `dir`, oldest first.
 /// tsink 0.10 names its segments `wal-*.log`, so they are never matched.
 pub fn legacy_wal_segments(dir: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut segments: Vec<(u64, PathBuf)> = Vec::new();
+    let mut segments: Vec<((u64, u64), PathBuf)> = Vec::new();
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
         if path.extension().is_some_and(|ext| ext == "wal") {
-            let index = path
+            let order = path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
-                .and_then(|stem| stem.parse().ok())
-                .unwrap_or(u64::MAX);
-            segments.push((index, path));
+                .map(segment_order)
+                .unwrap_or((u64::MAX, 0));
+            segments.push((order, path));
         }
     }
     segments.sort();
     Ok(segments.into_iter().map(|(_, path)| path).collect())
+}
+
+/// Sort key for a segment stem: `000002` is (2, 0), and `000002-1`, renamed by
+/// `unused_path` because it was moved later, is (2, 1).
+fn segment_order(stem: &str) -> (u64, u64) {
+    let (index, suffix) = stem.split_once('-').unwrap_or((stem, "0"));
+    (
+        index.parse().unwrap_or(u64::MAX),
+        suffix.parse().unwrap_or(u64::MAX),
+    )
 }
 
 #[cfg(test)]
@@ -169,6 +179,26 @@ mod tests {
 
         // Nothing left to move: still reports the pending legacy data.
         assert_eq!(move_legacy_data_aside(data).unwrap(), Some(legacy));
+    }
+
+    #[test]
+    fn repeated_segment_names_are_kept_and_ordered_by_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path();
+        touch(&data.join(LEGACY_DIR).join("wal/000002.wal"));
+        touch(&data.join(LEGACY_DIR).join("wal/000003.wal"));
+        touch(&data.join("wal/000002.wal"));
+
+        let legacy = move_legacy_data_aside(data).unwrap().unwrap();
+
+        assert_eq!(
+            legacy_wal_segments(&legacy.join("wal")).unwrap(),
+            vec![
+                legacy.join("wal/000002.wal"),
+                legacy.join("wal/000002-1.wal"),
+                legacy.join("wal/000003.wal"),
+            ]
+        );
     }
 
     #[test]
