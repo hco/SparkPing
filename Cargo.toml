@@ -45,7 +45,8 @@ tikv-jemallocator = "0.7"
 [dev-dependencies]
 tempfile = "3.27.0"
 
-# tsink 0.10.2 with a fix for a WAL reset race that trips background fail-fast
-# and makes the storage reject all operations. Drop once fixed upstream.
+# tsink 0.10.2 with two fixes, drop once fixed upstream: a WAL reset race that
+# trips background fail-fast and makes the storage reject all operations, and
+# compaction loading a whole level into memory (OOM during large imports).
 [patch.crates-io]
-tsink = { git = "https://github.com/hco/tsink", rev = "ccc9450847fabd58c14672b7976fbdd8758b73d6" }
+tsink = { git = "https://github.com/hco/tsink", rev = "d358b7516d701f38a229175657ad112ae1d90a42" }
