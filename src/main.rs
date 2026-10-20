@@ -4,6 +4,7 @@ mod config_file;
 mod config_wizard;
 mod device_identification;
 mod discovery;
+mod fd_limit;
 mod icmp;
 mod ip_scan;
 mod logging;
@@ -650,11 +651,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config_file::write_config_file(&config_path, &doc, &write_flag)?;
     }
 
+    // Raise the open-files limit before storage and ping sockets start competing for it
+    let nofile_limits = fd_limit::raise_nofile_limit();
+
     // Initialize logging before any other output
     init_logging(&app_config.logging).map_err(|e| {
         eprintln!("ERROR: Failed to initialize logging: {}", e);
         e
     })?;
+
+    match nofile_limits {
+        Ok(limits) => info!(
+            "Open files limit: soft {} (was {}), hard {}",
+            limits.soft, limits.previous_soft, limits.hard
+        ),
+        Err(e) => warn!("Failed to raise open files limit: {}", e),
+    }
 
     // Start background memory monitor (logs peak RSS every 60s)
     memory::start_memory_monitor();

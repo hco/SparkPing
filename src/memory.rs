@@ -65,37 +65,53 @@ fn parse_status_kb(value: &str) -> Option<u64> {
         .map(|kb| kb * 1024)
 }
 
-/// Reads VmRSS/VmSize/VmData/VmSwap (in bytes) from /proc/self/status.
+/// Memory counters (in bytes) from /proc/self/status.
+#[derive(Default)]
+struct ProcStatus {
+    vm_rss: u64,
+    rss_anon: u64,
+    rss_file: u64,
+    vm_size: u64,
+    vm_data: u64,
+    vm_swap: u64,
+}
+
+/// Reads VmRSS/RssAnon/RssFile/VmSize/VmData/VmSwap from /proc/self/status.
 ///
 /// VmRSS alone can look flat and healthy while VmSize/VmData/VmSwap grow
 /// unbounded, because pages that leak and go cold get pushed to swap and drop
-/// out of RSS. Watch all four together, not just RSS.
+/// out of RSS. Watch all of them together, not just RSS.
+///
+/// tsink memory-maps its segment files and reads them all at startup, so VmRSS
+/// approaches the database size through RssFile. Those pages are reclaimable;
+/// RssAnon is the number that reflects heap growth.
 #[cfg(target_os = "linux")]
-fn get_proc_status() -> Option<(u64, u64, u64, u64)> {
+fn get_proc_status() -> Option<ProcStatus> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
 
-    let mut vm_rss = 0u64;
-    let mut vm_size = 0u64;
-    let mut vm_data = 0u64;
-    let mut vm_swap = 0u64;
+    let mut result = ProcStatus::default();
 
     for line in status.lines() {
         if let Some(v) = line.strip_prefix("VmRSS:") {
-            vm_rss = parse_status_kb(v).unwrap_or(0);
+            result.vm_rss = parse_status_kb(v).unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("RssAnon:") {
+            result.rss_anon = parse_status_kb(v).unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("RssFile:") {
+            result.rss_file = parse_status_kb(v).unwrap_or(0);
         } else if let Some(v) = line.strip_prefix("VmSize:") {
-            vm_size = parse_status_kb(v).unwrap_or(0);
+            result.vm_size = parse_status_kb(v).unwrap_or(0);
         } else if let Some(v) = line.strip_prefix("VmData:") {
-            vm_data = parse_status_kb(v).unwrap_or(0);
+            result.vm_data = parse_status_kb(v).unwrap_or(0);
         } else if let Some(v) = line.strip_prefix("VmSwap:") {
-            vm_swap = parse_status_kb(v).unwrap_or(0);
+            result.vm_swap = parse_status_kb(v).unwrap_or(0);
         }
     }
 
-    Some((vm_rss, vm_size, vm_data, vm_swap))
+    Some(result)
 }
 
 #[cfg(not(target_os = "linux"))]
-fn get_proc_status() -> Option<(u64, u64, u64, u64)> {
+fn get_proc_status() -> Option<ProcStatus> {
     None
 }
 
@@ -137,17 +153,21 @@ pub fn start_memory_monitor() {
                         format_bytes(peak_rss)
                     );
                 }
-                if let Some((vm_rss, vm_size, vm_data, vm_swap)) = get_proc_status() {
+                if let Some(status) = get_proc_status() {
                     info!(
-                        vm_rss_bytes = vm_rss,
-                        vm_size_bytes = vm_size,
-                        vm_data_bytes = vm_data,
-                        vm_swap_bytes = vm_swap,
-                        "Memory footprint: VmRSS={} VmSize={} VmData={} VmSwap={}",
-                        format_bytes(vm_rss),
-                        format_bytes(vm_size),
-                        format_bytes(vm_data),
-                        format_bytes(vm_swap)
+                        vm_rss_bytes = status.vm_rss,
+                        rss_anon_bytes = status.rss_anon,
+                        rss_file_bytes = status.rss_file,
+                        vm_size_bytes = status.vm_size,
+                        vm_data_bytes = status.vm_data,
+                        vm_swap_bytes = status.vm_swap,
+                        "Memory footprint: VmRSS={} (anon {}, file {}) VmSize={} VmData={} VmSwap={}",
+                        format_bytes(status.vm_rss),
+                        format_bytes(status.rss_anon),
+                        format_bytes(status.rss_file),
+                        format_bytes(status.vm_size),
+                        format_bytes(status.vm_data),
+                        format_bytes(status.vm_swap)
                     );
                 }
                 peak_rss = 0;
