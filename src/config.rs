@@ -52,6 +52,20 @@ pub struct ServerConfig {
 pub struct LoggingConfig {
     pub level: String,
     pub file: String,
+    /// Rotate the log file once it exceeds this size (default: 10 MB)
+    #[serde(default = "default_log_max_size_mb")]
+    pub max_size_mb: u64,
+    /// Number of rotated files to keep next to the active one (default: 5)
+    #[serde(default = "default_log_max_files")]
+    pub max_files: usize,
+}
+
+fn default_log_max_size_mb() -> u64 {
+    10
+}
+
+fn default_log_max_files() -> usize {
+    5
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

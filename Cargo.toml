@@ -37,6 +37,7 @@ console = "0.15"
 reqwest = "0.13.1"
 quick-xml = { version = "0.38.4", features = ["serde", "serialize"] }
 socket2 = "0.6.3"
+file-rotate = "0.8.0"
 
 [target.'cfg(not(any(target_env = "msvc", target_env = "musl")))'.dependencies]
 tikv-jemallocator = "0.7"

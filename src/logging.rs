@@ -1,5 +1,7 @@
 use crate::config::LoggingConfig;
+use file_rotate::{compression::Compression, suffix::AppendCount, ContentLimit, FileRotate};
 use std::fs::OpenOptions;
+use std::sync::Mutex;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Custom time formatter for human-readable dates
@@ -18,11 +20,23 @@ pub fn init_logging(log_config: &LoggingConfig) -> Result<(), Box<dyn std::error
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_level));
 
-    // Create file appender
-    let file = OpenOptions::new()
+    // FileRotate swallows open errors and silently drops log lines, so check
+    // up front that the file is writable.
+    OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_config.file)?;
+
+    // Size-based rotation keeps the log bounded; an unrotated log once grew
+    // to 15 GB on a Home Assistant install.
+    let max_bytes = usize::try_from(log_config.max_size_mb.max(1) * 1024 * 1024)?;
+    let file = FileRotate::new(
+        &log_config.file,
+        AppendCount::new(log_config.max_files),
+        ContentLimit::BytesSurpassed(max_bytes),
+        Compression::None,
+        None,
+    );
 
     // Build subscriber with both console and file outputs
     tracing_subscriber::registry()
@@ -34,7 +48,7 @@ pub fn init_logging(log_config: &LoggingConfig) -> Result<(), Box<dyn std::error
                 .with_timer(HumanReadableTimer)
                 .compact(), // More compact, readable format for console
         )
-        .with(fmt::layer().with_writer(file).with_ansi(false))
+        .with(fmt::layer().with_writer(Mutex::new(file)).with_ansi(false))
         .init();
 
     Ok(())
