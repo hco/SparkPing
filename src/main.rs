@@ -786,6 +786,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     health_log.abort();
+    // Stop pinging so results are not written while the storage closes
+    for (_, handle) in task_handles
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .drain()
+    {
+        handle.abort();
+    }
     if let Some(migration) = migration {
         info!("Stopping migration...");
         if let Err(e) = tokio::task::spawn_blocking(move || migration.stop_and_wait()).await {
