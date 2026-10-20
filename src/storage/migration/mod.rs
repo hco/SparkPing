@@ -33,6 +33,24 @@ const DELETE_DELAY: Duration = Duration::from_secs(2);
 const PROGRESS_LOG_INTERVAL: Duration = Duration::from_secs(30);
 /// Allowed growth of tsink's in-memory index before waiting for compaction.
 const INDEX_HEADROOM_BYTES: usize = 32 * 1024 * 1024;
+/// Where tsink keeps freshly flushed segments until compaction merges them
+/// (tsink's on-disk layout, not a public API).
+const L0_SEGMENTS_DIR: &str = "lane_numeric/segments/L0";
+/// Inserting pauses at this many unmerged segments and resumes at the lower
+/// number. A bulk import writes segments faster than compaction merges them;
+/// the backlog makes compaction and closing slow.
+const L0_BACKLOG_PAUSE: usize = 64;
+const L0_BACKLOG_RESUME: usize = 16;
+/// Inserting pauses at this WAL size until tsink clears the WAL. It only does
+/// so when no write arrives between a flush and the reset, which never
+/// happens while the migration inserts continuously; a ping written during a
+/// flush prevents it too, so a pause can span several flushes. Opening the
+/// storage replays the whole WAL into memory: 760 MB of WAL needed more than
+/// 2 GB.
+const WAL_BACKLOG_PAUSE_BYTES: u64 = 128 * 1024 * 1024;
+const WAL_BACKLOG_RESUME_BYTES: u64 = 32 * 1024 * 1024;
+/// Waiting for the backlog stops when it has not shrunk for this long.
+const BACKLOG_STALL: Duration = Duration::from_secs(60);
 
 pub struct MigrationHandle {
     stop: Arc<AtomicBool>,
@@ -130,6 +148,14 @@ struct Migrator<'a> {
     started: Instant,
     last_progress_log: Instant,
     index_watermark: usize,
+    l0_dir: Option<PathBuf>,
+    backlog_stall_warned: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Backlog {
+    l0_segments: usize,
+    wal_bytes: u64,
 }
 
 impl<'a> Migrator<'a> {
@@ -162,10 +188,14 @@ impl<'a> Migrator<'a> {
                 .observability_snapshot()
                 .memory
                 .persisted_index_bytes,
+            l0_dir: None,
+            backlog_stall_warned: false,
         }
     }
 
     fn run(&mut self, legacy_dir: &Path) -> Result<()> {
+        // legacy_dir is inside the storage's data directory
+        self.l0_dir = legacy_dir.parent().map(|data| data.join(L0_SEGMENTS_DIR));
         let partitions = list_partitions(legacy_dir)?;
         let mut wal = LegacyWal::open(legacy_dir)?;
         let partition_bytes: Vec<u64> = partitions.iter().map(|p| dir_size(&p.path)).collect();
@@ -319,6 +349,7 @@ impl<'a> Migrator<'a> {
         if self.batch.is_empty() {
             return Ok(());
         }
+        self.wait_for_backlog();
         let batch = std::mem::take(&mut self.batch);
         match self.storage.insert_rows(&batch) {
             Ok(()) => self.points_migrated += batch.len() as u64,
@@ -362,6 +393,70 @@ impl<'a> Migrator<'a> {
             }
         }
         Ok(())
+    }
+
+    fn backlog(&self) -> Backlog {
+        let l0_segments = self
+            .l0_dir
+            .as_ref()
+            .and_then(|dir| fs::read_dir(dir).ok())
+            .map_or(0, |dir| dir.count());
+        Backlog {
+            l0_segments,
+            wal_bytes: self.storage.observability_snapshot().wal.size_bytes,
+        }
+    }
+
+    /// Pauses while compaction has many unmerged segments or the WAL is
+    /// large. Gives up waiting when the backlog stops shrinking, so a stuck
+    /// compaction or constant live writes do not stall the migration forever.
+    fn wait_for_backlog(&mut self) {
+        let current = self.backlog();
+        // Only the limit that was hit has to recover: the WAL clears at the
+        // next flush, so waiting for it after an L0 pause idles for up to a
+        // whole flush interval.
+        let l0_paused = current.l0_segments >= L0_BACKLOG_PAUSE;
+        let wal_paused = current.wal_bytes >= WAL_BACKLOG_PAUSE_BYTES;
+        if !l0_paused && !wal_paused {
+            return;
+        }
+        let waited = Instant::now();
+        let mut lowest = current;
+        let mut last_drop = Instant::now();
+        while ((l0_paused && lowest.l0_segments > L0_BACKLOG_RESUME)
+            || (wal_paused && lowest.wal_bytes > WAL_BACKLOG_RESUME_BYTES))
+            && !self.stop.load(Ordering::Relaxed)
+        {
+            if last_drop.elapsed() > BACKLOG_STALL {
+                if !self.backlog_stall_warned {
+                    warn!(
+                        "Storage backlog has not shrunk for {:?} ({} unmerged segments, {:.0} MB WAL), continuing the migration anyway",
+                        BACKLOG_STALL,
+                        lowest.l0_segments,
+                        lowest.wal_bytes as f64 / 1e6
+                    );
+                    self.backlog_stall_warned = true;
+                }
+                break;
+            }
+            std::thread::sleep(Duration::from_secs(1));
+            let now = self.backlog();
+            if now.l0_segments < lowest.l0_segments || now.wal_bytes < lowest.wal_bytes {
+                last_drop = Instant::now();
+            }
+            lowest = Backlog {
+                l0_segments: lowest.l0_segments.min(now.l0_segments),
+                wal_bytes: lowest.wal_bytes.min(now.wal_bytes),
+            };
+        }
+        debug!(
+            "Waited {:.0?} for the storage: {} -> {} unmerged segments, {:.0} -> {:.0} MB WAL",
+            waited.elapsed(),
+            current.l0_segments,
+            lowest.l0_segments,
+            current.wal_bytes as f64 / 1e6,
+            lowest.wal_bytes as f64 / 1e6
+        );
     }
 
     /// Pauses while tsink's in-memory index is well above its level after
