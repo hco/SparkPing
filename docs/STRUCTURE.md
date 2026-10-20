@@ -61,7 +61,7 @@ The backend follows Rust best practices with a clear separation of concerns.
 
 #### `src/storage/`
 tsink 0.10 storage and the migration of tsink 0.5 data (see ADR 0003).
-- `open.rs` - `open_storage()` with SparkPing's tsink settings (WAL, chunk size, partitions, retention)
+- `open.rs` - `open_storage()` with SparkPing's tsink settings (WAL, flush interval, chunk size, partitions, retention)
 - `write.rs` - `write_ping_result()` stores `ping_latency` and `ping_failed`, tracks the last successful write
 - `legacy_layout.rs` - Moves tsink 0.5 partitions and WAL segments to `legacy-v05/` before tsink 0.10 opens the directory
 - `migration/` - Background migration of `legacy-v05/` into the new storage
