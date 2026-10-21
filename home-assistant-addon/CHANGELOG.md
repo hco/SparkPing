@@ -1,6 +1,14 @@
 # Changelog
 
 
+## [0.3.1] - 2026-10-21
+
+### 🐛 Bug Fixes
+- Keep compaction from deleting a segment the flush has not published yet
+- Restart after the storage stops instead of running without it
+- Let the migration finish on partitions tsink 0.5 left behind
+
+
 ## [0.3.0] - 2026-10-20
 
 ### ✨ Features
@@ -58,15 +66,6 @@ This reverts commit 9c2d8f9fcb953c1745e0f216157cbae49f968822.
 
 fix: parse ICMP replies correctly on macOS/BSD
 - Bump docker/login-action to v4 to run on supported Node 24 runtime
-
-
-## [0.2.0] - 2026-07-14
-
-### ✨ Features
-- Make low packet loss visible with log-spaced severity colors
-
-### 🐛 Bug Fixes
-- Copy pnpm-workspace.yaml into Docker build so esbuild build is approved
 
 
 

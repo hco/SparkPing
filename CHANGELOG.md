@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1] - 2026-10-21
+
+### 🐛 Bug Fixes
+
+- Keep compaction from deleting a segment the flush has not published yet
+- Restart after the storage stops instead of running without it
+- Let the migration finish on partitions tsink 0.5 left behind
 ## [0.3.0] - 2026-10-20
 
 ### ✨ Features
