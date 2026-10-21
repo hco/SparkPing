@@ -16,6 +16,7 @@ use tsink::Storage;
 
 const LOG_INTERVAL: Duration = Duration::from_secs(60);
 const LOG_REMINDER: Duration = Duration::from_secs(15 * 60);
+const STORAGE_STOP_CHECK: Duration = Duration::from_secs(10);
 /// Pings may stop being stored for this long before it counts as a problem.
 const MIN_WRITE_STALL_SECS: i64 = 5 * 60;
 
@@ -143,6 +144,23 @@ pub fn spawn_health_log(monitor: Arc<HealthMonitor>) -> tokio::task::JoinHandle<
             last_log = Instant::now();
         }
     })
+}
+
+/// Resolves once background fail-fast has stopped the storage. It rejects all
+/// reads and writes from then on, and only reopening it recovers.
+pub async fn storage_stopped(storage: Arc<dyn Storage>) {
+    let mut interval = tokio::time::interval(STORAGE_STOP_CHECK);
+    loop {
+        interval.tick().await;
+        let storage = Arc::clone(&storage);
+        let stopped = tokio::task::spawn_blocking(move || {
+            storage.observability_snapshot().health.fail_fast_triggered
+        })
+        .await;
+        if stopped.unwrap_or(false) {
+            return;
+        }
+    }
 }
 
 struct WriteCheck {
@@ -363,5 +381,41 @@ mod tests {
             points_migrated: 10,
         };
         assert!(evaluate(&healthy_inputs(&storage, &done)).is_empty());
+    }
+
+    #[tokio::test]
+    async fn storage_stopped_resolves_after_fail_fast() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage: Arc<dyn Storage> = Arc::from(
+            tsink::StorageBuilder::new()
+                .with_data_path(dir.path())
+                .with_chunk_points(1)
+                .build()
+                .unwrap(),
+        );
+        // A file where the segment directory belongs makes the background
+        // flush fail, which trips fail-fast.
+        let lane = dir.path().join("lane_numeric");
+        let _ = std::fs::remove_dir_all(&lane);
+        std::fs::write(&lane, b"").unwrap();
+        storage
+            .insert_rows(&[tsink::Row::new("m", tsink::DataPoint::new(1, 1.0))])
+            .unwrap();
+
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            storage_stopped(Arc::clone(&storage)),
+        )
+        .await
+        .expect("fail-fast was not detected");
+        // The shutdown that follows must not hang on the stopped storage.
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            tokio::task::spawn_blocking(move || storage.close()),
+        )
+        .await
+        .expect("closing the stopped storage hung")
+        .unwrap()
+        .ok();
     }
 }

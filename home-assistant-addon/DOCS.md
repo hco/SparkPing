@@ -70,6 +70,11 @@ ping results are no longer stored, SparkPing shows a banner at the top of the
 web interface and logs the problem. The same information is available at
 `/api/health`.
 
+If the database stops after a background error, SparkPing exits so it can be
+restarted; the restart reopens the database and recovers recent data from its
+write-ahead log. Turn on **Watchdog** on the add-on's Info page so the
+Supervisor restarts it automatically.
+
 ## Support
 
 For issues and feature requests, visit:

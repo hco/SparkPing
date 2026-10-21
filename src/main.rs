@@ -19,7 +19,7 @@ mod vendor_discovery;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
-use crate::health::{spawn_health_log, HealthMonitor};
+use crate::health::{spawn_health_log, storage_stopped, HealthMonitor};
 use crate::logging::init_logging;
 use crate::storage::legacy_layout::move_legacy_data_aside;
 use crate::storage::migration::spawn_migration;
@@ -769,6 +769,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Run HTTP server, file watcher, and shutdown handler concurrently
+    let mut storage_failed = false;
     tokio::select! {
         result = server_task => {
             error!("HTTP server task ended: {:?}", result);
@@ -782,6 +783,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ = shutdown_task => {
             info!("Shutdown handler completed");
+        }
+        _ = storage_stopped(Arc::clone(&storage)) => {
+            // Exit with an error so the Supervisor watchdog or the container
+            // restart policy restarts SparkPing and reopens the storage.
+            error!("Storage stopped after a background error, exiting so SparkPing gets restarted");
+            storage_failed = true;
         }
     }
 
@@ -809,5 +816,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Storage closed successfully");
     }
 
+    if storage_failed {
+        std::process::exit(1);
+    }
     Ok(())
 }
