@@ -81,9 +81,7 @@ fn add_expected(expected: &mut Points, rows: &[tsink_legacy::Row], cutoff: Optio
 
 /// Writes a tsink 0.5 data directory: partitions for [start, start+30h) and
 /// WAL segments for [start+28h, start+34h), overlapping the last partition.
-fn write_legacy_fixture(data: &Path, start: i64, cutoff: Option<i64>) -> Points {
-    let mut expected = Points::new();
-
+fn write_legacy_partitions(data: &Path, rows: &[tsink_legacy::Row]) {
     // tsink 0.5 flushes partitions on detached threads that outlive close()
     // and then delete WAL segments in `<path>/wal`, where tsink 0.10 keeps its
     // WAL later. Build the partitions elsewhere and copy them over.
@@ -95,12 +93,10 @@ fn write_legacy_fixture(data: &Path, start: i64, cutoff: Option<i64>) -> Points 
         .with_retention(Duration::from_secs(365 * 24 * 3600))
         .build()
         .unwrap();
-    let rows = legacy_rows(start, start + 30 * HOUR);
     for chunk in rows.chunks(5000) {
         legacy.insert_rows(chunk).unwrap();
     }
     legacy.close().unwrap();
-    add_expected(&mut expected, &rows, cutoff);
     for entry in std::fs::read_dir(&source).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap();
@@ -108,6 +104,14 @@ fn write_legacy_fixture(data: &Path, start: i64, cutoff: Option<i64>) -> Points 
             copy_dir(&path, &data.join(name));
         }
     }
+}
+
+fn write_legacy_fixture(data: &Path, start: i64, cutoff: Option<i64>) -> Points {
+    let mut expected = Points::new();
+
+    let rows = legacy_rows(start, start + 30 * HOUR);
+    write_legacy_partitions(data, &rows);
+    add_expected(&mut expected, &rows, cutoff);
 
     let wal = tsink_legacy::wal::DiskWal::new(data.join("wal"), 4096).unwrap();
     let rows = legacy_rows(start + 28 * HOUR, start + 34 * HOUR);
@@ -208,6 +212,32 @@ fn migrates_partitions_and_overlapping_wal_exactly() {
     let storage = open_storage(&config(&data, None)).unwrap();
     assert_eq!(read_all(storage.as_ref()), expected);
     assert_eq!(storage.list_metrics().unwrap().len(), expected.len());
+    storage.close().unwrap();
+}
+
+#[test]
+fn partitions_with_two_values_for_one_timestamp_are_migrated() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let start = start_time();
+    let mut rows = Vec::new();
+    for ts in (start..start + HOUR).step_by(STEP as usize) {
+        for value in [1.0, 2.0] {
+            rows.push(tsink_legacy::Row::with_labels(
+                "ping_latency",
+                legacy_labels(0, 1),
+                tsink_legacy::DataPoint::new(ts, value),
+            ));
+        }
+    }
+    write_legacy_partitions(&data, &rows);
+    let legacy = move_legacy_data_aside(&data).unwrap().unwrap();
+
+    let storage = open_storage(&config(&data, None)).unwrap();
+    let migrator = migrate(storage.as_ref(), &legacy, None);
+
+    assert_eq!(migrator.failed_partitions, 0);
+    assert!(!legacy.exists());
     storage.close().unwrap();
 }
 

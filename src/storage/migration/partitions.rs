@@ -56,6 +56,9 @@ fn parse_partition_name(name: &str) -> Option<(i64, i64)> {
 pub enum ReadError {
     /// The partition has no data file content; nothing to migrate.
     Empty,
+    /// Data without meta.json, holding this many bytes. Series and offsets
+    /// live in meta.json, so tsink 0.5 skipped such partitions as well.
+    NoMetadata(u64),
     Legacy(TsinkError),
     /// Fewer points were read than the partition metadata lists.
     Incomplete {
@@ -68,6 +71,9 @@ impl std::fmt::Display for ReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ReadError::Empty => write!(f, "partition is empty"),
+            ReadError::NoMetadata(bytes) => {
+                write!(f, "{} bytes of data without meta.json", bytes)
+            }
             ReadError::Legacy(e) => write!(f, "{}", e),
             ReadError::Incomplete { read, expected } => {
                 write!(f, "read {} of {} points (unknown metrics?)", read, expected)
@@ -79,8 +85,10 @@ impl std::fmt::Display for ReadError {
 /// Reads all series of a legacy partition. Opens only this partition, so it
 /// holds a single file descriptor.
 pub fn read_partition(path: &Path) -> Result<Vec<LegacySeries>, ReadError> {
-    if is_failed_flush_leftover(path).map_err(|e| ReadError::Legacy(e.into()))? {
-        return Err(ReadError::Empty);
+    match bytes_without_metadata(path).map_err(|e| ReadError::Legacy(e.into()))? {
+        Some(0) => return Err(ReadError::Empty),
+        Some(bytes) => return Err(ReadError::NoMetadata(bytes)),
+        None => {}
     }
     // A zero retention disables tsink 0.5's expiry check.
     let partition = match DiskPartition::open(path, Duration::ZERO) {
@@ -120,18 +128,17 @@ pub fn read_partition(path: &Path) -> Result<Vec<LegacySeries>, ReadError> {
 }
 
 /// tsink 0.5 writes the data file before meta.json, so a flush that failed
-/// (for example on the open-files limit) leaves only empty files behind.
-fn is_failed_flush_leftover(path: &Path) -> io::Result<bool> {
+/// (for example on the open-files limit) leaves files without metadata
+/// behind. Returns their size, or None if meta.json exists.
+fn bytes_without_metadata(path: &Path) -> io::Result<Option<u64>> {
     if path.join("meta.json").exists() {
-        return Ok(false);
+        return Ok(None);
     }
+    let mut bytes = 0;
     for entry in std::fs::read_dir(path)? {
-        let metadata = entry?.metadata()?;
-        if !metadata.is_file() || metadata.len() > 0 {
-            return Ok(false);
-        }
+        bytes += entry?.metadata()?.len();
     }
-    Ok(true)
+    Ok(Some(bytes))
 }
 
 #[cfg(test)]
@@ -154,11 +161,10 @@ mod tests {
         std::fs::write(partition.join("data"), b"").unwrap();
         assert!(matches!(read_partition(&partition), Err(ReadError::Empty)));
 
-        // Data without metadata may still be worth a look; keep it.
-        std::fs::write(partition.join("data"), b"x").unwrap();
+        std::fs::write(partition.join("data"), b"xy").unwrap();
         assert!(matches!(
             read_partition(&partition),
-            Err(ReadError::Legacy(_))
+            Err(ReadError::NoMetadata(2))
         ));
     }
 }

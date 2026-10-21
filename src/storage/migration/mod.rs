@@ -281,6 +281,14 @@ impl<'a> Migrator<'a> {
                 self.schedule_deletes([partition.path.clone()]);
                 return Ok(());
             }
+            Err(ReadError::NoMetadata(bytes)) => {
+                warn!(
+                    "Deleting legacy partition {:?}: {} bytes of data without meta.json, which tsink 0.5 could not read either",
+                    partition.path, bytes
+                );
+                self.schedule_deletes([partition.path.clone()]);
+                return Ok(());
+            }
             Err(e) => {
                 error!(
                     "Cannot read legacy partition {:?}, keeping it: {}",
@@ -308,15 +316,18 @@ impl<'a> Migrator<'a> {
         }
         self.flush_batch()?;
 
-        // Verify: every distinct legacy point must be readable from the new
+        // Verify: every legacy timestamp must be readable from the new
         // storage. More is fine (WAL rows or live writes in the same range).
+        // Timestamps, not points: tsink 0.10 may keep only the last of two
+        // values with the same timestamp.
         for s in &series {
-            let kept: Vec<i64> = s
+            let mut kept: Vec<i64> = s
                 .points
                 .iter()
                 .map(|(ts, _)| *ts)
                 .filter(|ts| !self.is_expired(*ts))
                 .collect();
+            kept.dedup();
             let (Some(first), Some(last)) = (kept.first(), kept.last()) else {
                 continue;
             };
