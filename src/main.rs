@@ -11,8 +11,9 @@ mod icmp;
 mod ip_scan;
 mod logging;
 mod memory;
-mod pressure;
 mod ping;
+mod pressure;
+mod restart_guard;
 mod storage;
 mod tasks;
 mod unified_discovery;
@@ -20,8 +21,9 @@ mod vendor_discovery;
 
 use crate::api::create_router;
 use crate::config::AppConfig;
-use crate::health::{spawn_health_log, storage_stopped, HealthMonitor};
+use crate::health::{spawn_health_log, HealthMonitor};
 use crate::logging::init_logging;
+use crate::restart_guard::{clear_history, restart_after_storage_stop};
 use crate::storage::legacy_layout::move_legacy_data_aside;
 use crate::storage::migration::spawn_migration;
 use crate::storage::migration::status::{MigrationState, MigrationStatus};
@@ -552,6 +554,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create shared state for config and task management
     let server_host = app_config.server.host.clone();
     let server_port = app_config.server.port;
+    let restart_history = restart_guard::history_path(&app_config.database.path);
     let config_state = Arc::new(RwLock::new(app_config));
     let task_handles = Arc::new(RwLock::new(
         HashMap::<String, tokio::task::AbortHandle>::new(),
@@ -785,8 +788,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ = shutdown_task => {
             info!("Shutdown handler completed");
+            // Stopped from outside, so a later failure starts a fresh count.
+            clear_history(&restart_history);
         }
-        _ = storage_stopped(Arc::clone(&storage)) => {
+        _ = restart_after_storage_stop(Arc::clone(&storage), restart_history.clone()) => {
             // Exit with an error so the Supervisor watchdog or the container
             // restart policy restarts SparkPing and reopens the storage.
             error!("Storage stopped after a background error, exiting so SparkPing gets restarted");
