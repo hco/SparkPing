@@ -51,8 +51,15 @@ The backend follows Rust best practices with a clear separation of concerns.
 - Periodic memory logging (RSS, split into anonymous and file-backed on Linux)
 
 #### `src/health.rs`
-- `HealthMonitor` builds the health report: storage stopped or degraded, open files near the limit, stalled ping writes, migration state
+- `HealthMonitor` builds the health report: storage stopped or degraded, open files near the limit, stalled ping writes, host memory/IO pressure, migration state
 - Background task that logs health changes and reminds while unhealthy
+- `storage_stopped()` resolves once background fail-fast stopped the storage
+
+#### `src/restart_guard.rs`
+- Exits for a restart after the storage stopped, with growing delays and a limit of five restarts per 24 hours
+
+#### `src/pressure.rs`
+- Reads host-wide memory and IO pressure (Linux PSI); the migration pauses while it is high
 
 #### `src/ping.rs`
 - `PingResult` struct definition

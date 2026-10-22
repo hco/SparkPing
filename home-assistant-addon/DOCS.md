@@ -73,7 +73,12 @@ web interface and logs the problem. The same information is available at
 If the database stops after a background error, SparkPing exits so it can be
 restarted; the restart reopens the database and recovers recent data from its
 write-ahead log. Turn on **Watchdog** on the add-on's Info page so the
-Supervisor restarts it automatically.
+Supervisor restarts it automatically. If the error keeps coming back,
+restarts wait longer each time, and after five within a day SparkPing stays
+up and only reports the error; restart it yourself once the cause is fixed.
+
+While the host is short on memory or disk bandwidth, the migration of data
+from SparkPing 0.2.x pauses and the banner says so. It resumes on its own.
 
 ## Support
 
