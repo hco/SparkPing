@@ -10,6 +10,8 @@ pub enum MigrationState {
     Running {
         percent: u8,
         points_migrated: u64,
+        /// Why inserting is paused at the moment, if it is.
+        paused: Option<String>,
     },
     /// Finished this run. `failed_partitions` were kept and are retried on the
     /// next start. Memory used by the migration is only released on restart.

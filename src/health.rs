@@ -5,6 +5,7 @@
 
 use crate::config::AppConfig;
 use crate::fd_limit::{current_soft_limit, open_fd_count};
+use crate::pressure::{read_host_pressure, HostPressure};
 use crate::storage::migration::status::{MigrationState, MigrationStatus};
 use crate::storage::write::last_successful_write;
 use serde::Serialize;
@@ -35,6 +36,7 @@ pub enum HealthIssueKind {
     OpenFiles,
     Writes,
     Migration,
+    Pressure,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -53,6 +55,8 @@ pub struct HealthReport {
     /// Unix time of the last stored ping result.
     pub last_write_at: Option<i64>,
     pub migration: MigrationState,
+    /// None where the kernel does not report it.
+    pub host_pressure: Option<HostPressure>,
 }
 
 pub struct HealthMonitor {
@@ -82,6 +86,7 @@ impl HealthMonitor {
         let open_files_limit = current_soft_limit();
         let last_write_at = last_successful_write();
         let migration = self.migration.get();
+        let host_pressure = read_host_pressure();
 
         // Without targets nothing is written, so a stall means nothing.
         let max_ping_interval = self
@@ -100,6 +105,7 @@ impl HealthMonitor {
             open_files_limit,
             writes: write_check,
             migration: &migration,
+            pressure: host_pressure,
         });
         HealthReport {
             status: overall_status(&issues),
@@ -108,6 +114,7 @@ impl HealthMonitor {
             open_files_limit,
             last_write_at,
             migration,
+            host_pressure,
         }
     }
 }
@@ -176,6 +183,7 @@ struct Inputs<'a> {
     /// None when there are no targets.
     writes: Option<WriteCheck>,
     migration: &'a MigrationState,
+    pressure: Option<HostPressure>,
 }
 
 fn overall_status(issues: &[HealthIssue]) -> HealthStatus {
@@ -254,6 +262,23 @@ fn evaluate(inputs: &Inputs) -> Vec<HealthIssue> {
         }
     }
 
+    if let Some(pressure) = inputs.pressure.filter(HostPressure::is_high) {
+        let migration_note = if matches!(inputs.migration, MigrationState::Running { .. }) {
+            "; the data migration pauses until it eases"
+        } else {
+            ""
+        };
+        push(
+            HealthIssueKind::Pressure,
+            HealthStatus::Degraded,
+            format!(
+                "The host is short on memory or disk bandwidth ({}){}",
+                pressure.describe(),
+                migration_note
+            ),
+        );
+    }
+
     match inputs.migration {
         MigrationState::Failed { error } => push(
             HealthIssueKind::Migration,
@@ -296,6 +321,10 @@ mod tests {
                 stall_secs: MIN_WRITE_STALL_SECS,
             }),
             migration,
+            pressure: Some(HostPressure {
+                memory: 0.0,
+                io: 1.0,
+            }),
         }
     }
 
@@ -309,6 +338,7 @@ mod tests {
         let migration = MigrationState::Running {
             percent: 40,
             points_migrated: 1000,
+            paused: None,
         };
         let issues = evaluate(&healthy_inputs(&storage, &migration));
         assert!(issues.is_empty());
@@ -347,6 +377,31 @@ mod tests {
             kinds(&evaluate(&inputs)),
             [(HealthIssueKind::OpenFiles, HealthStatus::Error)]
         );
+    }
+
+    #[test]
+    fn host_pressure_is_reported_with_the_paused_migration() {
+        let storage = StorageHealthSnapshot::default();
+        let migration = MigrationState::Running {
+            percent: 40,
+            points_migrated: 1000,
+            paused: None,
+        };
+        let mut inputs = healthy_inputs(&storage, &migration);
+        inputs.pressure = Some(HostPressure {
+            memory: 3.0,
+            io: 71.0,
+        });
+        let issues = evaluate(&inputs);
+        assert_eq!(
+            kinds(&issues),
+            vec![(HealthIssueKind::Pressure, HealthStatus::Degraded)]
+        );
+        assert!(issues[0].message.contains("disk IO 71%"));
+        assert!(issues[0].message.contains("migration pauses"));
+
+        inputs.migration = &MigrationState::NotNeeded;
+        assert!(!evaluate(&inputs)[0].message.contains("migration"));
     }
 
     #[test]

@@ -48,10 +48,14 @@ function MigrationNotice({ migration }: { migration: MigrationState }) {
     return (
       <Alert>
         <DatabaseZap />
-        <AlertTitle>Migrating data from the previous version: {migration.percent}%</AlertTitle>
+        <AlertTitle>
+          Migrating data from the previous version: {migration.percent}%
+          {migration.paused && ' (paused)'}
+        </AlertTitle>
         <AlertDescription>
-          Pings are recorded as usual. Older history appears in the charts as the migration
-          progresses.
+          {migration.paused
+            ? `Paused while the host is under pressure (${migration.paused}). It resumes on its own once the pressure eases.`
+            : 'Pings are recorded as usual. Older history appears in the charts as the migration progresses.'}
         </AlertDescription>
       </Alert>
     );

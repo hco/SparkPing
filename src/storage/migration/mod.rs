@@ -13,6 +13,7 @@ pub mod status;
 #[cfg(test)]
 mod tests;
 
+use crate::pressure::{read_host_pressure, HostPressure};
 use legacy_wal::LegacyWal;
 use partitions::{list_partitions, read_partition, LegacyPartition, ReadError};
 use status::{MigrationState, MigrationStatus};
@@ -51,6 +52,8 @@ const WAL_BACKLOG_PAUSE_BYTES: u64 = 128 * 1024 * 1024;
 const WAL_BACKLOG_RESUME_BYTES: u64 = 32 * 1024 * 1024;
 /// Waiting for the backlog stops when it has not shrunk for this long.
 const BACKLOG_STALL: Duration = Duration::from_secs(60);
+/// How often a migration paused for host pressure checks it again.
+const PRESSURE_POLL: Duration = Duration::from_secs(5);
 
 pub struct MigrationHandle {
     stop: Arc<AtomicBool>,
@@ -150,6 +153,11 @@ struct Migrator<'a> {
     index_watermark: usize,
     l0_dir: Option<PathBuf>,
     backlog_stall_warned: bool,
+    percent: u8,
+    pressure: Box<dyn FnMut() -> Option<HostPressure> + 'a>,
+    pressure_poll: Duration,
+    paused: Option<String>,
+    pressure_pauses: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -190,6 +198,11 @@ impl<'a> Migrator<'a> {
                 .persisted_index_bytes,
             l0_dir: None,
             backlog_stall_warned: false,
+            percent: 0,
+            pressure: Box::new(read_host_pressure),
+            pressure_poll: PRESSURE_POLL,
+            paused: None,
+            pressure_pauses: 0,
         }
     }
 
@@ -361,6 +374,7 @@ impl<'a> Migrator<'a> {
             return Ok(());
         }
         self.wait_for_backlog();
+        self.wait_for_host_pressure();
         let batch = std::mem::take(&mut self.batch);
         match self.storage.insert_rows(&batch) {
             Ok(()) => self.points_migrated += batch.len() as u64,
@@ -470,6 +484,39 @@ impl<'a> Migrator<'a> {
         );
     }
 
+    /// Pauses while the host stalls on memory or disk IO, whatever causes it,
+    /// and resumes once the pressure has clearly eased. A migration that kept
+    /// reading on a host short of page cache held it at 70 % iowait.
+    fn wait_for_host_pressure(&mut self) {
+        let Some(pressure) = (self.pressure)().filter(HostPressure::is_high) else {
+            return;
+        };
+        warn!(
+            "Pausing the migration while the host is under pressure: {}",
+            pressure.describe()
+        );
+        let waited = Instant::now();
+        self.pressure_pauses += 1;
+        self.paused = Some(pressure.describe());
+        self.publish_status();
+        while !self.stop.load(Ordering::Relaxed) {
+            std::thread::sleep(self.pressure_poll);
+            match (self.pressure)() {
+                Some(now) if !now.is_low() => {
+                    self.paused = Some(now.describe());
+                    self.publish_status();
+                }
+                _ => break,
+            }
+        }
+        self.paused = None;
+        self.publish_status();
+        info!(
+            "Resuming the migration after {:.0?} of host pressure",
+            waited.elapsed()
+        );
+    }
+
     /// Pauses while tsink's in-memory index is well above its level after
     /// the last pause. Inserting faster than tsink compacts grows the index
     /// by about 1 MB per day of data; compaction shrinks it again.
@@ -504,6 +551,14 @@ impl<'a> Migrator<'a> {
         self.index_watermark = lowest;
     }
 
+    fn publish_status(&self) {
+        self.status.set(MigrationState::Running {
+            percent: self.percent,
+            points_migrated: self.points_migrated,
+            paused: self.paused.clone(),
+        });
+    }
+
     fn report_progress(&mut self, wal: &LegacyWal, force: bool) {
         let percent = if self.bytes_total == 0 {
             100
@@ -511,10 +566,8 @@ impl<'a> Migrator<'a> {
             ((self.partition_bytes_done + wal.finished_bytes()) * 100 / self.bytes_total).min(100)
                 as u8
         };
-        self.status.set(MigrationState::Running {
-            percent,
-            points_migrated: self.points_migrated,
-        });
+        self.percent = percent;
+        self.publish_status();
         if !force && self.last_progress_log.elapsed() < PROGRESS_LOG_INTERVAL {
             return;
         }

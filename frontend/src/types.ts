@@ -120,7 +120,7 @@ export interface StorageStatsResponse {
 export type HealthStatus = 'ok' | 'degraded' | 'error';
 
 export interface HealthIssue {
-  kind: 'storage' | 'open_files' | 'writes' | 'migration';
+  kind: 'storage' | 'open_files' | 'writes' | 'migration' | 'pressure';
   severity: HealthStatus;
   message: string;
 }
@@ -128,7 +128,13 @@ export interface HealthIssue {
 /** Progress of the one-time migration of data written by SparkPing 0.2.x */
 export type MigrationState =
   | { state: 'not_needed' }
-  | { state: 'running'; percent: number; points_migrated: number }
+  | {
+      state: 'running';
+      percent: number;
+      points_migrated: number;
+      /** Why inserting is paused at the moment, e.g. host memory or IO pressure */
+      paused: string | null;
+    }
   | { state: 'completed'; failed_partitions: number; points_migrated: number }
   | { state: 'failed'; error: string };
 
@@ -140,6 +146,8 @@ export interface HealthReport {
   /** Unix time (seconds) of the last stored ping result */
   last_write_at: number | null;
   migration: MigrationState;
+  /** Percent of the last 10 s in which host tasks stalled; null where unavailable */
+  host_pressure: { memory: number; io: number } | null;
 }
 
 // Device discovery types

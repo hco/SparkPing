@@ -1,8 +1,10 @@
 use super::status::{MigrationState, MigrationStatus};
 use super::Migrator;
 use crate::config::DatabaseConfig;
+use crate::pressure::HostPressure;
 use crate::storage::legacy_layout::{move_legacy_data_aside, LEGACY_DIR};
 use crate::storage::open::open_storage;
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
@@ -212,6 +214,53 @@ fn migrates_partitions_and_overlapping_wal_exactly() {
     let storage = open_storage(&config(&data, None)).unwrap();
     assert_eq!(read_all(storage.as_ref()), expected);
     assert_eq!(storage.list_metrics().unwrap().len(), expected.len());
+    storage.close().unwrap();
+}
+
+#[test]
+fn migration_pauses_while_the_host_is_under_pressure() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let expected = write_legacy_fixture(&data, start_time(), None);
+    let legacy = move_legacy_data_aside(&data).unwrap().unwrap();
+    let storage = open_storage(&config(&data, None)).unwrap();
+
+    let stop = AtomicBool::new(false);
+    let status = MigrationStatus::new(MigrationState::NotNeeded);
+    let checks = Cell::new(0);
+    let paused_seen = Cell::new(false);
+    let mut migrator = Migrator::new(storage.as_ref(), &stop, &status, None);
+    migrator.pressure_poll = Duration::from_millis(10);
+    migrator.pressure = Box::new(|| {
+        checks.set(checks.get() + 1);
+        if let MigrationState::Running {
+            paused: Some(reason),
+            ..
+        } = status.get()
+        {
+            paused_seen.set(paused_seen.get() || reason.contains("disk IO 70%"));
+        }
+        // High twice, then in between the thresholds (still paused), then low.
+        let io = match checks.get() {
+            1 | 2 => 70.0,
+            3 => 30.0,
+            _ => 1.0,
+        };
+        Some(HostPressure { memory: 0.0, io })
+    });
+    migrator.run(&legacy).unwrap();
+
+    assert_eq!(migrator.pressure_pauses, 1);
+    assert!(checks.get() > 4);
+    assert!(paused_seen.get());
+    assert!(matches!(
+        status.get(),
+        MigrationState::Completed {
+            failed_partitions: 0,
+            ..
+        }
+    ));
+    assert_eq!(read_all(storage.as_ref()), expected);
     storage.close().unwrap();
 }
 

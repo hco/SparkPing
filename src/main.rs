@@ -11,6 +11,7 @@ mod icmp;
 mod ip_scan;
 mod logging;
 mod memory;
+mod pressure;
 mod ping;
 mod storage;
 mod tasks;
@@ -526,6 +527,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             migration_status.set(MigrationState::Running {
                 percent: 0,
                 points_migrated: 0,
+                paused: None,
             });
             Some(spawn_migration(
                 Arc::clone(&storage),
