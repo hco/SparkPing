@@ -12,6 +12,7 @@ mod partitions;
 pub mod status;
 #[cfg(test)]
 mod tests;
+mod thread_io;
 
 use crate::pressure::{read_host_pressure, HostPressure};
 use legacy_wal::LegacyWal;
@@ -24,6 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use thread_io::ThreadIo;
 use tracing::{debug, error, info, warn};
 use tsink::{DataPoint, Row, Storage, TsinkError};
 
@@ -288,6 +290,7 @@ impl<'a> Migrator<'a> {
     }
 
     fn migrate_partition(&mut self, partition: &LegacyPartition) -> Result<()> {
+        let io_start = ThreadIo::now();
         let series = match read_partition(&partition.path) {
             Ok(series) => series,
             Err(ReadError::Empty) => {
@@ -311,6 +314,7 @@ impl<'a> Migrator<'a> {
                 return Ok(());
             }
         };
+        let io_read = ThreadIo::now();
         let rejected_before = self.points_rejected;
 
         for s in &series {
@@ -329,6 +333,14 @@ impl<'a> Migrator<'a> {
             }
         }
         self.flush_batch()?;
+        let io_inserted = ThreadIo::now();
+        debug!(
+            "Disk reads for legacy partition {:?}: reading {}, inserting {}",
+            partition.path,
+            (io_read - io_start).describe(),
+            (io_inserted - io_read).describe()
+        );
+
         // insert_rows only succeeds once tsink has taken every row into
         // memory and the WAL, and refuses single points with an error. Reading
         // the points back would decode every persisted chunk that overlaps the
