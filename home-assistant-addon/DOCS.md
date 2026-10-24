@@ -77,8 +77,11 @@ Supervisor restarts it automatically. If the error keeps coming back,
 restarts wait longer each time, and after five within a day SparkPing stays
 up and only reports the error; restart it yourself once the cause is fixed.
 
-While the host is short on memory or disk bandwidth, the migration of data
-from SparkPing 0.2.x pauses and the banner says so. It resumes on its own.
+The migration of data from SparkPing 0.2.x reads at most about 20 MB/s from
+disk, so it leaves bandwidth for other add-ons. Where the kernel reports
+memory and IO pressure (not on Home Assistant OS), it also pauses while the
+host is short on memory or disk bandwidth; the banner says so, and it resumes
+on its own.
 
 ## Support
 

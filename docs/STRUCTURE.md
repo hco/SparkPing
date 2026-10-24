@@ -59,7 +59,7 @@ The backend follows Rust best practices with a clear separation of concerns.
 - Exits for a restart after the storage stopped, with growing delays and a limit of five restarts per 24 hours
 
 #### `src/pressure.rs`
-- Reads host-wide memory and IO pressure (Linux PSI); the migration pauses while it is high
+- Reads host-wide memory and IO pressure (Linux PSI); the migration pauses while it is high. Not available on Home Assistant OS
 
 #### `src/ping.rs`
 - `PingResult` struct definition
@@ -72,9 +72,11 @@ tsink 0.10 storage and the migration of tsink 0.5 data (see ADR 0003).
 - `write.rs` - `write_ping_result()` stores `ping_latency` and `ping_failed`, tracks the last successful write
 - `legacy_layout.rs` - Moves tsink 0.5 partitions and WAL segments to `legacy-v05/` before tsink 0.10 opens the directory
 - `migration/` - Background migration of `legacy-v05/` into the new storage
-  - `mod.rs` - `spawn_migration()`, oldest-first merge of partitions and WAL, verification, deletion
+  - `mod.rs` - `spawn_migration()`, oldest-first merge of partitions and WAL, pauses, deletion of accepted partitions
   - `partitions.rs` - Lists and reads tsink 0.5 partitions one at a time
   - `legacy_wal.rs` - Streams rows from tsink 0.5 WAL segments
+  - `read_budget.rs` - Limits the migration thread's disk reads (works without PSI)
+  - `thread_io.rs` - Disk reads and major faults of the current thread, for the debug log
   - `status.rs` - `MigrationStatus` shared with the health report
 
 #### `src/tasks.rs`
