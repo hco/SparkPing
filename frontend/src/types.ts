@@ -148,6 +148,7 @@ export interface HealthReport {
   migration: MigrationState;
   /** Percent of the last 10 s in which host tasks stalled; null where unavailable */
   host_pressure: { memory: number; io: number } | null;
+  host_pressure_available: boolean;
 }
 
 // Device discovery types

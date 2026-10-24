@@ -57,6 +57,10 @@ pub struct HealthReport {
     pub migration: MigrationState,
     /// None where the kernel does not report it.
     pub host_pressure: Option<HostPressure>,
+    /// False on kernels without PSI (Home Assistant OS): the migration
+    /// cannot pause for other services' pressure there, only limit its own
+    /// disk reads.
+    pub host_pressure_available: bool,
 }
 
 pub struct HealthMonitor {
@@ -115,6 +119,7 @@ impl HealthMonitor {
             last_write_at,
             migration,
             host_pressure,
+            host_pressure_available: host_pressure.is_some(),
         }
     }
 }
