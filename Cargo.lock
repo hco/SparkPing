@@ -1816,7 +1816,7 @@ checksum = "81b4488e1f58b23169e168e9c85dc16e817fb9655de81ce1206f7d575f750e04"
 dependencies = [
  "rand",
  "socket2 0.6.3",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2928,7 +2928,7 @@ dependencies = [
 [[package]]
 name = "tsink"
 version = "0.10.2"
-source = "git+https://github.com/hco/tsink?rev=c6c939e616c14822dd21f05367ebc308e6a9e215#c6c939e616c14822dd21f05367ebc308e6a9e215"
+source = "git+https://github.com/hco/tsink?rev=872c12613ecc6f952a60c51aa919a441197a1b9e#872c12613ecc6f952a60c51aa919a441197a1b9e"
 dependencies = [
  "async-channel",
  "bincode",

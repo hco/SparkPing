@@ -50,7 +50,8 @@ tempfile = "3.27.0"
 # compaction loading a whole level into memory (OOM during large imports),
 # compaction during startup failing the open with ENOENT, and segments piling
 # up under steady writes (configurable flush interval, compaction that catches
-# up, merging of small last-level segments), and flushes failing with ENOENT
-# when they raced a catalog refresh or compaction.
+# up, merging of small last-level segments), flushes failing with ENOENT
+# when they raced a catalog refresh or compaction, and compaction joining
+# chunks across partitions.
 [patch.crates-io]
-tsink = { git = "https://github.com/hco/tsink", rev = "c6c939e616c14822dd21f05367ebc308e6a9e215" }
+tsink = { git = "https://github.com/hco/tsink", rev = "872c12613ecc6f952a60c51aa919a441197a1b9e" }
