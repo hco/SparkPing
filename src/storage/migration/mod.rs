@@ -9,6 +9,7 @@
 
 mod legacy_wal;
 mod partitions;
+mod read_budget;
 pub mod status;
 #[cfg(test)]
 mod tests;
@@ -17,6 +18,7 @@ mod thread_io;
 use crate::pressure::{read_host_pressure, HostPressure};
 use legacy_wal::LegacyWal;
 use partitions::{list_partitions, read_partition, LegacyPartition, ReadError};
+use read_budget::ReadBudget;
 use status::{MigrationState, MigrationStatus};
 use std::fs;
 use std::io;
@@ -80,6 +82,12 @@ pub fn spawn_migration(
     retention_days: Option<u32>,
     status: Arc<MigrationStatus>,
 ) -> io::Result<MigrationHandle> {
+    if read_host_pressure().is_none() {
+        info!(
+            "The kernel does not report host pressure (PSI); the migration limits only its own disk reads ({} MB/s)",
+            read_budget::BYTES_PER_SEC / 1_000_000
+        );
+    }
     let stop = Arc::new(AtomicBool::new(false));
     let thread_stop = Arc::clone(&stop);
     let thread = std::thread::Builder::new()
@@ -160,6 +168,8 @@ struct Migrator<'a> {
     pressure_poll: Duration,
     paused: Option<String>,
     pressure_pauses: usize,
+    read_budget: ReadBudget,
+    throttled: Duration,
 }
 
 #[derive(Clone, Copy)]
@@ -205,6 +215,14 @@ impl<'a> Migrator<'a> {
             pressure_poll: PRESSURE_POLL,
             paused: None,
             pressure_pauses: 0,
+            // Created on the migration thread, whose reads it counts.
+            read_budget: ReadBudget::new(
+                read_budget::BYTES_PER_SEC,
+                read_budget::BURST_BYTES,
+                ThreadIo::now().read_bytes,
+                Instant::now(),
+            ),
+            throttled: Duration::ZERO,
         }
     }
 
@@ -373,6 +391,7 @@ impl<'a> Migrator<'a> {
         }
         self.wait_for_backlog();
         self.wait_for_host_pressure();
+        self.wait_for_read_budget();
         let batch = std::mem::take(&mut self.batch);
         match self.storage.insert_rows(&batch) {
             Ok(()) => self.points_migrated += batch.len() as u64,
@@ -515,6 +534,26 @@ impl<'a> Migrator<'a> {
         );
     }
 
+    /// Waits while the migration thread has read more than its budget,
+    /// mostly page faults on memory maps that the kernel had to evict.
+    fn wait_for_read_budget(&mut self) {
+        let wait = self
+            .read_budget
+            .charge(ThreadIo::now().read_bytes, Instant::now());
+        if wait.is_zero() {
+            return;
+        }
+        self.throttled += wait;
+        let until = Instant::now() + wait;
+        while !self.stop.load(Ordering::Relaxed) && Instant::now() < until {
+            std::thread::sleep(
+                until
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_secs(1)),
+            );
+        }
+    }
+
     /// Pauses while tsink's in-memory index is well above its level after
     /// the last pause. Inserting faster than tsink compacts grows the index
     /// by about 1 MB per day of data; compaction shrinks it again.
@@ -575,13 +614,21 @@ impl<'a> Migrator<'a> {
             Duration::from_secs(elapsed * (100 - u64::from(percent)) / u64::from(percent))
         });
         info!(
-            "Migration progress: {}% ({} points{}{})",
+            "Migration progress: {}% ({} points{}{}{})",
             percent,
             self.points_migrated,
             if self.points_rejected > 0 {
                 format!(", {} rejected", self.points_rejected)
             } else {
                 String::new()
+            },
+            if self.throttled.is_zero() {
+                String::new()
+            } else {
+                format!(
+                    ", {:.0?} waited for the disk read budget",
+                    Duration::from_secs(self.throttled.as_secs())
+                )
             },
             eta.map(|eta| format!(", about {} min left", eta.as_secs() / 60 + 1))
                 .unwrap_or_default()
