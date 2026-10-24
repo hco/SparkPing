@@ -446,13 +446,11 @@ mod tests {
     #[tokio::test]
     async fn storage_stopped_resolves_after_fail_fast() {
         let dir = tempfile::tempdir().unwrap();
-        let storage: Arc<dyn Storage> = Arc::from(
-            tsink::StorageBuilder::new()
-                .with_data_path(dir.path())
-                .with_chunk_points(1)
-                .build()
-                .unwrap(),
-        );
+        let storage: Arc<dyn Storage> = tsink::StorageBuilder::new()
+            .with_data_path(dir.path())
+            .with_chunk_points(1)
+            .build()
+            .unwrap();
         // A file where the segment directory belongs makes the background
         // flush fail, which trips fail-fast.
         let lane = dir.path().join("lane_numeric");
