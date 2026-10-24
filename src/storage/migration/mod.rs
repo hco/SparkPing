@@ -4,8 +4,8 @@
 //! Data is inserted oldest first: tsink 0.10 keeps a bounded number of open
 //! partitions per series and rejects writes older than the oldest one. The
 //! WAL can overlap partitions in time, so both sources are merged by time.
-//! Legacy files are deleted only after their points are verified in the new
-//! storage and the WAL sync interval has passed.
+//! Legacy files are deleted only after the new storage accepted all their
+//! points and the WAL sync interval has passed.
 
 mod legacy_wal;
 mod partitions;
@@ -311,6 +311,7 @@ impl<'a> Migrator<'a> {
                 return Ok(());
             }
         };
+        let rejected_before = self.points_rejected;
 
         for s in &series {
             for &(ts, value) in &s.points {
@@ -328,34 +329,19 @@ impl<'a> Migrator<'a> {
             }
         }
         self.flush_batch()?;
-
-        // Verify: every legacy timestamp must be readable from the new
-        // storage. More is fine (WAL rows or live writes in the same range).
-        // Timestamps, not points: tsink 0.10 may keep only the last of two
-        // values with the same timestamp.
-        for s in &series {
-            let mut kept: Vec<i64> = s
-                .points
-                .iter()
-                .map(|(ts, _)| *ts)
-                .filter(|ts| !self.is_expired(*ts))
-                .collect();
-            kept.dedup();
-            let (Some(first), Some(last)) = (kept.first(), kept.last()) else {
-                continue;
-            };
-            let found = self
-                .storage
-                .select(s.metric, &s.labels, *first, last + 1)?
-                .len();
-            if found < kept.len() {
-                error!(
-                    "Verification failed for legacy partition {:?} ({} {:?}): {} of {} points found, keeping it",
-                    partition.path, s.metric, s.labels, found, kept.len()
-                );
-                self.failed_partitions += 1;
-                return Ok(());
-            }
+        // insert_rows only succeeds once tsink has taken every row into
+        // memory and the WAL, and refuses single points with an error. Reading
+        // the points back would decode every persisted chunk that overlaps the
+        // partition, which on a host short of page cache came from disk again
+        // and again.
+        let rejected = self.points_rejected - rejected_before;
+        if rejected > 0 {
+            error!(
+                "{} points of legacy partition {:?} were rejected, keeping it",
+                rejected, partition.path
+            );
+            self.failed_partitions += 1;
+            return Ok(());
         }
 
         self.schedule_deletes([partition.path.clone()]);

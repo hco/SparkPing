@@ -291,6 +291,29 @@ fn partitions_with_two_values_for_one_timestamp_are_migrated() {
 }
 
 #[test]
+fn partitions_with_rejected_points_are_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    // Older than the storage's retention; the migrator does not know about
+    // it, so tsink refuses the points.
+    let start = start_time() - 30 * 24 * HOUR;
+    write_legacy_partitions(&data, &legacy_rows(start, start + HOUR));
+    let legacy = move_legacy_data_aside(&data).unwrap().unwrap();
+
+    let storage = open_storage(&config(&data, Some(2))).unwrap();
+    let migrator = migrate(storage.as_ref(), &legacy, None);
+
+    assert!(migrator.points_rejected > 0);
+    assert_eq!(migrator.failed_partitions, 1);
+    assert!(std::fs::read_dir(&legacy).unwrap().any(|e| e
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with("p-")));
+    storage.close().unwrap();
+}
+
+#[test]
 fn migrating_a_partition_again_does_not_duplicate_points() {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path().join("data");
