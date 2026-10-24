@@ -160,6 +160,8 @@ struct Migrator<'a> {
     partition_bytes_done: u64,
     started: Instant,
     last_progress_log: Instant,
+    /// The thread's reads when the progress was last logged.
+    io_at_progress_log: ThreadIo,
     index_watermark: usize,
     l0_dir: Option<PathBuf>,
     backlog_stall_warned: bool,
@@ -204,6 +206,7 @@ impl<'a> Migrator<'a> {
             partition_bytes_done: 0,
             started: Instant::now(),
             last_progress_log: Instant::now(),
+            io_at_progress_log: ThreadIo::now(),
             index_watermark: storage
                 .observability_snapshot()
                 .memory
@@ -608,15 +611,20 @@ impl<'a> Migrator<'a> {
         if !force && self.last_progress_log.elapsed() < PROGRESS_LOG_INTERVAL {
             return;
         }
+        let interval = self.last_progress_log.elapsed().as_secs_f64().max(1.0);
         self.last_progress_log = Instant::now();
+        let io = ThreadIo::now();
+        let read = io - self.io_at_progress_log;
+        self.io_at_progress_log = io;
         let eta = (percent > 0 && percent < 100).then(|| {
             let elapsed = self.started.elapsed().as_secs();
             Duration::from_secs(elapsed * (100 - u64::from(percent)) / u64::from(percent))
         });
         info!(
-            "Migration progress: {}% ({} points{}{}{})",
+            "Migration progress: {}% ({} points, reading {:.1} MB/s from disk{}{}{})",
             percent,
             self.points_migrated,
+            read.read_bytes as f64 / 1e6 / interval,
             if self.points_rejected > 0 {
                 format!(", {} rejected", self.points_rejected)
             } else {
